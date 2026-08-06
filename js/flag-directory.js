@@ -14,7 +14,47 @@ function fallbackStorage() {
   };
 }
 
+// Hand-curated mapping so the admin picker can show "Brazil" instead of the
+// imgur file code "saBa4s8". Add new entries here when a new flag URL shows
+// up in the leaderboard — the fallback heuristic below still runs for
+// anything not listed.
+const KNOWN_FLAG_URLS = new Map([
+  ["https://i.imgur.com/B6VOEig.png", "France"],
+  ["https://i.imgur.com/l66r6qD.png", "Germany"],
+  ["https://i.imgur.com/saBa4s8.png", "Brazil"],
+  ["https://upload.wikimedia.org/wikipedia/commons/0/0a/Flag_of_Jamaica.svg", "Jamaica"],
+  ["https://i.imgur.com/FiyMewtg.jpg", "Japan"],
+  ["https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Flag_of_the_Federated_States_of_Micronesia.svg/1280px-Flag_of_the_Federated_States_of_Micronesia.svg.png", "Micronesia"],
+  ["https://i.imgur.com/sW4qCQU.png", "Italy"],
+  ["https://i.imgur.com/sbXkCut.png", "India"],
+  ["https://i.imgur.com/GhWQkxX.png", "Saudi Arabia"],
+  ["https://i.imgur.com/TsLtfjT.jpeg", "Mexico"],
+  ["https://i.imgur.com/sFwhqF5.png", "South Africa"],
+]);
+
+// Base64 flags carried over from the old leaderboard. Match on the first
+// ~88 chars of the data URI — that spans the PNG header + IHDR + palette
+// start, which is unique per image (different width/height/palette all
+// change these bytes). Keeps the constants short instead of embedding
+// full 3 KB data URIs.
+const KNOWN_FLAG_DATA_PREFIXES = [
+  ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAxCAMAAABgWz7uAAAAnFBMVEX///+xIzOwHS6w", "United States"],
+  ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAA9CAMAAAAXmf6VAAAAGFBMVEX///8hRoyuHCeu", "Netherlands"],
+  ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAT4AAACfCAMAAABX0UX9AAAAkFBMVEXVKx7////TGADr", "Canada"],
+  ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAuCAMAAACS246gAAAAb1BMVEX////PFCsAJH3O", "United Kingdom"],
+  ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAP0AAACfCAMAAAAF1y+fAAAAb1BMVEUAteJQni/vM0D/", "Azerbaijan"],
+];
+
 export function labelForFlagUrl(url) {
+  if (typeof url !== "string" || !url) return "flag";
+  const known = KNOWN_FLAG_URLS.get(url);
+  if (known) return known;
+  if (url.startsWith("data:")) {
+    for (const [prefix, label] of KNOWN_FLAG_DATA_PREFIXES) {
+      if (url.startsWith(prefix)) return label;
+    }
+    return "flag";
+  }
   try {
     const parsed = new URL(url);
     const last = parsed.pathname.split("/").filter(Boolean).pop() || "";

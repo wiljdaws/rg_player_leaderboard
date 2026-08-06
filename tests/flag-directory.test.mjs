@@ -29,6 +29,22 @@ test("labelForFlagUrl falls back to hostname when the basename is too long", () 
   );
 });
 
+test("labelForFlagUrl resolves known imgur codes to country names", () => {
+  assert.equal(labelForFlagUrl("https://i.imgur.com/saBa4s8.png"), "Brazil");
+  assert.equal(labelForFlagUrl("https://i.imgur.com/B6VOEig.png"), "France");
+  assert.equal(labelForFlagUrl("https://i.imgur.com/FiyMewtg.jpg"), "Japan");
+  assert.equal(labelForFlagUrl("https://i.imgur.com/TsLtfjT.jpeg"), "Mexico");
+});
+
+test("labelForFlagUrl resolves known base64 flags by prefix", () => {
+  const us = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAxCAMAAABgWz7uAAAAnFBMVEX///+xIzOwHS6w<truncated payload>";
+  assert.equal(labelForFlagUrl(us), "United States");
+});
+
+test("labelForFlagUrl returns 'flag' for unknown data URIs", () => {
+  assert.equal(labelForFlagUrl("data:image/png;base64,SOMEUNKNOWNBASE64"), "flag");
+});
+
 test("registerRows adds unique flag URLs from player rows", () => {
   const storage = makeStorage();
   const dir = new FlagDirectory({ storage });
