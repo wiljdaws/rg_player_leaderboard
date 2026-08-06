@@ -269,7 +269,10 @@ h1{
   color:var(--ink-dim);font-family:var(--display);font-weight:700;font-size:12px;
 }
 .p-flag img{width:100%;height:100%;object-fit:cover}
-.p-name-wrap{min-width:0;display:flex;flex-direction:column;gap:3px}
+/* Grow to fill the remaining space in .p-ident (after the fixed-width flag),
+   so long names get all the room they can — without this the wrap sits at
+   content width, which on narrow mobile columns clipped names to ~80px. */
+.p-name-wrap{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:3px}
 .p-name{
   display:inline-flex;align-items:center;gap:8px;min-width:0;
   font-family:var(--display);font-weight:700;font-size:16.5px;letter-spacing:.02em;
@@ -644,13 +647,15 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 /* Auto-scroll long names when text exceeds their container. Only elements
    that actually overflow get the .marquee class attached by JS, so short
    names stay static. Pause on hover / focus so users can read mid-scroll. */
-.marquee{overflow:hidden;text-align:left}
+/* Force display:block on the marquee host so the inner sits in a block
+   context, not a flex one. .p-name is display:inline-flex by default, and
+   flex containers blockify their inline children — an inline-block child
+   becomes block, which then sizes to the flex slot instead of its content,
+   hiding the overflow we want to marquee. Making the host block-level keeps
+   the inner as a true inline-block at intrinsic width. */
+.marquee{overflow:hidden;text-align:left;display:block}
 .marquee-inner{
   display:inline-block;white-space:nowrap;
-  /* Keep intrinsic width regardless of parent layout — needed because .p-name
-     is inline-flex, and flex-shrink would otherwise collapse this span to fit
-     the container, hiding the overflow that we want to marquee. */
-  flex:0 0 auto;
   will-change:transform;
 }
 .marquee .marquee-inner{

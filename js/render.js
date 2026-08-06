@@ -36,25 +36,25 @@ function attachMarquee(el) {
   // grown or shrunk, so a previously-marqueed name might now fit or vice versa.
   detachMarquee(el);
 
-  // Wrap first, then measure. `.p-name` is display:inline-flex, so a bare
-  // text node becomes an anonymous flex item that shrinks to fit the
-  // container — scrollWidth ends up equal to clientWidth and overflow is
-  // invisible to JS. The inner span has flex-shrink:0 so its offsetWidth
-  // stays at the intrinsic content width regardless of the parent's layout.
+  // Wrap + apply .marquee (which forces display:block) BEFORE measuring.
+  // Without the block override, flex-item blockification makes the inner
+  // report parent width instead of intrinsic content width and no overflow
+  // would be visible.
   const inner = document.createElement("span");
   inner.className = "marquee-inner";
   while (el.firstChild) inner.appendChild(el.firstChild);
   el.appendChild(inner);
+  el.classList.add("marquee");
 
   const overshoot = inner.offsetWidth - el.clientWidth;
   if (overshoot <= MARQUEE_SLACK_PX) {
-    // Fits — unwrap so the container reverts to its normal ellipsis behavior.
+    // Fits — unwrap and revert so the container keeps normal ellipsis behavior.
+    el.classList.remove("marquee");
     while (inner.firstChild) el.insertBefore(inner.firstChild, inner);
     inner.remove();
     return;
   }
 
-  el.classList.add("marquee");
   // ~40 px/sec traversal feels legible; add 3s of pause at each end.
   const traverseMs = Math.max(1500, (overshoot / 40) * 1000);
   el.style.setProperty("--marquee-distance", `${-(overshoot + 8)}px`);
