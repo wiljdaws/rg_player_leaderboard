@@ -640,6 +640,24 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .p-score{font-size:15px}
   .p-winrate{font-size:14px}
 }
+/* ---------- Marquee ---------- */
+/* Auto-scroll long names when text exceeds their container. Only elements
+   that actually overflow get the .marquee class attached by JS, so short
+   names stay static. Pause on hover / focus so users can read mid-scroll. */
+.marquee{overflow:hidden;text-align:left}
+.marquee-inner{
+  display:inline-block;white-space:nowrap;will-change:transform;
+  animation:marquee-scroll var(--marquee-duration,8s) ease-in-out infinite;
+}
+@keyframes marquee-scroll{
+  0%,15%{transform:translateX(0)}
+  50%,65%{transform:translate3d(var(--marquee-distance,0),0,0)}
+  100%{transform:translateX(0)}
+}
+.marquee:hover .marquee-inner,
+.marquee:focus-within .marquee-inner{animation-play-state:paused}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
+  .marquee-inner{animation:none!important}
 }

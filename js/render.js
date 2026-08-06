@@ -13,6 +13,61 @@ function node(tag, options = {}) {
   return element;
 }
 
+// Auto-scroll long names when they overflow their container. Only kicks in
+// when text actually exceeds the visible width, so short names stay static.
+const MARQUEE_TARGETS = ".p-name, .pname, .gain-card .n";
+const MARQUEE_SLACK_PX = 4;
+
+function detachMarquee(el) {
+  if (el.dataset.marquee !== "on") return;
+  const inner = el.querySelector(":scope > .marquee-inner");
+  if (inner) {
+    while (inner.firstChild) el.insertBefore(inner.firstChild, inner);
+    inner.remove();
+  }
+  el.classList.remove("marquee");
+  el.style.removeProperty("--marquee-distance");
+  el.style.removeProperty("--marquee-duration");
+  delete el.dataset.marquee;
+}
+
+function attachMarquee(el) {
+  // Re-measure from scratch on every pass: on resize the container may have
+  // grown or shrunk, so a previously-marqueed name might now fit or vice versa.
+  detachMarquee(el);
+  const overshoot = el.scrollWidth - el.clientWidth;
+  if (overshoot <= MARQUEE_SLACK_PX) return;
+
+  const inner = document.createElement("span");
+  inner.className = "marquee-inner";
+  while (el.firstChild) inner.appendChild(el.firstChild);
+  el.appendChild(inner);
+  el.classList.add("marquee");
+  // ~40 px/sec traversal feels legible; add 3s of pause at each end.
+  const traverseMs = Math.max(1500, (overshoot / 40) * 1000);
+  el.style.setProperty("--marquee-distance", `${-(overshoot + 8)}px`);
+  el.style.setProperty("--marquee-duration", `${((traverseMs * 2 + 3000) / 1000).toFixed(1)}s`);
+  el.dataset.marquee = "on";
+}
+
+export function applyMarquees(root = document) {
+  requestAnimationFrame(() => {
+    for (const el of root.querySelectorAll(MARQUEE_TARGETS)) attachMarquee(el);
+  });
+}
+
+if (typeof window !== "undefined") {
+  let scheduled = false;
+  window.addEventListener("resize", () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      applyMarquees();
+    });
+  });
+}
+
 function safeImage(url, className, alt = "", onFail) {
   const image = node("img", { className });
   image.src = url;
@@ -164,6 +219,7 @@ export function renderPodium(playlist, players, historyStore) {
     }
     host.append(step);
   }
+  applyMarquees(host);
 }
 
 export function renderRecentGains(playlist, players, historyStore) {
@@ -268,8 +324,14 @@ function renderMoverStrip({ playlist, players, historyStore, host, strip, window
 
   if (windowLabel) {
     if (trimmed.length) {
-      const widestSpan = Math.max(...trimmed.map((mover) => mover.spanMs));
-      windowLabel.textContent = formatWindow(widestSpan);
+      // Label follows the widest-span mover's source: a published (session)
+      // delta uses session wording, an observed rolling-window delta uses the
+      // "last N min / last hour" wording. Mixing sources is fine; the widest
+      // span drives what the whole strip is really showing.
+      const widest = trimmed.reduce((a, b) => (b.spanMs > a.spanMs ? b : a));
+      windowLabel.textContent = widest.source === "published"
+        ? "session"
+        : formatWindow(widest.spanMs);
     } else {
       windowLabel.textContent = "session";
     }
@@ -299,6 +361,7 @@ function renderMoverStrip({ playlist, players, historyStore, host, strip, window
     card.append(node("div", { className: "d", text: `${sign}${Math.abs(Math.round(gained)).toLocaleString()}` }));
     strip.append(card);
   }
+  applyMarquees(strip);
 }
 
 // Prefer the streak ATLAS publishes on the wins doc (immediate, authoritative)
@@ -355,6 +418,7 @@ function renderStreakStrip({ players, historyStore, host, strip, windowLabel, he
     card.append(node("div", { className: "d", text: `🔥 x${streak}` }));
     strip.append(card);
   }
+  applyMarquees(strip);
 }
 
 function playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete }) {
@@ -443,7 +507,7 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
       node("span", { className: "num", text: "MMR" }),
-      node("span", { className: "num", text: "Last hour" }),
+      node("span", { className: "num", text: "Recent" }),
     );
     if (admin) head.append(node("span", { text: "Actions" }));
   }
@@ -458,6 +522,7 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
     fragment.append(playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete }));
   });
   body.replaceChildren(fragment);
+  applyMarquees(body);
 }
 
 export function renderIconKey({ rows, admin, loading, error, onDelete }) {
