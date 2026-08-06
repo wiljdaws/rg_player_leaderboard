@@ -392,25 +392,48 @@ export function renderPlayerDialog(dialog, player, rank) {
   close.focus();
 }
 
-const CUSTOM_FLAG_VALUE = "__custom__";
-
-// A hydrated flag picker replaces a plain <input type=url> with a labeled
-// select (populated from directory.list()), a live preview image, and a
-// reveal-on-demand input for adding a new URL. The form still submits a
-// single "flag" value the model expects.
+// A visual flag combobox: native <select> can't render thumbnails, so this
+// hand-rolls a listbox out of a trigger button + a popover menu. Each option
+// carries a flag image next to its label, and the actual form value is held
+// in a hidden <input name="flag"> so FormData serializes it unchanged.
 export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFlag }) {
   if (!root) return null;
   root.innerHTML = "";
   root.classList.add("flag-picker");
 
-  const preview = document.createElement("div");
-  preview.className = "flag-preview";
-  preview.setAttribute("aria-hidden", "true");
+  const hidden = document.createElement("input");
+  hidden.type = "hidden";
+  hidden.name = "flag";
+  hidden.value = currentValue || "";
 
-  const select = document.createElement("select");
-  select.name = "flag";
-  select.className = "flag-select";
-  select.id = root.dataset.flagFieldId || "flagPicker";
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "flag-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+
+  const menu = document.createElement("div");
+  menu.className = "flag-menu";
+  menu.setAttribute("role", "listbox");
+  menu.hidden = true;
+
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "flag-search";
+  const search = document.createElement("input");
+  search.type = "search";
+  search.placeholder = "Search flags…";
+  search.autocomplete = "off";
+  search.setAttribute("aria-label", "Search flags");
+  searchWrap.append(search);
+
+  const list = document.createElement("div");
+  list.className = "flag-list";
+  list.setAttribute("role", "presentation");
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "flag-add";
+  addBtn.textContent = "+ Add new flag URL…";
 
   const customRow = document.createElement("div");
   customRow.className = "flag-custom";
@@ -430,19 +453,17 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   customCancel.className = "flag-custom-cancel";
   customRow.append(customInput, customAdd, customCancel);
 
-  const row = document.createElement("div");
-  row.className = "flag-picker-row";
-  row.append(preview, select);
-  root.append(row, customRow);
+  menu.append(searchWrap, list, addBtn);
+  root.append(hidden, trigger, menu, customRow);
 
-  function drawPreview(url) {
-    preview.innerHTML = "";
+  function makeThumb(url, className = "flag-thumb") {
+    const wrap = document.createElement("span");
+    wrap.className = className;
     if (!url) {
-      preview.classList.add("empty");
-      preview.textContent = "—";
-      return;
+      wrap.classList.add("empty");
+      wrap.textContent = "—";
+      return wrap;
     }
-    preview.classList.remove("empty");
     const img = document.createElement("img");
     img.src = url;
     img.alt = "";
@@ -451,57 +472,116 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     img.addEventListener(
       "error",
       () => {
-        preview.classList.add("empty");
-        preview.textContent = "?";
+        wrap.classList.add("empty");
+        wrap.replaceChildren(document.createTextNode("?"));
       },
       { once: true },
     );
-    preview.append(img);
+    wrap.append(img);
+    return wrap;
+  }
+
+  function drawTrigger() {
+    trigger.innerHTML = "";
+    const value = hidden.value;
+    trigger.append(makeThumb(value, "flag-thumb trigger"));
+    const label = document.createElement("span");
+    label.className = "flag-trigger-label";
+    label.textContent = value ? labelForFlagUrl(value) : "— No flag —";
+    trigger.append(label);
+    const chev = document.createElement("span");
+    chev.className = "flag-chev";
+    chev.textContent = "▾";
+    chev.setAttribute("aria-hidden", "true");
+    trigger.append(chev);
+  }
+
+  function drawOptions() {
+    const query = search.value.trim().toLowerCase();
+    const entries = directory.list();
+    const desired = hidden.value;
+    if (desired && !entries.some((e) => e.url === desired)) {
+      entries.unshift({ url: desired, label: labelForFlagUrl(desired) });
+    }
+
+    list.innerHTML = "";
+    const options = [{ url: "", label: "— No flag —" }, ...entries];
+    let active = 0;
+    let renderedActive = false;
+    options.forEach((entry, index) => {
+      if (query && entry.url && !entry.label.toLowerCase().includes(query)) return;
+      const item = document.createElement("div");
+      item.className = "flag-option";
+      item.setAttribute("role", "option");
+      item.dataset.value = entry.url;
+      const selected = entry.url === desired;
+      item.setAttribute("aria-selected", String(selected));
+      if (selected) {
+        item.classList.add("selected");
+        active = index;
+        renderedActive = true;
+      }
+      item.append(makeThumb(entry.url, "flag-thumb option"));
+      const label = document.createElement("span");
+      label.className = "flag-option-label";
+      label.textContent = entry.label;
+      item.append(label);
+      item.addEventListener("click", () => choose(entry.url));
+      list.append(item);
+    });
+
+    if (!list.children.length) {
+      const empty = document.createElement("div");
+      empty.className = "flag-empty";
+      empty.textContent = query ? `No flags matching "${query}"` : "No saved flags yet.";
+      list.append(empty);
+    } else if (!renderedActive) {
+      list.firstElementChild?.classList.add("kb-focus");
+    } else {
+      const activeEl = list.querySelector(".selected");
+      activeEl?.scrollIntoView({ block: "nearest" });
+    }
   }
 
   function refresh() {
-    const entries = directory.list();
-    const seen = new Set();
-    const desired = currentValue || "";
-    if (desired) seen.add(desired);
-    select.innerHTML = "";
-
-    const noneOpt = document.createElement("option");
-    noneOpt.value = "";
-    noneOpt.textContent = "— No flag —";
-    select.append(noneOpt);
-
-    if (desired && !entries.some((entry) => entry.url === desired)) {
-      const opt = document.createElement("option");
-      opt.value = desired;
-      opt.textContent = labelForFlagUrl(desired);
-      select.append(opt);
-    }
-
-    for (const entry of entries) {
-      if (seen.has(entry.url)) continue;
-      seen.add(entry.url);
-      const opt = document.createElement("option");
-      opt.value = entry.url;
-      opt.textContent = entry.label;
-      select.append(opt);
-    }
-
-    const addOpt = document.createElement("option");
-    addOpt.value = CUSTOM_FLAG_VALUE;
-    addOpt.textContent = "+ Add new flag URL…";
-    select.append(addOpt);
-
-    select.value = desired || "";
-    drawPreview(select.value);
+    drawTrigger();
+    if (!menu.hidden) drawOptions();
   }
 
-  function showCustomRow(show) {
-    customRow.hidden = !show;
-    if (show) {
-      customInput.value = "";
-      customInput.focus();
-    }
+  function openMenu() {
+    menu.hidden = false;
+    customRow.hidden = true;
+    trigger.setAttribute("aria-expanded", "true");
+    root.classList.add("open");
+    drawOptions();
+    // Defer focus so the popover has a frame to layout first.
+    requestAnimationFrame(() => search.focus());
+  }
+
+  function closeMenu() {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    root.classList.remove("open");
+    search.value = "";
+  }
+
+  function choose(value) {
+    hidden.value = value || "";
+    currentValue = hidden.value;
+    drawTrigger();
+    closeMenu();
+    hidden.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function moveFocus(delta) {
+    const items = [...list.querySelectorAll(".flag-option")];
+    if (!items.length) return;
+    const current = list.querySelector(".kb-focus, .selected") ?? items[0];
+    const currentIndex = items.indexOf(current);
+    const nextIndex = Math.max(0, Math.min(items.length - 1, currentIndex + delta));
+    items.forEach((item) => item.classList.remove("kb-focus"));
+    items[nextIndex].classList.add("kb-focus");
+    items[nextIndex].scrollIntoView({ block: "nearest" });
   }
 
   function commitCustomUrl() {
@@ -527,48 +607,85 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     const url = parsed.href;
     directory.add(url);
     onNewFlag?.(url);
-    currentValue = url;
-    refresh();
-    select.value = url;
-    drawPreview(url);
-    showCustomRow(false);
+    customRow.hidden = true;
+    choose(url);
   }
 
-  select.addEventListener("change", () => {
-    if (select.value === CUSTOM_FLAG_VALUE) {
-      showCustomRow(true);
-      select.value = currentValue || "";
-      return;
+  trigger.addEventListener("click", () => {
+    if (menu.hidden) openMenu();
+    else closeMenu();
+  });
+
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openMenu();
     }
-    currentValue = select.value;
-    drawPreview(select.value);
+  });
+
+  search.addEventListener("input", drawOptions);
+  search.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveFocus(1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveFocus(-1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const focused = list.querySelector(".kb-focus, .selected");
+      if (focused) choose(focused.dataset.value);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu();
+      trigger.focus();
+    }
+  });
+
+  addBtn.addEventListener("click", () => {
+    menu.hidden = true;
+    customRow.hidden = false;
+    customInput.value = "";
+    customInput.focus();
   });
 
   customAdd.addEventListener("click", commitCustomUrl);
+  customCancel.addEventListener("click", () => {
+    customRow.hidden = true;
+    openMenu();
+  });
   customInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       commitCustomUrl();
     } else if (event.key === "Escape") {
       event.preventDefault();
-      showCustomRow(false);
+      customRow.hidden = true;
     }
   });
-  customCancel.addEventListener("click", () => showCustomRow(false));
+
+  // Close on outside click. `mousedown` beats `click` so we don't miss the
+  // event when the click lands on something that removes itself.
+  const outsideHandler = (event) => {
+    if (!root.contains(event.target)) closeMenu();
+  };
+  document.addEventListener("mousedown", outsideHandler);
 
   const unsubscribe = directory.subscribe(refresh);
-  refresh();
+  drawTrigger();
 
   return {
     setValue(value) {
-      currentValue = value || "";
-      refresh();
+      hidden.value = value || "";
+      currentValue = hidden.value;
+      drawTrigger();
     },
     getValue() {
-      return currentValue || "";
+      return hidden.value;
     },
     destroy() {
       unsubscribe();
+      document.removeEventListener("mousedown", outsideHandler);
     },
   };
 }
