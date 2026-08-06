@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Leaderboard style variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../css/leaderboard.css?mock=1">
+<style>
+  body{padding:32px}
+  .mock-grid{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;
+    max-width:1400px;margin:0 auto;
+  }
+  .mock-cell{
+    background:linear-gradient(180deg,rgba(19,27,68,.5),rgba(12,18,48,.7));
+    border:1px solid var(--line);border-radius:18px;padding:18px 18px 24px;
+  }
+  .mock-title{
+    font:700 12px var(--display);letter-spacing:.28em;
+    text-transform:uppercase;color:var(--grad-a);margin-bottom:2px;
+  }
+  .mock-desc{color:var(--ink-dim);font-size:12.5px;margin-bottom:14px;line-height:1.5}
+  .mock-board{
+    background:linear-gradient(180deg,rgba(19,27,68,.72),rgba(12,18,48,.86));
+    border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  }
+  .mock-head{
+    display:grid;grid-template-columns:60px 1fr 100px 90px;gap:10px;
+    padding:11px 18px;border-bottom:1px solid var(--line);
+    font:600 10.5px var(--display);letter-spacing:.24em;
+    text-transform:uppercase;color:var(--ink-dim);
+  }
+  .mock-head .num{text-align:right}
+  .mock-row{
+    display:grid;grid-template-columns:60px 1fr 100px 90px;gap:10px;
+    padding:11px 18px;align-items:center;
+    border-bottom:1px solid var(--line);position:relative;
+  }
+  .mock-row:last-child{border-bottom:none}
+  .mock-rank{font:italic 700 21px var(--display);color:var(--ink-dim)}
+  .mock-ident{display:flex;align-items:center;gap:10px;min-width:0}
+  .mock-flag{
+    flex:none;width:30px;height:30px;border-radius:9px;overflow:hidden;
+    background:rgba(255,255,255,.05);border:1px solid var(--line-strong);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-dim);font:700 11px var(--display);
+  }
+  .mock-name{
+    font:700 15px var(--display);letter-spacing:.02em;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  }
+  .mock-mmr{
+    text-align:right;font:700 17px var(--display);color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .mock-delta{
+    text-align:right;font:700 12px var(--display);letter-spacing:.03em;
+    font-variant-numeric:tabular-nums;
+  }
+  .mock-delta.up{color:var(--gain)}
+  .mock-delta.down{color:var(--loss)}
+  .mock-delta.flat{color:var(--ink-dim)}
+
+  /* ============ V1 · Metallic left stripe ============ */
+  .v1 .mock-row{padding-left:22px}
+  .v1 .mock-row::before{
+    content:"";position:absolute;left:0;top:6px;bottom:6px;width:4px;border-radius:0 4px 4px 0;
+  }
+  .v1 .mock-row[data-rank="1"]::before{background:linear-gradient(180deg,#FFE58A,var(--gold));box-shadow:0 0 12px var(--gold)}
+  .v1 .mock-row[data-rank="2"]::before{background:linear-gradient(180deg,#F1F6FF,var(--silver));box-shadow:0 0 10px var(--silver)}
+  .v1 .mock-row[data-rank="3"]::before{background:linear-gradient(180deg,#F0B87F,var(--bronze));box-shadow:0 0 10px var(--bronze)}
+  .v1 .mock-row.top10::before{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));opacity:.6}
+
+  /* ============ V2 · Gradient name text ============ */
+  .v2 .mock-row[data-rank="1"] .mock-name,
+  .v2 .mock-row[data-rank="2"] .mock-name,
+  .v2 .mock-row[data-rank="3"] .mock-name{
+    background-clip:text;-webkit-background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 8px currentColor);
+  }
+  .v2 .mock-row[data-rank="1"] .mock-name{background-image:linear-gradient(90deg,#FFEDA0,var(--gold),#FFB84D)}
+  .v2 .mock-row[data-rank="2"] .mock-name{background-image:linear-gradient(90deg,#FFFFFF,var(--silver),#8FA5C4)}
+  .v2 .mock-row[data-rank="3"] .mock-name{background-image:linear-gradient(90deg,#F6C09A,var(--bronze),#B26B36)}
+  .v2 .mock-row.top10 .mock-name{
+    background-image:linear-gradient(90deg,var(--grad-a),var(--grad-b));
+    background-clip:text;-webkit-background-clip:text;color:transparent;
+  }
+
+  /* ============ V3 · Row background wash ============ */
+  .v3 .mock-row[data-rank="1"]{background:linear-gradient(90deg,rgba(255,210,74,.18),transparent 65%)}
+  .v3 .mock-row[data-rank="2"]{background:linear-gradient(90deg,rgba(201,212,232,.14),transparent 65%)}
+  .v3 .mock-row[data-rank="3"]{background:linear-gradient(90deg,rgba(224,154,92,.14),transparent 65%)}
+  .v3 .mock-row.top10{background:linear-gradient(90deg,rgba(168,85,247,.10),transparent 65%)}
+
+  /* ============ V4 · Rank medallion coin ============ */
+  .v4 .mock-rank{
+    width:34px;height:34px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;
+    font:italic 800 15px var(--display);
+    background:rgba(255,255,255,.04);border:1px solid var(--line-strong);
+  }
+  .v4 .mock-row[data-rank="1"] .mock-rank{
+    background:radial-gradient(circle at 30% 30%,#FFEDA0,#FFB84D 70%,#8A5A00);
+    border-color:#FFC94B;color:#3A2500;box-shadow:0 0 16px rgba(255,210,74,.45);
+  }
+  .v4 .mock-row[data-rank="2"] .mock-rank{
+    background:radial-gradient(circle at 30% 30%,#F5F8FF,var(--silver) 70%,#6E7A94);
+    border-color:#DDE4F1;color:#2A3450;box-shadow:0 0 12px rgba(201,212,232,.4);
+  }
+  .v4 .mock-row[data-rank="3"] .mock-rank{
+    background:radial-gradient(circle at 30% 30%,#F6C09A,var(--bronze) 70%,#7A4515);
+    border-color:#E2A170;color:#331802;box-shadow:0 0 12px rgba(224,154,92,.4);
+  }
+  .v4 .mock-row.top10 .mock-rank{
+    background:radial-gradient(circle at 30% 30%,var(--grad-a),var(--grad-b));
+    color:#fff;border-color:transparent;box-shadow:0 0 10px rgba(168,85,247,.35);
+    font-style:italic;font-weight:700;font-size:13px;
+  }
+
+  /* ============ V5 · Aura glow row ============ */
+  .v5 .mock-row[data-rank="1"]{box-shadow:inset 0 0 24px rgba(255,210,74,.16),inset 3px 0 0 var(--gold)}
+  .v5 .mock-row[data-rank="2"]{box-shadow:inset 0 0 20px rgba(201,212,232,.14),inset 3px 0 0 var(--silver)}
+  .v5 .mock-row[data-rank="3"]{box-shadow:inset 0 0 20px rgba(224,154,92,.14),inset 3px 0 0 var(--bronze)}
+  .v5 .mock-row.top10{box-shadow:inset 0 0 18px rgba(168,85,247,.10),inset 3px 0 0 rgba(168,85,247,.45)}
+
+  /* ============ V6 · Elevated card tier ============ */
+  .v6 .mock-row[data-rank="1"],
+  .v6 .mock-row[data-rank="2"],
+  .v6 .mock-row[data-rank="3"]{
+    background:linear-gradient(180deg,rgba(48,38,10,.35),rgba(12,18,48,.8));
+    border-top:1px solid rgba(255,210,74,.35);
+    border-bottom:1px solid rgba(255,210,74,.20);
+  }
+  .v6 .mock-row[data-rank="2"]{
+    background:linear-gradient(180deg,rgba(40,50,80,.35),rgba(12,18,48,.8));
+    border-top-color:rgba(201,212,232,.35);border-bottom-color:rgba(201,212,232,.20);
+  }
+  .v6 .mock-row[data-rank="3"]{
+    background:linear-gradient(180deg,rgba(50,32,20,.35),rgba(12,18,48,.8));
+    border-top-color:rgba(224,154,92,.35);border-bottom-color:rgba(224,154,92,.20);
+  }
+  .v6 .mock-row.top10{background:linear-gradient(180deg,rgba(30,22,66,.30),rgba(12,18,48,.8))}
+
+  /* ============ V7 · Foil shimmer name ============ */
+  .v7 .mock-row[data-rank="1"] .mock-name,
+  .v7 .mock-row[data-rank="2"] .mock-name,
+  .v7 .mock-row[data-rank="3"] .mock-name{
+    background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.35) 45%,transparent 60%),
+               linear-gradient(90deg,var(--gold),#FFEDA0,var(--gold));
+    background-size:250% 100%,100% 100%;
+    background-clip:text;-webkit-background-clip:text;color:transparent;
+    animation:foil-sweep 4.5s linear infinite;
+  }
+  .v7 .mock-row[data-rank="2"] .mock-name{
+    background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.4) 45%,transparent 60%),
+               linear-gradient(90deg,var(--silver),#FFFFFF,var(--silver));
+    background-size:250% 100%,100% 100%;
+    background-clip:text;-webkit-background-clip:text;color:transparent;
+    animation:foil-sweep 4.5s linear infinite;
+  }
+  .v7 .mock-row[data-rank="3"] .mock-name{
+    background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.35) 45%,transparent 60%),
+               linear-gradient(90deg,var(--bronze),#F6C09A,var(--bronze));
+    background-size:250% 100%,100% 100%;
+    background-clip:text;-webkit-background-clip:text;color:transparent;
+    animation:foil-sweep 4.5s linear infinite;
+  }
+  @keyframes foil-sweep{0%{background-position:250% 0,0 0}100%{background-position:-150% 0,0 0}}
+  .v7 .mock-row.top10 .mock-name{color:#D2B7FF}
+
+  /* ============ V8 · Ribbon badge ============ */
+  .v8 .mock-row{grid-template-columns:60px 1fr 96px auto 80px}
+  .v8 .mock-head{grid-template-columns:60px 1fr 96px auto 80px}
+  .v8 .mock-badge{
+    justify-self:end;
+    padding:3px 10px;border-radius:999px;
+    font:800 10px var(--display);letter-spacing:.18em;text-transform:uppercase;
+    align-self:center;
+  }
+  .v8 .mock-row[data-rank="1"] .mock-badge{background:linear-gradient(90deg,#FFE58A,var(--gold));color:#3A2500;box-shadow:0 0 14px rgba(255,210,74,.4)}
+  .v8 .mock-row[data-rank="2"] .mock-badge{background:linear-gradient(90deg,#FFFFFF,var(--silver));color:#2A3450;box-shadow:0 0 10px rgba(201,212,232,.35)}
+  .v8 .mock-row[data-rank="3"] .mock-badge{background:linear-gradient(90deg,#F6C09A,var(--bronze));color:#331802;box-shadow:0 0 10px rgba(224,154,92,.35)}
+  .v8 .mock-row.top10 .mock-badge{background:rgba(168,85,247,.18);color:#D2B7FF;border:1px solid rgba(168,85,247,.4)}
+  .v8 .mock-row:not([data-rank="1"]):not([data-rank="2"]):not([data-rank="3"]):not(.top10) .mock-badge{visibility:hidden}
+
+  /* ============ V9 · Neon underline ============ */
+  .v9 .mock-row[data-rank="1"] .mock-name,
+  .v9 .mock-row[data-rank="2"] .mock-name,
+  .v9 .mock-row[data-rank="3"] .mock-name,
+  .v9 .mock-row.top10 .mock-name{
+    padding-bottom:1px;border-bottom:2px solid;
+  }
+  .v9 .mock-row[data-rank="1"] .mock-name{border-color:var(--gold);text-shadow:0 0 10px rgba(255,210,74,.35)}
+  .v9 .mock-row[data-rank="2"] .mock-name{border-color:var(--silver);text-shadow:0 0 8px rgba(201,212,232,.35)}
+  .v9 .mock-row[data-rank="3"] .mock-name{border-color:var(--bronze);text-shadow:0 0 8px rgba(224,154,92,.35)}
+  .v9 .mock-row.top10 .mock-name{border-color:rgba(168,85,247,.65)}
+
+  /* ============ V10 · Rank ombre + accent ============ */
+  .v10 .mock-row[data-rank="1"] .mock-rank,
+  .v10 .mock-row[data-rank="2"] .mock-rank,
+  .v10 .mock-row[data-rank="3"] .mock-rank{
+    background-clip:text;-webkit-background-clip:text;color:transparent;
+  }
+  .v10 .mock-row[data-rank="1"] .mock-rank{background-image:linear-gradient(180deg,#FFEDA0,var(--gold),#B87A00)}
+  .v10 .mock-row[data-rank="2"] .mock-rank{background-image:linear-gradient(180deg,#FFFFFF,var(--silver),#7B8AA5)}
+  .v10 .mock-row[data-rank="3"] .mock-rank{background-image:linear-gradient(180deg,#F6C09A,var(--bronze),#7A4515)}
+  .v10 .mock-row .accent{
+    display:inline-block;margin-left:6px;font-size:9px;transform:translateY(-1px);
+    color:rgba(168,85,247,.7);
+  }
+  .v10 .mock-row[data-rank="1"] .accent{color:var(--gold);text-shadow:0 0 8px var(--gold)}
+  .v10 .mock-row[data-rank="2"] .accent{color:var(--silver);text-shadow:0 0 6px var(--silver)}
+  .v10 .mock-row[data-rank="3"] .accent{color:var(--bronze);text-shadow:0 0 6px var(--bronze)}
+</style>
+</head>
+<body>
+<header style="text-align:center;margin-bottom:36px">
+  <span class="title-kicker">Rocket Goal</span>
+  <h1>Leaderboard style variants</h1>
+  <p class="sub">10 creative treatments for top-3 (podium tier) + top-4–10 (elite tier).</p>
+</header>
+
+<div class="mock-grid" id="mockGrid"></div>
+
+<script>
+const ROWS = [
+  { flag: "🇳🇱", name: "[MEOW] NEWSOULZZS", mmr: 20384, delta: +42 },
+  { flag: "🇺🇸", name: "[KING] Grand Plat",  mmr: 10641, delta: +18 },
+  { flag: "🇺🇸", name: "[KING] Xuuya",       mmr: 10193, delta: -12 },
+  { flag: "🇫🇷", name: "Lucy",                mmr:  8842, delta:  +6 },
+  { flag: "🇳🇱", name: "[MEOW] NEWSOULZZS",   mmr:  7922, delta:  +3 },
+  { flag: "🇩🇪", name: "MrDarksoul",          mmr:  7053, delta:   0 },
+  { flag: "🇺🇸", name: "[MEOW] sO1emnt",      mmr:  5041, delta:  -8 },
+  { flag: "🇺🇸", name: "[MEOW] .crystxll",    mmr:  4995, delta: +25 },
+  { flag: "🇨🇦", name: "[KING] P",            mmr:  4943, delta:  -4 },
+  { flag: "🇺🇸", name: "Chop",                mmr:  4806, delta:  +9 },
+];
+
+const VARIANTS = [
+  { id: "v1",  title: "01 · Metallic left stripe",  desc: "Thin gold/silver/bronze bar down the left edge of top-3 rows. Purple gradient bar for top-4–10." },
+  { id: "v2",  title: "02 · Gradient name text",    desc: "Names in top-3 use a metal gradient text-fill with a soft glow. Top-4–10 gets the site's purple gradient." },
+  { id: "v3",  title: "03 · Row background wash",   desc: "Whole row gets a subtle horizontal fade from metal color to transparent. Purple wash for the top-4–10 band." },
+  { id: "v4",  title: "04 · Rank medallion coin",   desc: "Rank number becomes a round coin — gold/silver/bronze for the podium, purple for top-4–10." },
+  { id: "v5",  title: "05 · Aura glow row",         desc: "Inset colored box-shadow makes each top-3 row look lit from within. Subtle purple aura on top-4–10." },
+  { id: "v6",  title: "06 · Elevated card tier",    desc: "Top-3 rows have a brighter background + colored borders so they feel raised. Muted purple lift for top-4–10." },
+  { id: "v7",  title: "07 · Foil shimmer name",     desc: "Animated holographic sweep across the top-3 names — like a foil trading card. Static purple tint below." },
+  { id: "v8",  title: "08 · Ribbon badge",          desc: "CHAMPION / SILVER / BRONZE pill on the right of the row. TOP-10 pill for #4-10, empty after." },
+  { id: "v9",  title: "09 · Neon underline",        desc: "Colored underline under the player name — metal for top-3, purple for top-4–10." },
+  { id: "v10", title: "10 · Rank ombre + accent",   desc: "Rank number itself is filled with a vertical metal gradient. Small ◆ diamond accent next to the name." },
+];
+
+function safeName(text) { return String(text).replace(/[<>&"']/g, ""); }
+
+function renderBoard(variantId) {
+  const board = document.createElement("div");
+  board.className = "mock-board " + variantId;
+  const head = document.createElement("div");
+  head.className = "mock-head";
+  head.innerHTML = "<span>Rank</span><span>Player</span><span class='num'>MMR</span><span class='num'>Recent</span>";
+  if (variantId === "v8") {
+    head.innerHTML = "<span>Rank</span><span>Player</span><span class='num'>MMR</span><span></span><span class='num'>Recent</span>";
+  }
+  board.appendChild(head);
+  ROWS.forEach((r, i) => {
+    const rank = i + 1;
+    const row = document.createElement("div");
+    row.className = "mock-row" + (rank >= 4 && rank <= 10 ? " top10" : "");
+    row.setAttribute("data-rank", rank);
+    const rankCell = document.createElement("span");
+    rankCell.className = "mock-rank";
+    rankCell.textContent = "#" + rank;
+    row.appendChild(rankCell);
+
+    const ident = document.createElement("span");
+    ident.className = "mock-ident";
+    const flag = document.createElement("span");
+    flag.className = "mock-flag";
+    flag.textContent = r.flag;
+    ident.appendChild(flag);
+    const name = document.createElement("span");
+    name.className = "mock-name";
+    name.textContent = safeName(r.name);
+    if (variantId === "v10") {
+      const accent = document.createElement("span");
+      accent.className = "accent";
+      accent.textContent = "◆";
+      ident.appendChild(name);
+      ident.appendChild(accent);
+    } else {
+      ident.appendChild(name);
+    }
+    row.appendChild(ident);
+
+    const mmr = document.createElement("span");
+    mmr.className = "mock-mmr";
+    mmr.textContent = r.mmr.toLocaleString();
+    row.appendChild(mmr);
+
+    if (variantId === "v8") {
+      const badge = document.createElement("span");
+      badge.className = "mock-badge";
+      if (rank === 1) badge.textContent = "Champion";
+      else if (rank === 2) badge.textContent = "Silver";
+      else if (rank === 3) badge.textContent = "Bronze";
+      else if (rank >= 4 && rank <= 10) badge.textContent = "Top 10";
+      else badge.textContent = "";
+      row.appendChild(badge);
+    }
+
+    const delta = document.createElement("span");
+    const cls = r.delta > 0 ? "up" : r.delta < 0 ? "down" : "flat";
+    delta.className = "mock-delta " + cls;
+    delta.textContent = r.delta === 0 ? "— flat" : (r.delta > 0 ? "+" : "") + r.delta;
+    row.appendChild(delta);
+
+    board.appendChild(row);
+  });
+  return board;
+}
+
+const grid = document.getElementById("mockGrid");
+for (const variant of VARIANTS) {
+  const cell = document.createElement("section");
+  cell.className = "mock-cell";
+  const title = document.createElement("div");
+  title.className = "mock-title";
+  title.textContent = variant.title;
+  const desc = document.createElement("p");
+  desc.className = "mock-desc";
+  desc.textContent = variant.desc;
+  cell.append(title, desc, renderBoard(variant.id));
+  grid.append(cell);
+}
+</script>
+</body>
+</html>

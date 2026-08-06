@@ -77,85 +77,10 @@ h1{
 .admin-access button:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px}
 #authStatus{color:var(--ink-dim);font-size:11px;letter-spacing:.08em}
 
-/* ---------- Recent gains strip ---------- */
-.recent-gains{
-  margin:0 0 20px;padding:16px 20px;border-radius:16px;
-  background:linear-gradient(180deg,rgba(19,27,68,.72),rgba(12,18,48,.86));
-  border:1px solid var(--line);backdrop-filter:blur(6px);
-}
-.recent-gains[hidden]{display:none}
-.gains-heading{
-  display:flex;align-items:baseline;gap:14px;margin-bottom:12px;flex-wrap:wrap;
-}
-.gains-kicker{
-  color:var(--grad-a);font:700 10px var(--display);
-  letter-spacing:.24em;text-transform:uppercase;
-}
-.gains-heading h2{font:700 18px/1 var(--display);letter-spacing:.01em}
-.gains-window{
-  margin-left:auto;color:var(--ink-dim);
-  font:700 11px var(--display);letter-spacing:.18em;text-transform:uppercase;
-}
-/* .gains-strip is the mask; .gains-track is the moving element inside.
-   Cards flex-grow to fill when they fit; when the total content exceeds
-   the mask, JS duplicates the cards and .overflowing enables the loop
-   animation so the strip cycles horizontally like a marquee. */
-.gains-strip{position:relative;overflow:hidden}
-.gains-strip.overflowing::before,
-.gains-strip.overflowing::after{
-  content:"";position:absolute;top:0;bottom:0;width:24px;z-index:2;pointer-events:none;
-}
-.gains-strip.overflowing::before{left:0;background:linear-gradient(90deg,rgba(19,27,68,1),transparent)}
-.gains-strip.overflowing::after{right:0;background:linear-gradient(-90deg,rgba(19,27,68,1),transparent)}
-.gains-track{display:flex;gap:10px}
-.gains-strip .gain-card{flex:1 0 200px;min-width:200px}
-.gains-strip.overflowing .gain-card{flex:0 0 200px}
-.gains-strip.overflowing .gains-track{
-  animation:gains-scroll var(--gains-duration,30s) linear infinite;
-}
-.gains-strip.overflowing:hover .gains-track,
-.gains-strip.overflowing:focus-within .gains-track{animation-play-state:paused}
-/* Distance is set in pixels by JS (--gains-distance) rather than a percentage.
-   The track box itself is only strip-wide even though its content overflows,
-   so translateX(-50%) would only move the box, not the full content set. */
-@keyframes gains-scroll{
-  from{transform:translate3d(0,0,0)}
-  to{transform:translate3d(var(--gains-distance,-100%),0,0)}
-}
-.gain-card{
-  display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;
-  background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.25);
-}
-.gain-card.neg{background:rgba(251,113,133,.05);border-color:rgba(251,113,133,.25)}
-.gain-card.streak{
-  background:rgba(255,122,0,.08);border-color:rgba(255,122,0,.35);
-}
-.gain-card.streak .d{color:#ff9a3c;text-shadow:0 0 12px rgba(255,122,0,.35)}
-.gain-card .flag{
-  flex:none;width:32px;height:32px;border-radius:9px;overflow:hidden;
-  background:rgba(255,255,255,.05);border:1px solid var(--line);
-  display:flex;align-items:center;justify-content:center;
-}
-.gain-card .flag img{width:100%;height:100%;object-fit:cover}
-.gain-card .body{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
-.gain-card .n{
-  font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.02em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.gain-card .r{color:var(--ink-dim);font-size:11.5px;font-weight:600;letter-spacing:.05em}
-.gain-card .d{
-  font-family:var(--display);font-weight:700;font-size:18px;
-  font-variant-numeric:tabular-nums;color:var(--gain);
-}
-.gain-card.neg .d{color:var(--loss)}
-.gains-empty{
-  color:var(--ink-dim);font-size:13px;padding:8px 4px;font-style:italic;
-}
-
-/* ---------- Controls (tabs + search + share) ---------- */
+/* ---------- Controls (tabs + share) ---------- */
 .controls{
-  display:grid;grid-template-columns:auto 1fr auto;gap:12px;
-  align-items:center;margin-bottom:18px;
+  display:flex;justify-content:space-between;align-items:center;
+  gap:12px;margin-bottom:18px;
 }
 .tabs{
   display:inline-flex;border:1px solid var(--line);border-radius:999px;
@@ -170,26 +95,6 @@ h1{
 }
 .tab.active{background:linear-gradient(93deg,var(--grad-a),var(--grad-b));color:var(--ink)}
 .tab:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px}
-
-.search-wrap{position:relative;display:flex}
-.search-wrap input[type=search]{
-  width:100%;
-  font-family:var(--display);font-weight:600;font-size:13px;
-  color:var(--ink);background:rgba(12,18,48,.65);
-  border:1px solid var(--line);border-radius:12px;
-  padding:10px 40px 10px 14px;letter-spacing:.02em;outline:none;
-  transition:border-color .16s ease;-webkit-appearance:none;appearance:none;
-}
-.search-wrap input[type=search]:focus{border-color:var(--line-strong)}
-.search-wrap input[type=search]:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px}
-.search-wrap input[type=search]::placeholder{color:var(--ink-dim)}
-.clear-btn{
-  position:absolute;top:50%;right:6px;transform:translateY(-50%);
-  background:transparent;border:none;color:var(--ink-dim);cursor:pointer;
-  font:700 10px var(--display);letter-spacing:.18em;text-transform:uppercase;
-  padding:6px 10px;border-radius:999px;
-}
-.clear-btn:hover{color:var(--ink)}
 
 .share-btn{
   width:38px;height:38px;border-radius:10px;
@@ -210,26 +115,124 @@ h1{
   overflow:hidden;
 }
 .board-head{
-  display:grid;grid-template-columns:64px 1fr 130px 150px;gap:12px;align-items:center;
+  display:grid;grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr;gap:12px;align-items:center;
   padding:15px 22px;border-bottom:1px solid var(--line);
   font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.26em;
   text-transform:uppercase;color:var(--ink-dim);
   position:sticky;top:0;background:rgba(12,18,48,.92);backdrop-filter:blur(8px);z-index:5;
 }
 .board-head .num{text-align:right}
-.board-head[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 84px}
+.board-head > :nth-child(4),
+.board-head > :last-child{text-align:center}
+.board-head[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px}
+.board-head[data-playlist="wins"] > :nth-child(4),
+.board-head[data-playlist="wins"] > :nth-child(5){text-align:right}
 .board-head[data-playlist="wins"] > :nth-child(6){text-align:center}
 
 .player-row{
-  display:grid;grid-template-columns:64px 1fr 130px 150px;gap:12px;align-items:center;
+  display:grid;grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr;gap:12px;align-items:center;
   padding:14px 22px;border-bottom:1px solid var(--line);
-  transition:background .16s ease;
+  transition:background .16s ease;position:relative;overflow:hidden;
 }
-.player-row[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 84px}
+.player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
-.player-row.admin{grid-template-columns:64px 1fr 130px 150px auto}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 84px auto}
+.player-row.admin{grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr auto}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px auto}
+
+/* =========================================================
+   Preview styles — one variant per tab so Pal can compare
+   in context. Remove after we pick the winner.
+   1v1: W5 · Wash + edge bar
+   2v2: F3 · Vertical shimmer
+   3v3: F4 · Prismatic rainbow
+   wins: F5 · Full-row shimmer
+   ========================================================= */
+
+/* Foil sweep keyframes shared across the shimmer variants. */
+@keyframes preview-foil-sweep{0%{background-position:250% 0,0 0}100%{background-position:-150% 0,0 0}}
+@keyframes preview-foil-vertical{0%{background-position:0 250%,0 0}100%{background-position:0 -150%,0 0}}
+@keyframes preview-row-sweep{0%{background-position:250% 0}100%{background-position:-100% 0}}
+
+/* ---- 1v1: W5 (wash + left edge bar) --------------------- */
+.player-row[data-playlist="1v1"]{padding-left:26px}
+.player-row[data-playlist="1v1"]::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:5px;z-index:0;pointer-events:none;
+}
+.player-row[data-playlist="1v1"][data-rank="1"]{background:linear-gradient(90deg,rgba(255,210,74,.34),transparent 70%)}
+.player-row[data-playlist="1v1"][data-rank="1"]::before{background:linear-gradient(180deg,#FFEDA0,var(--gold));box-shadow:0 0 16px var(--gold)}
+.player-row[data-playlist="1v1"][data-rank="2"]{background:linear-gradient(90deg,rgba(201,212,232,.30),transparent 70%)}
+.player-row[data-playlist="1v1"][data-rank="2"]::before{background:linear-gradient(180deg,#F1F6FF,var(--silver));box-shadow:0 0 12px var(--silver)}
+.player-row[data-playlist="1v1"][data-rank="3"]{background:linear-gradient(90deg,rgba(224,154,92,.30),transparent 70%)}
+.player-row[data-playlist="1v1"][data-rank="3"]::before{background:linear-gradient(180deg,#F0B87F,var(--bronze));box-shadow:0 0 12px var(--bronze)}
+.player-row[data-playlist="1v1"].top10{background:linear-gradient(90deg,rgba(168,85,247,.16),transparent 70%)}
+.player-row[data-playlist="1v1"].top10::before{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));opacity:.7}
+
+/* ---- 2v2: F3 (vertical shimmer name) -------------------- */
+.player-row[data-playlist="2v2"][data-rank="1"] .p-name,
+.player-row[data-playlist="2v2"][data-rank="2"] .p-name,
+.player-row[data-playlist="2v2"][data-rank="3"] .p-name{
+  background-clip:text;-webkit-background-clip:text;color:transparent;
+  background-size:100% 250%,100% 100%;
+  animation:preview-foil-vertical 4s linear infinite;
+}
+.player-row[data-playlist="2v2"][data-rank="1"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-playlist="2v2"][data-rank="2"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-playlist="2v2"][data-rank="3"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-playlist="2v2"].top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
+
+/* ---- 3v3: F4 (prismatic rainbow name) ------------------- */
+.player-row[data-playlist="3v3"][data-rank="1"] .p-name,
+.player-row[data-playlist="3v3"][data-rank="2"] .p-name,
+.player-row[data-playlist="3v3"][data-rank="3"] .p-name{
+  background-clip:text;-webkit-background-clip:text;color:transparent;
+  background-size:250% 100%,100% 100%;
+  animation:preview-foil-sweep 4.5s linear infinite;
+}
+.player-row[data-playlist="3v3"][data-rank="1"] .p-name{background:linear-gradient(115deg,transparent 15%,rgba(255,120,180,.5) 35%,rgba(120,220,255,.5) 50%,rgba(255,240,120,.5) 65%,transparent 80%),linear-gradient(90deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
+.player-row[data-playlist="3v3"][data-rank="2"] .p-name{background:linear-gradient(115deg,transparent 15%,rgba(255,120,180,.5) 35%,rgba(120,220,255,.5) 50%,rgba(255,240,120,.5) 65%,transparent 80%),linear-gradient(90deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
+.player-row[data-playlist="3v3"][data-rank="3"] .p-name{background:linear-gradient(115deg,transparent 15%,rgba(255,120,180,.5) 35%,rgba(120,220,255,.5) 50%,rgba(255,240,120,.5) 65%,transparent 80%),linear-gradient(90deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
+.player-row[data-playlist="3v3"].top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
+
+/* ---- wins: F5 (full-row shimmer + shimmer name) --------- */
+.player-row[data-playlist="wins"][data-rank="1"]{
+  background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.10) 45%,transparent 60%),
+             linear-gradient(90deg,rgba(255,210,74,.20),transparent 85%);
+  background-size:250% 100%,100% 100%;
+  animation:preview-row-sweep 5s linear infinite;
+}
+.player-row[data-playlist="wins"][data-rank="2"]{
+  background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.12) 45%,transparent 60%),
+             linear-gradient(90deg,rgba(201,212,232,.18),transparent 85%);
+  background-size:250% 100%,100% 100%;
+  animation:preview-row-sweep 5s linear infinite;animation-delay:.7s;
+}
+.player-row[data-playlist="wins"][data-rank="3"]{
+  background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.10) 45%,transparent 60%),
+             linear-gradient(90deg,rgba(224,154,92,.18),transparent 85%);
+  background-size:250% 100%,100% 100%;
+  animation:preview-row-sweep 5s linear infinite;animation-delay:1.4s;
+}
+.player-row[data-playlist="wins"][data-rank="1"] .p-name,
+.player-row[data-playlist="wins"][data-rank="2"] .p-name,
+.player-row[data-playlist="wins"][data-rank="3"] .p-name{
+  background-clip:text;-webkit-background-clip:text;color:transparent;
+  background-size:250% 100%,100% 100%;
+  animation:preview-foil-sweep 4.5s linear infinite;
+}
+.player-row[data-playlist="wins"][data-rank="1"] .p-name{background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.4) 45%,transparent 60%),linear-gradient(90deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
+.player-row[data-playlist="wins"][data-rank="2"] .p-name{background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.5) 45%,transparent 60%),linear-gradient(90deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
+.player-row[data-playlist="wins"][data-rank="3"] .p-name{background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.4) 45%,transparent 60%),linear-gradient(90deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
+.player-row[data-playlist="wins"].top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
+
+/* Keep rank + MMR + Recent above the animated backgrounds. */
+.player-row .rank,
+.player-row .p-ident,
+.player-row .p-score,
+.player-row .p-winrate,
+.player-row .momentum-cell,
+.player-row .p-streak,
+.player-row .row-actions{position:relative;z-index:1}
 
 .rank{font-family:var(--display);font-style:italic;font-weight:700;font-size:23px;color:var(--ink-dim)}
 .rank.r1{color:var(--gold);text-shadow:0 0 18px rgba(255,210,74,.4)}
@@ -280,9 +283,10 @@ h1{
 }
 
 .p-score{
-  text-align:right;font-family:var(--display);font-weight:700;font-size:20px;
+  text-align:right;font-family:var(--display);font-weight:700;font-size:22px;
   color:var(--ink);font-variant-numeric:tabular-nums;
 }
+.player-row[data-playlist="wins"] .p-score{font-size:20px}
 .p-score.small{font-size:16px;color:var(--ink-dim);font-weight:600}
 .p-winrate{
   text-align:right;font-family:var(--display);font-weight:600;font-size:14px;
@@ -599,7 +603,8 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .tabs{display:flex;width:100%;overflow-x:auto}
   .tab{flex:1;min-height:44px;white-space:nowrap}
   .share-btn{align-self:end}
-  .board-head,.player-row{grid-template-columns:44px 1fr 90px 100px;padding:12px 14px;gap:8px}
+  .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 96px 74px 1fr;padding:12px 14px;gap:8px}
+  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 96px 74px 1fr auto}
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px}
   .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px auto}
@@ -617,17 +622,18 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .field-wide{grid-column:1}
   .dialog-panel{padding:22px 20px}
 
-  /* Names were getting truncated to 3-4 chars on phones. Drop the "Last hour"
-     column on ranked and the "Matches" column on wins to give names room. */
+  /* Names were getting truncated to 3-4 chars on phones. Drop the "Recent"
+     column on ranked and the "Matches" column on wins to give names room.
+     Streak stays because a "🔥 x12" pill is scannable and small. */
   .board-head,.player-row{padding:11px 12px;gap:8px}
   .board-head:not([data-playlist="wins"]),
   .player-row:not([data-playlist="wins"]){
-    grid-template-columns:40px minmax(0,1fr) 88px;
+    grid-template-columns:40px minmax(0,1fr) 82px 64px;
   }
   .player-row.admin:not([data-playlist="wins"]){
-    grid-template-columns:40px minmax(0,1fr) 88px auto;
+    grid-template-columns:40px minmax(0,1fr) 82px 64px auto;
   }
-  .board-head:not([data-playlist="wins"]) > :nth-child(4),
+  .board-head:not([data-playlist="wins"]) > :nth-child(5),
   .player-row:not([data-playlist="wins"]) .momentum-cell{display:none}
 
   .board-head[data-playlist="wins"],

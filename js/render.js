@@ -1,7 +1,7 @@
-import { PLAYLIST_LABELS, PLAYLISTS, isRankedPlaylist } from "./config.js";
+import { PLAYLIST_LABELS, PLAYLISTS } from "./config.js";
 import { COUNTRIES, canonicalCountry, labelForFlagUrl } from "./flag-directory.js";
 import { playerGlow, winRate } from "./model.js";
-import { formatWindow, momentumChip } from "./momentum.js";
+import { momentumChip } from "./momentum.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -15,7 +15,7 @@ function node(tag, options = {}) {
 
 // Auto-scroll long names when they overflow their container. Only kicks in
 // when text actually exceeds the visible width, so short names stay static.
-const MARQUEE_TARGETS = ".p-name, .pname, .gain-card .n";
+const MARQUEE_TARGETS = ".p-name";
 const MARQUEE_SLACK_PX = 4;
 
 function detachMarquee(el) {
@@ -62,58 +62,6 @@ function attachMarquee(el) {
   el.dataset.marquee = "on";
 }
 
-// Auto-scroll the mover / streak strip when the cards don't fit in one row.
-// Cards flex-grow to fill when there's room; when they overflow we duplicate
-// the whole set inside the track and the CSS animation slides 0 → -50%, so
-// the second copy takes over seamlessly as the first scrolls off.
-const GAINS_SCROLL_SLACK = 4;
-const GAINS_SCROLL_PX_PER_SEC = 70;
-
-function refreshGainsCarousel(strip) {
-  const track = strip?.querySelector(".gains-track");
-  if (!track) {
-    strip?.classList.remove("overflowing");
-    return;
-  }
-  // Reset from any prior overflowing state so the measurement is clean.
-  strip.classList.remove("overflowing");
-  track.style.removeProperty("--gains-duration");
-  track.style.removeProperty("--gains-distance");
-  track
-    .querySelectorAll(":scope > [data-dup='1']")
-    .forEach((clone) => clone.remove());
-
-  const overshoot = track.scrollWidth - strip.clientWidth;
-  if (overshoot <= GAINS_SCROLL_SLACK) return;
-
-  const originals = [...track.children];
-  for (const card of originals) {
-    const clone = card.cloneNode(true);
-    clone.setAttribute("data-dup", "1");
-    clone.setAttribute("aria-hidden", "true");
-    track.appendChild(clone);
-  }
-  strip.classList.add("overflowing");
-  const halfContent = track.scrollWidth / 2;
-  const seconds = Math.max(10, Math.round(halfContent / GAINS_SCROLL_PX_PER_SEC));
-  track.style.setProperty("--gains-duration", `${seconds}s`);
-  // Explicit pixel distance so the animation shifts by exactly one full set
-  // of original cards; the duplicated set slides into their place seamlessly.
-  track.style.setProperty("--gains-distance", `-${halfContent}px`);
-}
-
-export function applyGainsCarousels(root = document) {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      // querySelectorAll searches descendants only, so a strip passed as
-      // root would be skipped — include it explicitly when it matches.
-      const strips = new Set(root.querySelectorAll?.(".gains-strip") ?? []);
-      if (root.classList?.contains?.("gains-strip")) strips.add(root);
-      strips.forEach(refreshGainsCarousel);
-    });
-  });
-}
-
 export function applyMarquees(root = document) {
   // Double-rAF: iOS Safari occasionally runs the first rAF before layout is
   // fully painted. The second guarantees measurement against final geometry.
@@ -137,7 +85,6 @@ if (typeof window !== "undefined") {
     requestAnimationFrame(() => {
       scheduled = false;
       applyMarquees();
-      applyGainsCarousels();
     });
   });
 
@@ -145,12 +92,7 @@ if (typeof window !== "undefined") {
   // uses fallback metrics, so a name that "just fits" in the fallback can be
   // wider after the display font arrives — re-run once fonts settle.
   if (typeof document !== "undefined" && document.fonts?.ready) {
-    document.fonts.ready
-      .then(() => {
-        applyMarquees();
-        applyGainsCarousels();
-      })
-      .catch(() => {});
+    document.fonts.ready.then(() => applyMarquees()).catch(() => {});
   }
 }
 
@@ -248,28 +190,6 @@ export function handleTabKeydown(event, onActivate) {
   onActivate(PLAYLISTS[nextIndex]);
 }
 
-export function renderRecentGains(playlist, players, historyStore) {
-  const host = $("recentGains");
-  const strip = $("gainsStrip");
-  const windowLabel = $("gainsWindow");
-  const heading = $("gainsHeading");
-  if (!host || !strip) return;
-
-  // Wins tab: no top strip. Streak badges live inline on each row now
-  // (see the row-streak-chip in playerRow), so a separate top carousel
-  // would just duplicate the same info.
-  if (playlist === "wins") {
-    host.hidden = true;
-    strip.replaceChildren();
-    return;
-  }
-
-  host.hidden = false;
-  if (isRankedPlaylist(playlist)) {
-    renderMoverStrip({ playlist, players, historyStore, host, strip, windowLabel, heading });
-  }
-}
-
 // Build a chip label for the standings row. A "published" delta comes from
 // ATLAS's session baseline (always trustworthy, no minimum span check), while
 // an "observed" delta reuses the existing momentum-chip logic that requires
@@ -336,69 +256,6 @@ export function effectiveMmrDelta(player, playlist, historyStore, now = Date.now
   return { gained: null, spanMs: 0, source: "none" };
 }
 
-function renderMoverStrip({ playlist, players, historyStore, host, strip, windowLabel, heading }) {
-  host.setAttribute("aria-label", "Recent MMR changes");
-  if (heading) heading.textContent = "Recent MMR changes";
-
-  const now = Date.now();
-  const movers = [];
-  for (const player of players ?? []) {
-    const { gained, spanMs, source } = effectiveMmrDelta(player, playlist, historyStore, now);
-    if (gained == null) continue;
-    if (Math.abs(gained) < 1) continue;
-    // For observation-based deltas we still require the 10-min minimum so a
-    // 1-minute reading doesn't sneak in; published deltas are always trusted.
-    if (source === "observed" && spanMs < 10 * 60_000) continue;
-    movers.push({ player, gained, spanMs, source });
-  }
-  movers.sort((a, b) => Math.abs(b.gained) - Math.abs(a.gained));
-  const trimmed = movers.slice(0, 8);
-
-  if (windowLabel) {
-    if (trimmed.length) {
-      // Label follows the widest-span mover's source: a published (session)
-      // delta uses session wording, an observed rolling-window delta uses the
-      // "last N min / last hour" wording. Mixing sources is fine; the widest
-      // span drives what the whole strip is really showing.
-      const widest = trimmed.reduce((a, b) => (b.spanMs > a.spanMs ? b : a));
-      windowLabel.textContent = widest.source === "published"
-        ? "session"
-        : formatWindow(widest.spanMs);
-    } else {
-      windowLabel.textContent = "session";
-    }
-  }
-
-  strip.replaceChildren();
-  if (!trimmed.length) {
-    strip.append(
-      node("div", {
-        className: "gains-empty",
-        text: "No MMR movement this session yet. Movers appear as players play.",
-      }),
-    );
-    return;
-  }
-
-  const track = node("div", { className: "gains-track" });
-  for (const { player, gained } of trimmed) {
-    const card = node("div", { className: gained < 0 ? "gain-card neg" : "gain-card" });
-    card.append(flagCell(player, "flag"));
-    const body = node("div", { className: "body" });
-    body.append(node("div", { className: "n", text: player.name }));
-    if (typeof player.mmr === "number") {
-      body.append(node("div", { className: "r", text: `${player.mmr.toLocaleString()} MMR` }));
-    }
-    card.append(body);
-    const sign = gained > 0 ? "+" : gained < 0 ? "-" : "";
-    card.append(node("div", { className: "d", text: `${sign}${Math.abs(Math.round(gained)).toLocaleString()}` }));
-    track.append(card);
-  }
-  strip.append(track);
-  applyMarquees(strip);
-  applyGainsCarousels(strip);
-}
-
 // Prefer the streak ATLAS publishes on the wins doc (immediate, authoritative)
 // and fall back to whatever we've observed since the tab opened. A published
 // streak is ignored when the session is stale so a 3h-old "🔥 x6" doesn't
@@ -420,6 +277,9 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   const row = node("div", { className: `player-row${admin ? " admin" : ""}` });
   row.dataset.playlist = playlist;
   row.dataset.playerId = player.id;
+  const rank = index + 1;
+  row.dataset.rank = rank;
+  if (rank >= 4 && rank <= 10) row.classList.add("top10");
 
   row.append(node("div", { className: `rank ${rankClass(index)}`, text: `#${index + 1}` }));
 
@@ -452,22 +312,11 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     row.append(node("div", { className: "p-score", text: player.wins.toLocaleString() }));
     row.append(node("div", { className: "p-score small", text: player.matches.toLocaleString() }));
     row.append(node("div", { className: "p-winrate", text: `${winRate(player)}%` }));
-
-    // Empty cell still renders so grid columns line up across every row.
-    const streakCell = node("div", { className: "p-streak" });
-    const { streak } = effectiveStreak(player, historyStore);
-    if (streak >= 3) {
-      const chip = node("span", { className: "streak-chip" });
-      chip.title = `${streak}-win streak`;
-      chip.append(node("span", { className: "streak-flame", text: "🔥" }));
-      chip.append(node("span", { className: "streak-count", text: `x${streak}` }));
-      streakCell.append(chip);
-    }
-    row.append(streakCell);
-
+    row.append(streakCell(player, historyStore));
     if (admin) row.append(adminActions(player, onEdit, onDelete));
   } else {
     row.append(node("div", { className: "p-score", text: player.mmr.toLocaleString() }));
+    row.append(streakCell(player, historyStore));
 
     const momentumWrap = node("div", { className: "momentum-cell" });
     const delta = effectiveMmrDelta(player, playlist, historyStore);
@@ -482,6 +331,20 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     if (admin) row.append(adminActions(player, onEdit, onDelete));
   }
   return row;
+}
+
+// Empty cell still renders so grid columns line up across every row.
+function streakCell(player, historyStore) {
+  const cell = node("div", { className: "p-streak" });
+  const { streak } = effectiveStreak(player, historyStore);
+  if (streak >= 3) {
+    const chip = node("span", { className: "streak-chip" });
+    chip.title = `${streak}-win streak`;
+    chip.append(node("span", { className: "streak-flame", text: "🔥" }));
+    chip.append(node("span", { className: "streak-count", text: `x${streak}` }));
+    cell.append(chip);
+  }
+  return cell;
 }
 
 function adminActions(player, onEdit, onDelete) {
@@ -516,7 +379,8 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
       node("span", { className: "num", text: "MMR" }),
-      node("span", { className: "num", text: "Recent" }),
+      node("span", { text: "Streak" }),
+      node("span", { text: "Recent" }),
     );
     if (admin) head.append(node("span", { text: "Actions" }));
   }

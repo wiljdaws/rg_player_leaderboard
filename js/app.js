@@ -12,7 +12,6 @@ import { PlaylistListenerManager } from "./listener-manager.js";
 import {
   buildIconPayload,
   buildPlayerPayload,
-  filterPlayers,
   normalizeIconKeyRows,
   normalizePlaylistRows,
 } from "./model.js";
@@ -22,7 +21,6 @@ import {
   renderBoard,
   renderIconKey,
   renderPlayerDialog,
-  renderRecentGains,
   setActiveTab,
   setDataStatus,
   setSubLine,
@@ -71,7 +69,6 @@ function mountFlagPickers() {
 const initial = parseUrlState(window.location.href);
 const state = {
   playlist: initial.playlist,
-  search: initial.search,
   playerId: initial.playerId,
   rows: [],
   quarantined: [],
@@ -91,7 +88,7 @@ let writes = null;
 function urlState(push = false) {
   return writeUrlState(
     window,
-    { playlist: state.playlist, search: state.search, playerId: state.playerId },
+    { playlist: state.playlist, search: "", playerId: state.playerId },
     push,
   );
 }
@@ -106,10 +103,7 @@ function effectiveStatus() {
   };
 }
 
-function emptyMessage(filtered) {
-  if (state.search && !filtered.length && state.rows.length) {
-    return `No players match "${state.search}".`;
-  }
+function emptyMessage() {
   if (state.status.kind === "loading") return "Loading rankings…";
   if (state.status.kind === "error") return "Rankings are unavailable right now. Please try again shortly.";
   return `No ${state.playlist} rankings have been added yet.`;
@@ -126,7 +120,6 @@ function syncPlayerDialog() {
 }
 
 function render() {
-  const filtered = filterPlayers(state.rows, state.search);
   setActiveTab(state.playlist);
   setDataStatus(effectiveStatus());
   setSubLine(
@@ -135,14 +128,12 @@ function render() {
       : `Live 1v1, 2v2, 3v3, and wins standings.`,
   );
 
-  $("clearSearch").hidden = !state.search;
-  renderRecentGains(state.playlist, state.rows, historyStore);
   renderBoard({
     playlist: state.playlist,
-    rows: filtered,
+    rows: state.rows,
     historyStore,
     admin: state.admin,
-    emptyMessage: emptyMessage(filtered),
+    emptyMessage: emptyMessage(),
     onInspect: openPlayerDetails,
     onEdit: openEdit,
     onDelete: (player) => writes?.deletePlayer(player.id),
@@ -267,33 +258,11 @@ function wireEvents() {
     handleTabKeydown(event, (playlist) => activatePlaylist(playlist)),
   );
 
-  const search = $("playerSearch");
-  search.value = state.search;
-  search.addEventListener("input", () => {
-    state.search = search.value.slice(0, 80);
-    state.playerId = "";
-    const dialog = $("playerDialog");
-    if (dialog) {
-      dialog.dataset.playerId = "";
-      if (dialog.open) dialog.close();
-    }
-    urlState(false);
-    render();
-  });
-
-  $("clearSearch").addEventListener("click", () => {
-    state.search = "";
-    search.value = "";
-    urlState(false);
-    render();
-    search.focus();
-  });
-
   $("shareView").addEventListener("click", async () => {
     try {
       const url = buildShareUrl(window.location.href, {
         playlist: state.playlist,
-        search: state.search,
+        search: "",
         playerId: state.playerId,
       }).href;
       await copyText(url);
@@ -310,9 +279,7 @@ function wireEvents() {
 
   window.addEventListener("popstate", () => {
     const next = parseUrlState(window.location.href);
-    state.search = next.search;
     state.playerId = next.playerId;
-    search.value = next.search;
     activatePlaylist(next.playlist, { push: false, updateUrl: false });
   });
 
