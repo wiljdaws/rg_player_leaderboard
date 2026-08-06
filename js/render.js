@@ -263,9 +263,14 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
 
     const momentumWrap = node("div", { className: "momentum-cell" });
     const chip = momentumChip(historyStore.gainFor(playlist, player.id));
-    const chipEl = node("span", { className: chip.className, text: chip.label });
-    chipEl.title = chip.title;
-    momentumWrap.append(chipEl);
+    // Only surface a chip when the player has actually moved this window —
+    // "warming up" and "flat" both mean "nothing to show for this row", and
+    // stamping them on every row was just visual noise.
+    if (chip.className === "momentum hot" || chip.className === "momentum cold") {
+      const chipEl = node("span", { className: chip.className, text: chip.label });
+      chipEl.title = chip.title;
+      momentumWrap.append(chipEl);
+    }
     row.append(momentumWrap);
 
     if (admin) row.append(adminActions(player, onEdit, onDelete));
