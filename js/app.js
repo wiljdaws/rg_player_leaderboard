@@ -6,6 +6,7 @@ import {
 } from "./admin.js";
 import { PLAYLIST_LABELS, isAdminUser, isPlaylist, isRankedPlaylist } from "./config.js";
 import { createFirebaseGateway } from "./firebase.js";
+import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
 import {
@@ -17,6 +18,7 @@ import {
 } from "./model.js";
 import {
   handleTabKeydown,
+  hydrateFlagPicker,
   renderBoard,
   renderIconKey,
   renderPlayerDialog,
@@ -32,6 +34,40 @@ import { buildShareUrl, parseUrlState, writeUrlState } from "./url-state.js";
 const $ = (id) => document.getElementById(id);
 
 const historyStore = new MmrHistoryStore();
+const flagDirectory = new FlagDirectory();
+const flagPickers = { add: null, edit: null };
+
+// Live-updating readout next to each range slider — helps admins pick a
+// glow value without eyeballing pixels.
+function bindGlowSlider(form) {
+  const slider = form.querySelector("[data-glow-slider]");
+  const output = form.querySelector("[data-glow-value]");
+  if (!slider || !output) return;
+  const paint = () => {
+    output.textContent = `${slider.value}px`;
+  };
+  slider.addEventListener("input", paint);
+  paint();
+}
+
+function mountFlagPickers() {
+  const addMount = document.querySelector('[data-flag-picker="add"]');
+  const editMount = document.querySelector('[data-flag-picker="edit"]');
+  if (addMount) {
+    flagPickers.add = hydrateFlagPicker(addMount, {
+      currentValue: "",
+      directory: flagDirectory,
+      onNewFlag: (url) => flagDirectory.add(url),
+    });
+  }
+  if (editMount) {
+    flagPickers.edit = hydrateFlagPicker(editMount, {
+      currentValue: "",
+      directory: flagDirectory,
+      onNewFlag: (url) => flagDirectory.add(url),
+    });
+  }
+}
 
 const initial = parseUrlState(window.location.href);
 const state = {
@@ -139,12 +175,15 @@ function openEdit(player) {
   setFormValue(form, "mmr", player.mmr ?? 0);
   setFormValue(form, "wins", player.wins ?? 0);
   setFormValue(form, "matches", player.matches ?? 0);
-  setFormValue(form, "flag", player.flag);
   setFormValue(form, "icons", player.icons.join(","));
   setFormValue(form, "iconSize", player.iconSize);
   setFormValue(form, "glowColor", player.glowColor);
   setFormValue(form, "glowStrength", player.glowStrength);
+  if (player.flag) flagDirectory.add(player.flag);
+  flagPickers.edit?.setValue(player.flag || "");
   togglePlaylistFields(form, player.playlist);
+  const glowValue = form.querySelector("[data-glow-value]");
+  if (glowValue) glowValue.textContent = `${player.glowStrength ?? 0}px`;
   const dialog = $("editDialog");
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
@@ -210,6 +249,10 @@ async function refreshIcons(force = false) {
 }
 
 function wireEvents() {
+  mountFlagPickers();
+  bindGlowSlider($("adminForm"));
+  bindGlowSlider($("editForm"));
+
   const tabs = $("playlistTabs");
   tabs.addEventListener("click", (event) => {
     const tab = event.target.closest('[role="tab"]');
@@ -277,7 +320,15 @@ function wireEvents() {
     event.preventDefault();
     try {
       const payload = buildPlayerPayload(readFormValues($("adminForm")));
-      await writes?.addPlayer(payload);
+      if (payload.flag) flagDirectory.add(payload.flag);
+      const saved = await writes?.addPlayer(payload);
+      if (saved) {
+        $("adminForm").reset();
+        flagPickers.add?.setValue("");
+        const glowValue = $("adminForm").querySelector("[data-glow-value]");
+        if (glowValue) glowValue.textContent = "0px";
+        togglePlaylistFields($("adminForm"), $("playlist").value);
+      }
     } catch (error) {
       handleValidationError(error);
     }
@@ -299,6 +350,7 @@ function wireEvents() {
     if (!state.editingPlayer) return;
     try {
       const payload = buildPlayerPayload(readFormValues($("editForm")), false);
+      if (payload.flag) flagDirectory.add(payload.flag);
       const saved = await writes?.updatePlayer(state.editingPlayer.id, payload);
       if (saved) {
         state.editingPlayer = null;
@@ -389,6 +441,7 @@ async function boot() {
       if (isRankedPlaylist(state.playlist)) {
         historyStore.record(state.playlist, state.rows);
       }
+      flagDirectory.registerRows(state.rows);
       render();
     },
     onStatus(status) {

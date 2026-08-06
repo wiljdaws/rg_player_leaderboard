@@ -1,4 +1,5 @@
 import { PLAYLIST_LABELS, PLAYLISTS, isRankedPlaylist } from "./config.js";
+import { labelForFlagUrl } from "./flag-directory.js";
 import { playerGlow, winRate } from "./model.js";
 import { formatWindow, momentumChip } from "./momentum.js";
 
@@ -178,21 +179,21 @@ export function renderRecentGains(playlist, players, historyStore) {
   }
 
   host.hidden = false;
-  const gainers = historyStore?.topGainers(playlist, players) ?? [];
+  const movers = historyStore?.topMovers(playlist, players) ?? [];
 
   strip.replaceChildren();
-  if (!gainers.length) {
+  if (!movers.length) {
     strip.append(node("div", { className: "gains-empty", text: "Watching for MMR movement — check back after the next sync." }));
     if (windowLabel) windowLabel.textContent = "last hour";
     return;
   }
 
   if (windowLabel) {
-    const spans = gainers.map((g) => g.spanMs).filter((s) => s > 0);
+    const spans = movers.map((g) => g.spanMs).filter((s) => s > 0);
     windowLabel.textContent = spans.length ? formatWindow(Math.max(...spans)) : "last hour";
   }
 
-  for (const { player, gained } of gainers) {
+  for (const { player, gained } of movers) {
     const card = node("div", { className: gained < 0 ? "gain-card neg" : "gain-card" });
     card.append(flagCell(player, "flag"));
     const body = node("div", { className: "body" });
@@ -389,6 +390,187 @@ export function renderPlayerDialog(dialog, player, rank) {
     else dialog.setAttribute("open", "");
   }
   close.focus();
+}
+
+const CUSTOM_FLAG_VALUE = "__custom__";
+
+// A hydrated flag picker replaces a plain <input type=url> with a labeled
+// select (populated from directory.list()), a live preview image, and a
+// reveal-on-demand input for adding a new URL. The form still submits a
+// single "flag" value the model expects.
+export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFlag }) {
+  if (!root) return null;
+  root.innerHTML = "";
+  root.classList.add("flag-picker");
+
+  const preview = document.createElement("div");
+  preview.className = "flag-preview";
+  preview.setAttribute("aria-hidden", "true");
+
+  const select = document.createElement("select");
+  select.name = "flag";
+  select.className = "flag-select";
+  select.id = root.dataset.flagFieldId || "flagPicker";
+
+  const customRow = document.createElement("div");
+  customRow.className = "flag-custom";
+  customRow.hidden = true;
+  const customInput = document.createElement("input");
+  customInput.type = "url";
+  customInput.placeholder = "https://…/flag.svg";
+  customInput.autocomplete = "off";
+  customInput.className = "flag-custom-input";
+  const customAdd = document.createElement("button");
+  customAdd.type = "button";
+  customAdd.textContent = "Add";
+  customAdd.className = "flag-custom-add";
+  const customCancel = document.createElement("button");
+  customCancel.type = "button";
+  customCancel.textContent = "Cancel";
+  customCancel.className = "flag-custom-cancel";
+  customRow.append(customInput, customAdd, customCancel);
+
+  const row = document.createElement("div");
+  row.className = "flag-picker-row";
+  row.append(preview, select);
+  root.append(row, customRow);
+
+  function drawPreview(url) {
+    preview.innerHTML = "";
+    if (!url) {
+      preview.classList.add("empty");
+      preview.textContent = "—";
+      return;
+    }
+    preview.classList.remove("empty");
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "";
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener(
+      "error",
+      () => {
+        preview.classList.add("empty");
+        preview.textContent = "?";
+      },
+      { once: true },
+    );
+    preview.append(img);
+  }
+
+  function refresh() {
+    const entries = directory.list();
+    const seen = new Set();
+    const desired = currentValue || "";
+    if (desired) seen.add(desired);
+    select.innerHTML = "";
+
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = "— No flag —";
+    select.append(noneOpt);
+
+    if (desired && !entries.some((entry) => entry.url === desired)) {
+      const opt = document.createElement("option");
+      opt.value = desired;
+      opt.textContent = labelForFlagUrl(desired);
+      select.append(opt);
+    }
+
+    for (const entry of entries) {
+      if (seen.has(entry.url)) continue;
+      seen.add(entry.url);
+      const opt = document.createElement("option");
+      opt.value = entry.url;
+      opt.textContent = entry.label;
+      select.append(opt);
+    }
+
+    const addOpt = document.createElement("option");
+    addOpt.value = CUSTOM_FLAG_VALUE;
+    addOpt.textContent = "+ Add new flag URL…";
+    select.append(addOpt);
+
+    select.value = desired || "";
+    drawPreview(select.value);
+  }
+
+  function showCustomRow(show) {
+    customRow.hidden = !show;
+    if (show) {
+      customInput.value = "";
+      customInput.focus();
+    }
+  }
+
+  function commitCustomUrl() {
+    const raw = customInput.value.trim();
+    if (!raw) {
+      customInput.focus();
+      return;
+    }
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      customInput.setCustomValidity("Enter a valid URL.");
+      customInput.reportValidity();
+      return;
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      customInput.setCustomValidity("Flag URL must use http or https.");
+      customInput.reportValidity();
+      return;
+    }
+    customInput.setCustomValidity("");
+    const url = parsed.href;
+    directory.add(url);
+    onNewFlag?.(url);
+    currentValue = url;
+    refresh();
+    select.value = url;
+    drawPreview(url);
+    showCustomRow(false);
+  }
+
+  select.addEventListener("change", () => {
+    if (select.value === CUSTOM_FLAG_VALUE) {
+      showCustomRow(true);
+      select.value = currentValue || "";
+      return;
+    }
+    currentValue = select.value;
+    drawPreview(select.value);
+  });
+
+  customAdd.addEventListener("click", commitCustomUrl);
+  customInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitCustomUrl();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      showCustomRow(false);
+    }
+  });
+  customCancel.addEventListener("click", () => showCustomRow(false));
+
+  const unsubscribe = directory.subscribe(refresh);
+  refresh();
+
+  return {
+    setValue(value) {
+      currentValue = value || "";
+      refresh();
+    },
+    getValue() {
+      return currentValue || "";
+    },
+    destroy() {
+      unsubscribe();
+    },
+  };
 }
 
 export function setWriteStatus(status) {

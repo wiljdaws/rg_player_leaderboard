@@ -40,10 +40,10 @@
 
   <section class="podium" id="podium" style="display:none"></section>
 
-  <section class="recent-gains" id="recentGains" aria-label="Recent MMR gains" hidden>
+  <section class="recent-gains" id="recentGains" aria-label="Recent MMR changes" hidden>
     <div class="gains-heading">
       <span class="gains-kicker">Movers</span>
-      <h2>Recent MMR gains</h2>
+      <h2>Recent MMR changes</h2>
       <span class="gains-window" id="gainsWindow">last hour</span>
     </div>
     <div class="gains-strip" id="gainsStrip"></div>
@@ -85,8 +85,10 @@
 
     <form id="adminForm" class="admin-form">
       <h3>Add player</h3>
-      <div class="admin-form-grid">
-        <label>Playlist
+
+      <div class="field-grid">
+        <label class="field">
+          <span class="field-label">Playlist</span>
           <select id="playlist" name="playlist">
             <option value="1v1">1v1</option>
             <option value="2v2">2v2</option>
@@ -94,41 +96,54 @@
             <option value="wins">Wins</option>
           </select>
         </label>
-        <label>Player name
-          <input id="playerName" name="name" type="text" maxlength="80" required>
+        <label class="field field-wide">
+          <span class="field-label">Player name</span>
+          <input id="playerName" name="name" type="text" maxlength="80" required placeholder="e.g. [KING] JesusDied4U">
         </label>
 
-        <div class="admin-score-group" data-score-fields="ranked">
-          <label>MMR
-            <input id="playerMMR" name="mmr" type="number" required>
+        <div class="score-group" data-score-fields="ranked">
+          <label class="field">
+            <span class="field-label">MMR</span>
+            <input id="playerMMR" name="mmr" type="number" required placeholder="0">
           </label>
         </div>
 
-        <div class="admin-score-group" data-score-fields="wins" hidden>
-          <label>Wins
+        <div class="score-group" data-score-fields="wins" hidden>
+          <label class="field">
+            <span class="field-label">Wins</span>
             <input id="playerWins" name="wins" type="number" min="0" value="0">
           </label>
-          <label>Matches
+          <label class="field">
+            <span class="field-label">Matches</span>
             <input id="playerMatches" name="matches" type="number" min="0" value="0">
           </label>
         </div>
+      </div>
 
-        <label>Flag image URL
-          <input id="playerFlag" name="flag" type="url" inputmode="url">
+      <div class="field-section">
+        <div class="field-section-title">Appearance</div>
+        <div class="field field-wide">
+          <span class="field-label">Flag</span>
+          <div class="flag-picker-mount" data-flag-picker="add"></div>
+        </div>
+        <label class="field field-wide">
+          <span class="field-label">Icon URLs <em>(comma-separated)</em></span>
+          <input id="playerIcons" name="icons" type="text" placeholder="https://…/icon.png, https://…/other.png">
         </label>
-        <label>Icon URLs (comma separated)
-          <input id="playerIcons" name="icons" type="text">
-        </label>
-        <label>Icon size
+        <label class="field">
+          <span class="field-label">Icon size</span>
           <input id="playerIconSize" name="iconSize" type="number" min="12" max="50" value="18">
         </label>
-        <label>Glow color
+        <label class="field">
+          <span class="field-label">Glow color</span>
           <input id="playerGlowColor" name="glowColor" type="color" value="#ffffff">
         </label>
-        <label>Glow strength
-          <input id="playerGlowStrength" name="glowStrength" type="range" min="0" max="50" value="0">
+        <label class="field field-wide">
+          <span class="field-label">Glow strength <output data-glow-value>0px</output></span>
+          <input id="playerGlowStrength" name="glowStrength" type="range" min="0" max="50" value="0" data-glow-slider>
         </label>
       </div>
+
       <div class="admin-actions">
         <button class="admin-primary" type="submit">Add player</button>
       </div>
@@ -138,12 +153,14 @@
 
     <form id="iconForm" class="admin-form">
       <h3>Icon key</h3>
-      <div class="admin-form-grid two-col">
-        <label>Icon URL
-          <input id="iconKeyURL" name="icon" type="url" inputmode="url" required>
+      <div class="field-grid two-col">
+        <label class="field">
+          <span class="field-label">Icon URL</span>
+          <input id="iconKeyURL" name="icon" type="url" inputmode="url" required placeholder="https://…/icon.png">
         </label>
-        <label>Icon meaning
-          <input id="iconKeyLabel" name="label" type="text" maxlength="100" required>
+        <label class="field">
+          <span class="field-label">Icon meaning</span>
+          <input id="iconKeyLabel" name="label" type="text" maxlength="100" required placeholder="e.g. Streamer">
         </label>
       </div>
       <div class="admin-actions">
@@ -158,39 +175,56 @@
     <form id="editForm" class="dialog-panel">
       <h2 id="editDialogTitle" class="dialog-title">Edit player</h2>
       <input name="playlist" type="hidden">
-      <div class="admin-form-grid">
-        <label>Player name
+
+      <div class="field-grid">
+        <label class="field field-wide">
+          <span class="field-label">Player name</span>
           <input id="editName" name="name" type="text" maxlength="80" required>
         </label>
-        <div class="admin-score-group" data-score-fields="ranked">
-          <label>MMR
+
+        <div class="score-group" data-score-fields="ranked">
+          <label class="field">
+            <span class="field-label">MMR</span>
             <input id="editMMR" name="mmr" type="number">
           </label>
         </div>
-        <div class="admin-score-group" data-score-fields="wins" hidden>
-          <label>Wins
+
+        <div class="score-group" data-score-fields="wins" hidden>
+          <label class="field">
+            <span class="field-label">Wins</span>
             <input id="editWins" name="wins" type="number" min="0">
           </label>
-          <label>Matches
+          <label class="field">
+            <span class="field-label">Matches</span>
             <input id="editMatches" name="matches" type="number" min="0">
           </label>
         </div>
-        <label>Flag URL
-          <input id="editFlag" name="flag" type="url" inputmode="url">
-        </label>
-        <label>Icon URLs
+      </div>
+
+      <div class="field-section">
+        <div class="field-section-title">Appearance</div>
+        <div class="field field-wide">
+          <span class="field-label">Flag</span>
+          <div class="flag-picker-mount" data-flag-picker="edit"></div>
+        </div>
+        <label class="field field-wide">
+          <span class="field-label">Icon URLs <em>(comma-separated)</em></span>
           <input id="editIcons" name="icons" type="text">
         </label>
-        <label>Icon size
+        <label class="field">
+          <span class="field-label">Icon size</span>
           <input id="editIconSize" name="iconSize" type="number" min="12" max="50">
         </label>
-        <label>Glow color
+        <label class="field">
+          <span class="field-label">Glow color</span>
           <input id="editGlowColor" name="glowColor" type="color">
         </label>
-        <label>Glow strength
-          <input id="editGlowStrength" name="glowStrength" type="range" min="0" max="50">
+        <label class="field field-wide">
+          <span class="field-label">Glow strength <output data-glow-value>0px</output></span>
+          <input id="editGlowStrength" name="glowStrength" type="range" min="0" max="50" data-glow-slider>
         </label>
       </div>
+
       <div class="dialog-actions">
         <button id="cancelEdit" class="admin-secondary" type="button">Cancel</button>
         <button class="admin-primary" type="submit">Save changes</button>

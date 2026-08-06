@@ -43,7 +43,7 @@ test("gainFor drops samples older than the rolling window", () => {
   assert.equal(gain.gained, 20);
 });
 
-test("topGainers ranks positive movers only", () => {
+test("topMovers ranks both positive and negative changes by magnitude", () => {
   const storage = makeStorage();
   const store = new MmrHistoryStore({ storage, now: () => 0 });
   const t0 = 0;
@@ -54,9 +54,9 @@ test("topGainers ranks positive movers only", () => {
     { id: "c", mmr: 800 },
   ], t0);
   store.record("1v1", [
-    { id: "a", mmr: 1050 },
-    { id: "b", mmr: 890 },
-    { id: "c", mmr: 810 },
+    { id: "a", mmr: 1050 }, // +50
+    { id: "b", mmr: 830 }, // -70
+    { id: "c", mmr: 810 }, // +10
   ], t1);
 
   const players = [
@@ -64,11 +64,25 @@ test("topGainers ranks positive movers only", () => {
     { id: "b", name: "B" },
     { id: "c", name: "C" },
   ];
-  const gainers = store.topGainers("1v1", players, { ts: t1 });
+  const movers = store.topMovers("1v1", players, { ts: t1 });
   assert.deepEqual(
-    gainers.map((g) => [g.player.id, g.gained]),
-    [["a", 50], ["c", 10]],
+    movers.map((m) => [m.player.id, m.gained]),
+    [["b", -70], ["a", 50], ["c", 10]],
   );
+});
+
+test("topMovers uses the oldest in-window sample for the full-hour comparison", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("1v1", [{ id: "a", mmr: 1000 }], 0);
+  store.record("1v1", [{ id: "a", mmr: 1030 }], 20 * 60_000);
+  store.record("1v1", [{ id: "a", mmr: 1080 }], 50 * 60_000);
+
+  const [mover] = store.topMovers("1v1", [{ id: "a", name: "A" }], {
+    ts: 50 * 60_000,
+  });
+  assert.equal(mover.gained, 80); // compared against t=0, not the intermediate sample
+  assert.equal(mover.spanMs, 50 * 60_000);
 });
 
 test("record dedupes samples with an identical mmr within 30s", () => {

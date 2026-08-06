@@ -107,16 +107,18 @@ export class MmrHistoryStore {
     };
   }
 
-  topGainers(playlist, players, { max = 8, minGain = 1, ts = this.now() } = {}) {
+  // Every player whose MMR shifted (up or down) inside the rolling window,
+  // ranked by absolute magnitude. gainFor already anchors at the oldest
+  // in-window sample so this always reflects the full last-hour comparison.
+  topMovers(playlist, players, { max = 8, minChange = 1, ts = this.now() } = {}) {
     const rows = [];
     for (const player of players ?? []) {
       const { gained, spanMs, samples } = this.gainFor(playlist, player.id, ts);
-      if (gained == null) continue;
-      if (samples < 2) continue;
-      if (gained < minGain) continue;
+      if (gained == null || samples < 2) continue;
+      if (Math.abs(gained) < minChange) continue;
       rows.push({ player, gained, spanMs });
     }
-    rows.sort((a, b) => b.gained - a.gained);
+    rows.sort((a, b) => Math.abs(b.gained) - Math.abs(a.gained));
     return rows.slice(0, max);
   }
 
