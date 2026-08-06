@@ -358,8 +358,31 @@ function wireEvents() {
     try {
       const payload = buildPlayerPayload(readFormValues($("editForm")), false);
       if (payload.flag) flagDirectory.add(payload.flag);
-      const saved = await writes?.updatePlayer(state.editingPlayer.id, payload);
+      const player = state.editingPlayer;
+      const saved = await writes?.updatePlayer(player.id, payload);
       if (saved) {
+        // For HUD-synced players (deterministic ID = sourceUserId_playlist),
+        // propagate the cosmetic fields to the other playlist docs so a flag
+        // or glow edit made in 1v1 is reflected in 2v2/3v3/wins too. Score
+        // fields (mmr / wins / matches) stay per-playlist.
+        if (player.sourceUserId) {
+          const cosmetic = {
+            name: payload.name,
+            flag: payload.flag,
+            icons: payload.icons,
+            iconSize: payload.iconSize,
+            glowColor: payload.glowColor,
+            glowStrength: payload.glowStrength,
+          };
+          const siblingIds = ["1v1", "2v2", "3v3", "wins"]
+            .filter((p) => p !== player.playlist)
+            .map((p) => `${player.sourceUserId}_${p}`);
+          // Fire in parallel, ignore individual failures (a sibling doc may
+          // simply not exist yet — e.g. the player never played that mode).
+          await Promise.allSettled(
+            siblingIds.map((id) => gateway.updatePlayer(id, cosmetic)),
+          );
+        }
         state.editingPlayer = null;
         $("editDialog").close();
       }

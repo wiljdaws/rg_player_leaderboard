@@ -6,6 +6,7 @@ import {
   filterPlayers,
   normalizePlayerDocument,
   normalizePlaylistRows,
+  sanitizeHttpUrl,
   winRate,
 } from "../js/model.js";
 
@@ -138,4 +139,21 @@ test("buildPlayerPayload rejects invalid flag URL", () => {
       }),
     /Flag URL/,
   );
+});
+
+test("sanitizeHttpUrl accepts base64 raster data URIs (legacy flags)", () => {
+  const png = "data:image/png;base64,iVBORw0KGgoAAAA";
+  assert.equal(sanitizeHttpUrl(png), png);
+  const jpg = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+  assert.equal(sanitizeHttpUrl(jpg), jpg);
+});
+
+test("sanitizeHttpUrl rejects SVG data URIs (XSS vector)", () => {
+  const svg = "data:image/svg+xml;base64,PHN2Zz48c2NyaXB0Pg==";
+  assert.equal(sanitizeHttpUrl(svg), "");
+});
+
+test("sanitizeHttpUrl still rejects arbitrary schemes", () => {
+  assert.equal(sanitizeHttpUrl("javascript:alert(1)"), "");
+  assert.equal(sanitizeHttpUrl("file:///etc/passwd"), "");
 });

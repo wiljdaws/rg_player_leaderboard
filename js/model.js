@@ -3,6 +3,13 @@ import { isPlaylist } from "./config.js";
 const HEX_COLOR = /^#(?:[\da-f]{3}|[\da-f]{6})$/i;
 const MAX_NAME_LENGTH = 80;
 const MAX_URL_LENGTH = 2_048;
+// Larger cap so a base64-encoded flag PNG (~5-30 KB) is accepted. Legacy
+// entries in the leaderboard were saved inline as data URIs; without this
+// they were silently stripped and no flag rendered for those players.
+const MAX_IMAGE_URL_LENGTH = 200_000;
+// Raster-only. SVG data URIs are excluded because they can embed executable
+// JavaScript inside <script> or event handlers → XSS if we render them.
+const SAFE_DATA_URI = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/;
 
 function finiteNumber(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -23,7 +30,14 @@ function optionalText(value, maximum = 120) {
 export function sanitizeHttpUrl(value) {
   if (typeof value !== "string") return "";
   const candidate = value.trim();
-  if (!candidate || candidate.length > MAX_URL_LENGTH) return "";
+  if (!candidate) return "";
+  // Preserve inline raster data URIs (base64 PNG/JPEG/GIF/WebP). The legacy
+  // leaderboard saved country flags this way, and stripping them means those
+  // players lose their flag on the new site. Length cap is generous but bounded.
+  if (SAFE_DATA_URI.test(candidate) && candidate.length <= MAX_IMAGE_URL_LENGTH) {
+    return candidate;
+  }
+  if (candidate.length > MAX_URL_LENGTH) return "";
   try {
     const parsed = new URL(candidate);
     if (!["http:", "https:"].includes(parsed.protocol)) return "";
@@ -119,6 +133,10 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
       id,
       playlist,
       name,
+      // sourceUserId identifies HUD-synced players. Callers use it to fan out
+      // cosmetic edits (flag, icons, glow) across a player's sibling playlist
+      // docs — an edit made in 1v1 propagates to 2v2/3v3/wins.
+      sourceUserId: sourceUserId || null,
       ...score,
       flag: sanitizeHttpUrl(raw.flag),
       icons: normalizeIcons(raw.icons),
