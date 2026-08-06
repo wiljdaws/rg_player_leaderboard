@@ -503,7 +503,7 @@ export function formatAgo(timestamp, now = Date.now()) {
 function formatLastPlayed(player) {
   const ts = lastActivityMs(player);
   const ago = formatAgo(ts);
-  return ago ? `Last played: ${ago}` : "Last played: never";
+  return ago ? `Last played: ${ago}` : "Last played: unknown";
 }
 
 // Admin diagnostic: group everyone by HUD @version so the admin can eyeball
