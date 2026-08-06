@@ -267,18 +267,19 @@ h1{
   position:sticky;top:0;background:rgba(12,18,48,.92);backdrop-filter:blur(8px);z-index:5;
 }
 .board-head .num{text-align:right}
-.board-head[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 90px auto}
+.board-head[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 80px}
+.board-head[data-playlist="wins"] > :last-child{text-align:left}
 
 .player-row{
   display:grid;grid-template-columns:64px 1fr 130px 150px;gap:12px;align-items:center;
   padding:14px 22px;border-bottom:1px solid var(--line);
   transition:background .16s ease;
 }
-.player-row[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 90px auto}
+.player-row[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 80px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
 .player-row.admin{grid-template-columns:64px 1fr 130px 150px auto}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 90px auto}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 80px auto}
 
 .rank{font-family:var(--display);font-style:italic;font-weight:700;font-size:23px;color:var(--ink-dim)}
 .rank.r1{color:var(--gold);text-shadow:0 0 18px rgba(255,210,74,.4)}
@@ -306,19 +307,21 @@ h1{
 .p-name:hover{color:var(--grad-a)}
 .p-name:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px;border-radius:6px}
 .p-icons{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
-/* Row-level streak badge on the wins tab — orange fire theme mirrors the
-   streak card in the top strip so the same "🔥 x12" reads the same in both
-   contexts. align-self:flex-start so the chip hugs the left under the name,
-   never stretches to full name-column width. */
-.row-streak-chip{
-  align-self:flex-start;
-  padding:2px 8px;border-radius:999px;
-  background:rgba(255,122,0,.14);
-  border:1px solid rgba(255,122,0,.4);
-  color:#ff9a3c;
-  font:700 11px var(--display);letter-spacing:.05em;
-  text-shadow:0 0 6px rgba(255,122,0,.35);
+/* Streak column on the wins tab. Chip is a pill with a subtle gradient
+   so the "🔥 x12" reads clearly against the row background. Empty cell
+   still occupies its grid slot so columns line up across every row. */
+.p-streak{display:flex;align-items:center;justify-content:flex-start;min-width:0}
+.streak-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 10px;border-radius:999px;
+  background:linear-gradient(90deg,rgba(255,122,0,.24),rgba(255,154,60,.18));
+  border:1px solid rgba(255,154,60,.55);
+  color:#ffd7ad;
+  font:700 12px var(--display);letter-spacing:.06em;
+  text-shadow:0 0 8px rgba(255,122,0,.45);
+  box-shadow:0 4px 14px rgba(255,122,0,.14),inset 0 0 0 1px rgba(255,255,255,.04);
   white-space:nowrap;
+  font-variant-numeric:tabular-nums;
 }
 .p-icon{
   width:var(--icon-size,18px);height:var(--icon-size,18px);object-fit:contain;
@@ -647,7 +650,8 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .share-btn{align-self:end}
   .board-head,.player-row{grid-template-columns:44px 1fr 90px 100px;padding:12px 14px;gap:8px}
   .board-head[data-playlist="wins"],
-  .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 70px 70px 70px auto}
+  .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px auto}
   .rank{font-size:18px}
   .p-name{font-size:14.5px}
   .p-score{font-size:16px}
@@ -688,7 +692,10 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .player-row:not([data-playlist="wins"]) .momentum-cell{display:none}
 
   .board-head[data-playlist="wins"],
-  .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 62px 62px auto}
+  .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 58px 56px 68px}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 58px 56px 68px auto}
+  /* Matches column hidden on phones — wins + win% + streak are the stats
+     people scan; matches is derivable from wins/win%. */
   .board-head[data-playlist="wins"] > :nth-child(4),
   .player-row[data-playlist="wins"] > :nth-child(4){display:none}
 

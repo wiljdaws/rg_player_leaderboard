@@ -505,18 +505,6 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     nameWrap.append(icons);
   }
 
-  // Inline win-streak chip on wins-tab rows, same 3+ threshold as the top
-  // streaks strip. The strip still shows the top streaks up top; this puts
-  // the badge next to the player it belongs to so people can spot their own.
-  if (playlist === "wins") {
-    const { streak } = effectiveStreak(player, historyStore);
-    if (streak >= 3) {
-      const chip = node("span", { className: "row-streak-chip", text: `🔥 x${streak}` });
-      chip.title = `${streak}-win streak`;
-      nameWrap.append(chip);
-    }
-  }
-
   ident.append(nameWrap);
   row.append(ident);
 
@@ -524,8 +512,20 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     row.append(node("div", { className: "p-score", text: player.wins.toLocaleString() }));
     row.append(node("div", { className: "p-score small", text: player.matches.toLocaleString() }));
     row.append(node("div", { className: "p-winrate", text: `${winRate(player)}%` }));
+
+    // Dedicated streak column — same 3+ threshold as the old top strip.
+    // Chip cell always renders (even when empty) so the grid columns stay
+    // aligned across every row and the header line above them stays honest.
+    const streakCell = node("div", { className: "p-streak" });
+    const { streak } = effectiveStreak(player, historyStore);
+    if (streak >= 3) {
+      const chip = node("span", { className: "streak-chip", text: `🔥 x${streak}` });
+      chip.title = `${streak}-win streak`;
+      streakCell.append(chip);
+    }
+    row.append(streakCell);
+
     if (admin) row.append(adminActions(player, onEdit, onDelete));
-    else row.append(node("div"));
   } else {
     row.append(node("div", { className: "p-score", text: player.mmr.toLocaleString() }));
 
@@ -568,8 +568,9 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
       node("span", { className: "num", text: "Wins" }),
       node("span", { className: "num", text: "Matches" }),
       node("span", { className: "num", text: "Win %" }),
-      node("span", { text: admin ? "Actions" : "" }),
+      node("span", { text: "Streak" }),
     );
+    if (admin) head.append(node("span", { text: "Actions" }));
   } else {
     head.append(
       node("span", { text: "Rank" }),
