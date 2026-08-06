@@ -287,13 +287,23 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   ident.append(flagCell(player));
   const nameWrap = node("div", { className: "p-name-wrap" });
 
-  const nameBtn = node("button", { className: "p-name", type: "button" });
-  nameBtn.textContent = player.name;
+  // Non-admin viewers get a plain span with a hover tooltip; admins get a
+  // clickable button that opens the full details modal (version, source,
+  // last updated). Pal asked us to strip that info from the public view.
   const glow = playerGlow(player);
-  if (glow) nameBtn.style.textShadow = glow;
-  nameBtn.setAttribute("aria-label", `View details for ${player.name}`);
-  nameBtn.addEventListener("click", () => onInspect(player));
-  nameWrap.append(nameBtn);
+  const lastPlayed = formatLastPlayed(player);
+  let nameEl;
+  if (admin) {
+    nameEl = node("button", { className: "p-name", type: "button" });
+    nameEl.setAttribute("aria-label", `View details for ${player.name}`);
+    nameEl.addEventListener("click", () => onInspect(player));
+  } else {
+    nameEl = node("span", { className: "p-name p-name-static" });
+  }
+  nameEl.textContent = player.name;
+  nameEl.title = lastPlayed;
+  if (glow) nameEl.style.textShadow = glow;
+  nameWrap.append(nameEl);
 
   if (player.icons?.length) {
     const icons = node("div", { className: "p-icons" });
@@ -460,6 +470,92 @@ const UPDATED_AT_FORMAT = new Intl.DateTimeFormat(undefined, {
 function formatUpdatedAt(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "Not recorded";
   return UPDATED_AT_FORMAT.format(date);
+}
+
+// Human-friendly "X ago" — used for the hover tooltip on player names.
+// Prefers sessionLastSeen (HUD activity) because it reflects when the player
+// last actually did something in-game; falls back to lastWriteAt for docs
+// that predate session tracking.
+export function lastActivityMs(player) {
+  const lastSeen = Number.isFinite(player?.sessionLastSeen) ? player.sessionLastSeen : null;
+  const updated = player?.provenance?.updatedAt instanceof Date
+    ? player.provenance.updatedAt.getTime()
+    : null;
+  if (lastSeen != null && updated != null) return Math.max(lastSeen, updated);
+  return lastSeen ?? updated;
+}
+export function formatAgo(timestamp, now = Date.now()) {
+  if (!Number.isFinite(timestamp)) return null;
+  const diff = Math.max(0, now - timestamp);
+  const seconds = Math.round(diff / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+  const years = Math.round(months / 12);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+function formatLastPlayed(player) {
+  const ts = lastActivityMs(player);
+  const ago = formatAgo(ts);
+  return ago ? `Last played: ${ago}` : "Last played: never";
+}
+
+// Admin diagnostic: group everyone by HUD @version so the admin can eyeball
+// who's stuck on old builds and needs a ping. Rows come from the wins
+// collection because every HUD-synced player writes a wins doc, so it's the
+// canonical "seen at least once" roster. Unknown/legacy rows (no versionNum
+// stamped) surface first so they can't hide at the bottom.
+export function renderVersionBreakdown(host, rows) {
+  if (!host) return;
+  host.replaceChildren();
+  const active = (rows || []).filter((p) => p?.name);
+  if (!active.length) {
+    host.append(node("p", { className: "version-empty", text: "No players in the roster yet." }));
+    return;
+  }
+
+  const groups = new Map();
+  for (const player of active) {
+    const raw = player.provenance?.version;
+    const num = Number.parseFloat(raw);
+    const key = Number.isFinite(num) ? num : "unknown";
+    if (!groups.has(key)) groups.set(key, { label: Number.isFinite(num) ? `v${raw}` : "Unknown / legacy", players: [] });
+    groups.get(key).players.push(player);
+  }
+
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    if (a === "unknown") return -1;
+    if (b === "unknown") return 1;
+    return a - b;
+  });
+
+  for (const key of sortedKeys) {
+    const group = groups.get(key);
+    const wrap = node("div", { className: "version-group" });
+    const header = node("div", { className: "version-header" });
+    header.append(
+      node("span", { className: "version-tag", text: group.label }),
+      node("span", { className: "version-count", text: `${group.players.length} ${group.players.length === 1 ? "player" : "players"}` }),
+    );
+    wrap.append(header);
+    group.players.sort((a, b) => (lastActivityMs(b) ?? 0) - (lastActivityMs(a) ?? 0));
+    const list = node("ul", { className: "version-list" });
+    for (const player of group.players) {
+      const item = node("li", { className: "version-row" });
+      item.append(node("span", { className: "v-name", text: player.name }));
+      const ago = formatAgo(lastActivityMs(player)) || "never";
+      item.append(node("span", { className: "v-last", text: ago }));
+      list.append(item);
+    }
+    wrap.append(list);
+    host.append(wrap);
+  }
 }
 
 export function renderPlayerDialog(dialog, player, rank) {

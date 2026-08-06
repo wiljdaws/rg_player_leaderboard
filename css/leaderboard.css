@@ -219,6 +219,9 @@ h1{
 }
 .p-name:hover{color:var(--grad-a)}
 .p-name:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px;border-radius:6px}
+/* Non-admin viewers see the name as a static label with a hover tooltip. */
+.p-name.p-name-static{cursor:help}
+.p-name.p-name-static:hover{color:inherit}
 .p-icons{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 /* Streak column on the wins tab. Chip sits centered under the "Streak"
    header so empty rows still balance visually. */
@@ -341,6 +344,39 @@ h1{
   background:linear-gradient(90deg,var(--grad-a),var(--grad-b));
 }
 .admin-panel hr{border:none;border-top:1px solid var(--line);margin:28px 0}
+
+/* Version breakdown lives at the bottom of the admin panel. Each group is a
+   compact card showing all players on that HUD version, oldest first so
+   stragglers rise to the top. */
+.version-breakdown .admin-panel-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;
+}
+.version-breakdown .admin-panel-head p{margin-top:4px}
+.version-breakdown h3{margin-bottom:2px}
+.version-empty{color:var(--ink-dim);font-size:13px;font-style:italic}
+.version-group{
+  margin-bottom:16px;padding:14px 18px;border-radius:12px;
+  background:rgba(12,18,48,.55);border:1px solid var(--line);
+}
+.version-group:last-child{margin-bottom:0}
+.version-header{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line);
+}
+.version-tag{
+  font:700 15px var(--display);letter-spacing:.04em;color:var(--gold);
+}
+.version-count{
+  font:600 11px var(--display);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink-dim);
+}
+.version-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.version-row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  font-size:13px;color:var(--ink);
+}
+.v-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v-last{color:var(--ink-dim);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
 
 .field-grid{
   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));

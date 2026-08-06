@@ -21,6 +21,7 @@ import {
   renderBoard,
   renderIconKey,
   renderPlayerDialog,
+  renderVersionBreakdown,
   setActiveTab,
   setDataStatus,
   setSubLine,
@@ -63,6 +64,23 @@ function mountFlagPickers() {
       directory: flagDirectory,
       onNewFlag: (url) => flagDirectory.add(url),
     });
+  }
+}
+
+async function loadVersionBreakdown() {
+  const host = $("versionBreakdown");
+  if (!host) return;
+  host.replaceChildren(document.createTextNode("Loading roster…"));
+  try {
+    const raw = await gateway.loadPlayerRoster();
+    const normalized = normalizePlaylistRows(raw, "wins");
+    renderVersionBreakdown(host, normalized.rows);
+  } catch (error) {
+    host.replaceChildren();
+    host.append(Object.assign(document.createElement("p"), {
+      className: "version-empty",
+      textContent: `Could not load roster: ${error?.message || "unknown error"}`,
+    }));
   }
 }
 
@@ -317,6 +335,10 @@ function wireEvents() {
     }
   });
 
+  $("refreshVersions")?.addEventListener("click", () => {
+    if (state.admin) loadVersionBreakdown();
+  });
+
   $("editForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!state.editingPlayer) return;
@@ -424,6 +446,7 @@ async function boot() {
         ? "Signed in without admin access"
         : "";
     render();
+    if (state.admin) loadVersionBreakdown();
   });
 
   listenerManager = new PlaylistListenerManager({
