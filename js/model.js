@@ -83,7 +83,12 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
     if (matches === null || matches < 0) reasons.push("invalid matches");
     if (wins !== null && matches !== null && wins > matches) reasons.push("wins exceed matches");
     if (matches !== null && matches > 100_000) reasons.push("matches exceed limit");
-    score = { wins, matches };
+    const streak = finiteNumber(raw?.currentStreak);
+    score = {
+      wins,
+      matches,
+      currentStreak: streak == null ? null : Math.max(-999, Math.min(999, Math.trunc(streak))),
+    };
   } else {
     const mmr = finiteNumber(raw?.mmr);
     if (mmr === null || mmr < 0 || mmr > 35_000) reasons.push("invalid MMR");

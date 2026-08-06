@@ -19,6 +19,31 @@ test("normalizePlayerDocument accepts a valid MMR doc", () => {
   assert.equal(result.player.provenance.kind, "Manual admin entry");
 });
 
+test("normalizePlayerDocument passes through currentStreak on wins docs", () => {
+  const result = normalizePlayerDocument(
+    { id: "x", playlist: "wins", name: "A", wins: 10, matches: 20, currentStreak: 5 },
+    "wins",
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.player.currentStreak, 5);
+});
+
+test("normalizePlayerDocument clamps runaway currentStreak values", () => {
+  const result = normalizePlayerDocument(
+    { id: "x", playlist: "wins", name: "A", wins: 10, matches: 20, currentStreak: 9999 },
+    "wins",
+  );
+  assert.equal(result.player.currentStreak, 999);
+});
+
+test("normalizePlayerDocument leaves currentStreak null when missing", () => {
+  const result = normalizePlayerDocument(
+    { id: "x", playlist: "wins", name: "A", wins: 10, matches: 20 },
+    "wins",
+  );
+  assert.equal(result.player.currentStreak, null);
+});
+
 test("normalizePlayerDocument quarantines wins > matches", () => {
   const result = normalizePlayerDocument(
     { id: "x", playlist: "wins", name: "A", wins: 10, matches: 5 },

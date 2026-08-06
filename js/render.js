@@ -224,25 +224,47 @@ function renderMoverStrip({ playlist, players, historyStore, host, strip, window
   }
 }
 
+// Prefer the streak ATLAS publishes on the wins doc (immediate, authoritative)
+// and fall back to whatever we've observed since the tab opened.
+export function effectiveStreak(player, historyStore) {
+  const published = Number.isFinite(player?.currentStreak) ? Math.trunc(player.currentStreak) : null;
+  if (published != null && published !== 0) {
+    return { streak: published, source: "published" };
+  }
+  const observed = historyStore?.streakFor?.(player.id);
+  if (observed?.confident && observed.streak !== 0) {
+    return { streak: observed.streak, source: "observed" };
+  }
+  return { streak: 0, source: "none" };
+}
+
 function renderStreakStrip({ players, historyStore, host, strip, windowLabel, heading }) {
   host.setAttribute("aria-label", "Current win streaks");
   if (heading) heading.textContent = "Win streaks";
   if (windowLabel) windowLabel.textContent = "session";
 
-  const streaks = historyStore?.topStreaks(players) ?? [];
+  const MIN_STREAK = 3;
+  const streaks = [];
+  for (const player of players ?? []) {
+    const { streak, source } = effectiveStreak(player, historyStore);
+    if (streak < MIN_STREAK) continue;
+    streaks.push({ player, streak, source });
+  }
+  streaks.sort((a, b) => b.streak - a.streak);
+  const trimmed = streaks.slice(0, 8);
 
   strip.replaceChildren();
-  if (!streaks.length) {
+  if (!trimmed.length) {
     strip.append(
       node("div", {
         className: "gains-empty",
-        text: "No one on a 3+ win streak yet — check back once players start heating up.",
+        text: "No one on a 3+ win streak right now. Check back once players start heating up.",
       }),
     );
     return;
   }
 
-  for (const { player, streak } of streaks) {
+  for (const { player, streak } of trimmed) {
     const card = node("div", { className: "gain-card streak" });
     card.append(flagCell(player, "flag"));
     const body = node("div", { className: "body" });
