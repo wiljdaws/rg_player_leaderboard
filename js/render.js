@@ -170,20 +170,22 @@ export function renderRecentGains(playlist, players, historyStore) {
   const host = $("recentGains");
   const strip = $("gainsStrip");
   const windowLabel = $("gainsWindow");
+  const heading = $("gainsHeading");
   if (!host || !strip) return;
 
-  if (!isRankedPlaylist(playlist)) {
-    host.hidden = true;
-    strip.replaceChildren();
-    return;
-  }
+  const isRanked = isRankedPlaylist(playlist);
+  const statLabel = isRanked ? "MMR" : "wins";
+  const statValueOf = (player) => (isRanked ? player.mmr : player.wins);
 
   host.hidden = false;
+  host.setAttribute("aria-label", `Recent ${statLabel} changes`);
+  if (heading) heading.textContent = `Recent ${statLabel} changes`;
+
   const movers = historyStore?.topMovers(playlist, players) ?? [];
 
   strip.replaceChildren();
   if (!movers.length) {
-    strip.append(node("div", { className: "gains-empty", text: "Watching for MMR movement — check back after the next sync." }));
+    strip.append(node("div", { className: "gains-empty", text: `Watching for ${statLabel} movement — check back after the next sync.` }));
     if (windowLabel) windowLabel.textContent = "last hour";
     return;
   }
@@ -193,12 +195,16 @@ export function renderRecentGains(playlist, players, historyStore) {
     windowLabel.textContent = spans.length ? formatWindow(Math.max(...spans)) : "last hour";
   }
 
+  const metaLabel = isRanked ? "MMR" : "Wins";
   for (const { player, gained } of movers) {
     const card = node("div", { className: gained < 0 ? "gain-card neg" : "gain-card" });
     card.append(flagCell(player, "flag"));
     const body = node("div", { className: "body" });
     body.append(node("div", { className: "n", text: player.name }));
-    body.append(node("div", { className: "r", text: `${player.mmr.toLocaleString()} MMR` }));
+    const value = statValueOf(player);
+    if (typeof value === "number") {
+      body.append(node("div", { className: "r", text: `${value.toLocaleString()} ${metaLabel}` }));
+    }
     card.append(body);
     const sign = gained > 0 ? "+" : gained < 0 ? "-" : "";
     card.append(node("div", { className: "d", text: `${sign}${Math.abs(Math.round(gained)).toLocaleString()}` }));

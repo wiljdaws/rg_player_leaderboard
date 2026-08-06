@@ -1,8 +1,9 @@
-// Rolling 60-minute per-player MMR window kept in localStorage. The cap
-// keeps this from growing without bound when a browser stays open for days.
+// Rolling 60-minute per-player stat window kept in localStorage. Tracks MMR
+// for ranked playlists and wins for the wins playlist — same shape either
+// way. The cap keeps the store bounded across long-lived browser sessions.
 
 const WINDOW_MS = 60 * 60_000;
-const STORAGE_KEY = "rgPlayerLb:mmrHistory:v1";
+const STORAGE_KEY = "rgPlayerLb:statHistory:v2";
 const MAX_SNAPSHOTS_PER_PLAYER = 240;
 const MAX_PLAYERS_PER_PLAYLIST = 300;
 
@@ -15,7 +16,14 @@ function fallbackStorage() {
   };
 }
 
-const blank = () => ({ version: 1, playlists: {} });
+const blank = () => ({ version: 2, playlists: {} });
+
+function statFrom(playlist, row) {
+  if (playlist === "wins") {
+    return typeof row?.wins === "number" && Number.isFinite(row.wins) ? row.wins : null;
+  }
+  return typeof row?.mmr === "number" && Number.isFinite(row.mmr) ? row.mmr : null;
+}
 
 export class MmrHistoryStore {
   constructor({
@@ -33,11 +41,11 @@ export class MmrHistoryStore {
   load() {
     try {
       const parsed = JSON.parse(this.storage.getItem(STORAGE_KEY) || "null");
-      if (parsed?.version === 1 && parsed.playlists && typeof parsed.playlists === "object") {
+      if (parsed?.version === 2 && parsed.playlists && typeof parsed.playlists === "object") {
         return parsed;
       }
     } catch {
-      this.error = "MMR history could not be read.";
+      this.error = "History could not be read.";
     }
     return blank();
   }
@@ -47,7 +55,7 @@ export class MmrHistoryStore {
       this.storage.setItem(STORAGE_KEY, JSON.stringify(this.data));
       this.error = null;
     } catch {
-      this.error = "MMR history could not be saved.";
+      this.error = "History could not be saved.";
     }
   }
 
@@ -59,14 +67,14 @@ export class MmrHistoryStore {
 
     for (const row of rows) {
       if (!row?.id) continue;
-      const mmr = typeof row.mmr === "number" && Number.isFinite(row.mmr) ? row.mmr : null;
-      if (mmr === null) continue;
+      const value = statFrom(playlist, row);
+      if (value === null) continue;
 
       const series = store.players[row.id] ?? [];
       const last = series[series.length - 1];
       // Skip near-duplicates so a burst of unchanged snapshots doesn't fill the series.
-      if (last && last.mmr === mmr && ts - last.ts < 30_000) continue;
-      series.push({ mmr, ts });
+      if (last && last.value === value && ts - last.ts < 30_000) continue;
+      series.push({ value, ts });
 
       // Keep at least the newest sample even when the whole window is stale,
       // so a chip can render as soon as the next reading lands.
@@ -101,14 +109,14 @@ export class MmrHistoryStore {
     const anchor = series.find((entry) => entry.ts >= cutoff) ?? series[0];
     const latest = series[series.length - 1];
     return {
-      gained: latest.mmr - anchor.mmr,
+      gained: latest.value - anchor.value,
       spanMs: Math.max(0, latest.ts - anchor.ts),
       samples: series.length,
     };
   }
 
-  // Every player whose MMR shifted (up or down) inside the rolling window,
-  // ranked by absolute magnitude. gainFor already anchors at the oldest
+  // Every player whose tracked stat shifted (up or down) inside the rolling
+  // window, ranked by absolute magnitude. gainFor anchors at the oldest
   // in-window sample so this always reflects the full last-hour comparison.
   topMovers(playlist, players, { max = 8, minChange = 1, ts = this.now() } = {}) {
     const rows = [];

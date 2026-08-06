@@ -4,7 +4,7 @@ import {
   setFormValue,
   togglePlaylistFields,
 } from "./admin.js";
-import { PLAYLIST_LABELS, isAdminUser, isPlaylist, isRankedPlaylist } from "./config.js";
+import { PLAYLIST_LABELS, isAdminUser, isPlaylist } from "./config.js";
 import { createFirebaseGateway } from "./firebase.js";
 import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
@@ -438,9 +438,7 @@ async function boot() {
       const normalized = normalizePlaylistRows(raw, state.playlist);
       state.rows = normalized.rows;
       state.quarantined = normalized.quarantined;
-      if (isRankedPlaylist(state.playlist)) {
-        historyStore.record(state.playlist, state.rows);
-      }
+      historyStore.record(state.playlist, state.rows);
       flagDirectory.registerRows(state.rows);
       render();
     },

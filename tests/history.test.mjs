@@ -85,7 +85,7 @@ test("topMovers uses the oldest in-window sample for the full-hour comparison", 
   assert.equal(mover.spanMs, 50 * 60_000);
 });
 
-test("record dedupes samples with an identical mmr within 30s", () => {
+test("record dedupes samples with an identical value within 30s", () => {
   const storage = makeStorage();
   const store = new MmrHistoryStore({ storage, now: () => 0 });
   store.record("1v1", [{ id: "a", mmr: 1000 }], 0);
@@ -94,10 +94,28 @@ test("record dedupes samples with an identical mmr within 30s", () => {
   assert.equal(series.length, 1);
 });
 
-test("wins playlist rows are ignored (no MMR present)", () => {
+test("wins playlist tracks the wins count instead of MMR", () => {
   const storage = makeStorage();
   const store = new MmrHistoryStore({ storage, now: () => 0 });
-  store.record("wins", [{ id: "a", wins: 5, matches: 10 }], 0);
+  store.record("wins", [{ id: "a", wins: 100, matches: 150 }], 0);
+  store.record("wins", [{ id: "a", wins: 103, matches: 154 }], 20 * 60_000);
+  const gain = store.gainFor("wins", "a", 20 * 60_000);
+  assert.equal(gain.gained, 3);
+  assert.equal(gain.samples, 2);
+});
+
+test("wins playlist ignores rows missing a wins count", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("wins", [{ id: "a", mmr: 1000 }], 0);
   const gain = store.gainFor("wins", "a", 0);
+  assert.equal(gain.samples, 0);
+});
+
+test("ranked playlist ignores rows missing an MMR", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("1v1", [{ id: "a", wins: 5, matches: 10 }], 0);
+  const gain = store.gainFor("1v1", "a", 0);
   assert.equal(gain.samples, 0);
 });
