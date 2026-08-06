@@ -183,16 +183,25 @@ export function renderRecentGains(playlist, players, historyStore) {
 
   const movers = historyStore?.topMovers(playlist, players) ?? [];
 
-  strip.replaceChildren();
-  if (!movers.length) {
-    strip.append(node("div", { className: "gains-empty", text: `Watching for ${statLabel} movement — check back after the next sync.` }));
-    if (windowLabel) windowLabel.textContent = "last hour";
-    return;
+  if (windowLabel) {
+    if (movers.length) {
+      const widestSpan = Math.max(...movers.map((mover) => mover.spanMs));
+      windowLabel.textContent = formatWindow(widestSpan);
+    } else {
+      windowLabel.textContent = "last hour";
+    }
   }
 
-  if (windowLabel) {
-    const spans = movers.map((g) => g.spanMs).filter((s) => s > 0);
-    windowLabel.textContent = spans.length ? formatWindow(Math.max(...spans)) : "last hour";
+  strip.replaceChildren();
+  if (!movers.length) {
+    const progress = historyStore?.warmupProgress(playlist);
+    const spanMin = Math.max(0, Math.round((progress?.spanMs ?? 0) / 60_000));
+    const message =
+      spanMin > 0
+        ? `Building history · ${spanMin} min so far. Movers land once we have at least 10 min of readings.`
+        : `Watching for ${statLabel} changes — check back after the next sync.`;
+    strip.append(node("div", { className: "gains-empty", text: message }));
+    return;
   }
 
   const metaLabel = isRanked ? "MMR" : "Wins";

@@ -115,19 +115,40 @@ export class MmrHistoryStore {
     };
   }
 
-  // Every player whose tracked stat shifted (up or down) inside the rolling
-  // window, ranked by absolute magnitude. gainFor anchors at the oldest
-  // in-window sample so this always reflects the full last-hour comparison.
-  topMovers(playlist, players, { max = 8, minChange = 1, ts = this.now() } = {}) {
+  // Every player whose tracked stat shifted inside the rolling window, ranked
+  // by absolute magnitude. Requires a minimum span so the strip only reports
+  // real last-hour comparisons instead of fresh-load 1-minute snapshots.
+  topMovers(
+    playlist,
+    players,
+    { max = 8, minChange = 1, minSpanMs = 10 * 60_000, ts = this.now() } = {},
+  ) {
     const rows = [];
     for (const player of players ?? []) {
       const { gained, spanMs, samples } = this.gainFor(playlist, player.id, ts);
       if (gained == null || samples < 2) continue;
+      if (spanMs < minSpanMs) continue;
       if (Math.abs(gained) < minChange) continue;
       rows.push({ player, gained, spanMs });
     }
     rows.sort((a, b) => Math.abs(b.gained) - Math.abs(a.gained));
     return rows.slice(0, max);
+  }
+
+  // How much of the 60-minute window we've filled for the playlist — used to
+  // show progress during the initial warmup so the empty state feels alive.
+  warmupProgress(playlist, ts = this.now()) {
+    const players = this.data.playlists[playlist]?.players ?? {};
+    let bestSpanMs = 0;
+    for (const series of Object.values(players)) {
+      if (series.length < 2) continue;
+      const cutoff = ts - this.windowMs;
+      const anchor = series.find((entry) => entry.ts >= cutoff) ?? series[0];
+      const latest = series[series.length - 1];
+      const span = Math.max(0, latest.ts - anchor.ts);
+      if (span > bestSpanMs) bestSpanMs = span;
+    }
+    return { spanMs: bestSpanMs, ratio: Math.min(1, bestSpanMs / this.windowMs) };
   }
 
   clear() {

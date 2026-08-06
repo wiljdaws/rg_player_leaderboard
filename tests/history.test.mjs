@@ -71,6 +71,16 @@ test("topMovers ranks both positive and negative changes by magnitude", () => {
   );
 });
 
+test("topMovers hides players whose window is shorter than 10 minutes", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("1v1", [{ id: "a", mmr: 1000 }], 0);
+  store.record("1v1", [{ id: "a", mmr: 1050 }], 5 * 60_000);
+  const players = [{ id: "a", name: "A" }];
+  const movers = store.topMovers("1v1", players, { ts: 5 * 60_000 });
+  assert.deepEqual(movers, []);
+});
+
 test("topMovers uses the oldest in-window sample for the full-hour comparison", () => {
   const storage = makeStorage();
   const store = new MmrHistoryStore({ storage, now: () => 0 });
