@@ -315,11 +315,17 @@ export function renderRecentGains(playlist, players, historyStore) {
   const heading = $("gainsHeading");
   if (!host || !strip) return;
 
-  host.hidden = false;
-
+  // Wins tab: no top strip. Streak badges live inline on each row now
+  // (see the row-streak-chip in playerRow), so a separate top carousel
+  // would just duplicate the same info.
   if (playlist === "wins") {
-    renderStreakStrip({ players, historyStore, host, strip, windowLabel, heading });
-  } else if (isRankedPlaylist(playlist)) {
+    host.hidden = true;
+    strip.replaceChildren();
+    return;
+  }
+
+  host.hidden = false;
+  if (isRankedPlaylist(playlist)) {
     renderMoverStrip({ playlist, players, historyStore, host, strip, windowLabel, heading });
   }
 }
@@ -469,49 +475,6 @@ export function effectiveStreak(player, historyStore, now = Date.now()) {
   return { streak: 0, source: "none" };
 }
 
-function renderStreakStrip({ players, historyStore, host, strip, windowLabel, heading }) {
-  host.setAttribute("aria-label", "Current win streaks");
-  if (heading) heading.textContent = "Win streaks";
-  if (windowLabel) windowLabel.textContent = "session";
-
-  const MIN_STREAK = 3;
-  const streaks = [];
-  for (const player of players ?? []) {
-    const { streak, source } = effectiveStreak(player, historyStore);
-    if (streak < MIN_STREAK) continue;
-    streaks.push({ player, streak, source });
-  }
-  streaks.sort((a, b) => b.streak - a.streak);
-  const trimmed = streaks.slice(0, 8);
-
-  strip.replaceChildren();
-  if (!trimmed.length) {
-    strip.append(
-      node("div", {
-        className: "gains-empty",
-        text: "No one on a 3+ win streak right now. Check back once players start heating up.",
-      }),
-    );
-    return;
-  }
-
-  const track = node("div", { className: "gains-track" });
-  for (const { player, streak } of trimmed) {
-    const card = node("div", { className: "gain-card streak" });
-    card.append(flagCell(player, "flag"));
-    const body = node("div", { className: "body" });
-    body.append(node("div", { className: "n", text: player.name }));
-    if (typeof player.wins === "number") {
-      body.append(node("div", { className: "r", text: `${player.wins.toLocaleString()} Wins` }));
-    }
-    card.append(body);
-    card.append(node("div", { className: "d", text: `🔥 x${streak}` }));
-    track.append(card);
-  }
-  strip.append(track);
-  applyMarquees(strip);
-  applyGainsCarousels(strip);
-}
 
 function playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete }) {
   const row = node("div", { className: `player-row${admin ? " admin" : ""}` });
