@@ -146,7 +146,10 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
       provenance: {
         kind: sourceUserId ? "ATLAS synced" : "Manual admin entry",
         version,
-        updatedAt: normalizeUpdatedAt(raw.updatedAt),
+        // HUD writes the timestamp as `lastWriteAt`; legacy admin rows used
+        // `updatedAt`. Fall back to either so the "Last updated" readout
+        // populates whichever field the writer stamped.
+        updatedAt: normalizeUpdatedAt(raw.lastWriteAt) || normalizeUpdatedAt(raw.updatedAt),
       },
     },
   };

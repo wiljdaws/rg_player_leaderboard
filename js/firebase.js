@@ -58,6 +58,7 @@ export async function createFirebaseGateway() {
     onSnapshot,
     orderBy,
     query,
+    serverTimestamp,
     updateDoc,
     where,
   } = firestoreMod;
@@ -161,8 +162,8 @@ export async function createFirebaseGateway() {
     signIn: () => signInWithPopup(auth, provider),
     signOut: () => signOut(auth),
     loadIconKey,
-    addPlayer: (payload) => addDoc(leaderboard, payload),
-    updatePlayer: (id, payload) => updateDoc(doc(db, "leaderboard", id), payload),
+    addPlayer: (payload) => addDoc(leaderboard, { ...payload, lastWriteAt: serverTimestamp() }),
+    updatePlayer: (id, payload) => updateDoc(doc(db, "leaderboard", id), { ...payload, lastWriteAt: serverTimestamp() }),
     deletePlayer: (id) => deleteDoc(doc(db, "leaderboard", id)),
     addIcon: (payload) => addDoc(iconKey, payload),
     deleteIcon: (id) => deleteDoc(doc(db, "iconKey", id)),

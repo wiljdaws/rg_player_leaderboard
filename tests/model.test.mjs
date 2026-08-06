@@ -38,6 +38,21 @@ test("normalizePlayerDocument passes through session fields on ranked docs", () 
   assert.equal(result.player.sessionLastSeen, 1_700_000_000_500);
 });
 
+test("normalizePlayerDocument surfaces HUD's lastWriteAt as provenance.updatedAt", () => {
+  const stamp = new Date("2026-08-06T09:15:00Z");
+  const fromHud = normalizePlayerDocument(
+    { id: "abc", playlist: "1v1", name: "Player", mmr: 1234, lastWriteAt: stamp },
+    "1v1",
+  );
+  assert.equal(fromHud.player.provenance.updatedAt?.toISOString(), stamp.toISOString());
+
+  const legacy = normalizePlayerDocument(
+    { id: "abc", playlist: "1v1", name: "Player", mmr: 1234, updatedAt: stamp.toISOString() },
+    "1v1",
+  );
+  assert.equal(legacy.player.provenance.updatedAt?.toISOString(), stamp.toISOString());
+});
+
 test("normalizePlayerDocument leaves session fields null when missing", () => {
   const result = normalizePlayerDocument(
     { id: "abc", playlist: "1v1", name: "Player", mmr: 1234 },
