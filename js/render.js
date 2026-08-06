@@ -582,6 +582,22 @@ function detailRow(term, value) {
   return wrap;
 }
 
+// Format in the viewer's local zone with an explicit zone tag so people
+// reading from different regions know what "3:34 AM" is anchored to.
+// dateStyle+timeZoneName together throws on older engines, so spell out fields.
+const UPDATED_AT_FORMAT = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZoneName: "short",
+});
+function formatUpdatedAt(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "Not recorded";
+  return UPDATED_AT_FORMAT.format(date);
+}
+
 export function renderPlayerDialog(dialog, player, rank) {
   const panel = node("div", { className: "dialog-panel" });
   const heading = node("h2", { className: "dialog-title", text: player.name });
@@ -603,10 +619,7 @@ export function renderPlayerDialog(dialog, player, rank) {
     ),
     detailRow("Source", player.provenance.kind),
     detailRow("ATLAS version", player.provenance.version || "Not recorded"),
-    detailRow(
-      "Last updated",
-      player.provenance.updatedAt ? player.provenance.updatedAt.toLocaleString() : "Not recorded",
-    ),
+    detailRow("Last updated", formatUpdatedAt(player.provenance.updatedAt)),
   );
 
   const close = node("button", { className: "admin-primary", text: "Close", type: "button" });
