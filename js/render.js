@@ -63,8 +63,17 @@ function attachMarquee(el) {
 }
 
 export function applyMarquees(root = document) {
+  // Double-rAF: iOS Safari occasionally runs the first rAF before layout is
+  // fully painted. The second guarantees measurement against final geometry.
   requestAnimationFrame(() => {
-    for (const el of root.querySelectorAll(MARQUEE_TARGETS)) attachMarquee(el);
+    requestAnimationFrame(() => {
+      for (const el of root.querySelectorAll(MARQUEE_TARGETS)) {
+        // Skip elements the browser hasn't laid out yet (offsetParent null,
+        // width 0). They'll get another pass on the next render or resize.
+        if (el.clientWidth === 0) continue;
+        attachMarquee(el);
+      }
+    });
   });
 }
 
@@ -78,6 +87,13 @@ if (typeof window !== "undefined") {
       applyMarquees();
     });
   });
+
+  // Chakra Petch loads from Google Fonts async. Text measured before the swap
+  // uses fallback metrics, so a name that "just fits" in the fallback can be
+  // wider after the display font arrives — re-run once fonts settle.
+  if (typeof document !== "undefined" && document.fonts?.ready) {
+    document.fonts.ready.then(() => applyMarquees()).catch(() => {});
+  }
 }
 
 function safeImage(url, className, alt = "", onFail) {
