@@ -250,6 +250,50 @@ export function renderPodium(playlist, players, historyStore) {
   applyMarquees(host);
 }
 
+export function renderPlayerTicker(playlist, players) {
+  const host = $("playerTicker");
+  const track = $("playerTickerTrack");
+  if (!host || !track) return;
+
+  if (!players?.length) {
+    host.classList.remove("has-items");
+    track.replaceChildren();
+    return;
+  }
+  host.classList.add("has-items");
+
+  const isWins = playlist === "wins";
+  const items = document.createDocumentFragment();
+  const buildItem = (player, rank) => {
+    const item = node("span", { className: "player-ticker-item" });
+    item.append(node("span", { className: "r", text: `#${rank}` }));
+    item.append(node("span", { className: "n", text: player.name }));
+    const scoreText = isWins
+      ? `${player.wins.toLocaleString()} W`
+      : `${player.mmr.toLocaleString()}`;
+    item.append(node("span", { className: "s", text: scoreText }));
+    return item;
+  };
+  // Content is doubled so the animation from 0 → -50% loops seamlessly:
+  // when the first copy scrolls off, the second is already in its place.
+  for (let repeat = 0; repeat < 2; repeat += 1) {
+    players.forEach((player, index) => {
+      items.append(buildItem(player, index + 1));
+    });
+  }
+  track.replaceChildren(items);
+
+  // Scale duration to content width so scroll speed feels consistent
+  // regardless of how many players are in the current playlist. ~70 px/s
+  // keeps names legible without dragging on for minutes when the roster is
+  // large. Cap at 5 min so short lists don't zoom past too fast either.
+  requestAnimationFrame(() => {
+    const halfWidth = track.scrollWidth / 2;
+    const seconds = Math.min(300, Math.max(12, Math.round(halfWidth / 70)));
+    track.style.setProperty("--ticker-duration", `${seconds}s`);
+  });
+}
+
 export function renderRecentGains(playlist, players, historyStore) {
   const host = $("recentGains");
   const strip = $("gainsStrip");

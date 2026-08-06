@@ -643,6 +643,49 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .p-score{font-size:15px}
   .p-winrate{font-size:14px}
 }
+/* ---------- Player ticker (mobile only) ---------- */
+/* A single-line horizontal auto-scroll of every player in the current
+   playlist. Rendered above the standings board only on mobile — desktop
+   already shows names in full so a ticker there is just noise. Content is
+   doubled by JS and the animation runs 0 → -50%, giving a seamless loop. */
+.player-ticker{
+  display:none;
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:rgba(12,18,48,.65);
+  backdrop-filter:blur(4px);
+  margin-bottom:14px;
+  position:relative;
+  height:40px;
+  align-items:center;
+}
+.player-ticker::before,
+.player-ticker::after{
+  content:"";position:absolute;top:0;bottom:0;width:32px;z-index:2;pointer-events:none;
+}
+.player-ticker::before{left:0;background:linear-gradient(90deg,rgba(12,18,48,1),transparent)}
+.player-ticker::after{right:0;background:linear-gradient(-90deg,rgba(12,18,48,1),transparent)}
+.player-ticker-track{
+  display:flex;gap:28px;padding:0 12px;white-space:nowrap;
+  animation:player-ticker-scroll var(--ticker-duration,30s) linear infinite;
+}
+.player-ticker-item{
+  font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.02em;
+  display:inline-flex;align-items:center;gap:6px;color:var(--ink);
+}
+.player-ticker-item .r{color:var(--grad-a)}
+.player-ticker-item .s{color:var(--gain);font-variant-numeric:tabular-nums}
+.player-ticker:hover .player-ticker-track,
+.player-ticker:focus-within .player-ticker-track{animation-play-state:paused}
+@keyframes player-ticker-scroll{
+  from{transform:translateX(0)}
+  to{transform:translateX(-50%)}
+}
+@media (max-width:680px){
+  .player-ticker.has-items{display:flex}
+}
+
 /* ---------- Marquee ---------- */
 /* Auto-scroll long names when text exceeds their container. Only elements
    that actually overflow get the .marquee class attached by JS, so short
@@ -672,4 +715,8 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .marquee-inner{animation:none!important}
+  .player-ticker-track{animation:none!important}
+  /* Give reduced-motion users a way to still see everything: enable
+     horizontal scroll so they can swipe through the ticker manually. */
+  .player-ticker{overflow-x:auto}
 }
