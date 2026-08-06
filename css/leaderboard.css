@@ -222,6 +222,39 @@ h1{
 /* Non-admin viewers see the name as a static label with a hover tooltip. */
 .p-name.p-name-static{cursor:help}
 .p-name.p-name-static:hover{color:inherit}
+
+/* Custom tooltip pill — used for player name hover. Native title looked
+   generic and clashed with the site's neon/gold theme; this floats via a
+   single shared node in <body> so the row's overflow:hidden can't clip it. */
+.rg-tooltip{
+  position:absolute;z-index:9999;pointer-events:none;
+  padding:8px 14px;border-radius:10px;
+  background:rgba(12,18,48,.96);border:1px solid var(--line-strong);
+  color:var(--ink);
+  font:600 11.5px var(--display);letter-spacing:.14em;text-transform:uppercase;
+  white-space:nowrap;
+  box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 20px rgba(168,120,255,.14),inset 0 1px 0 rgba(255,255,255,.04);
+  backdrop-filter:blur(8px);
+  opacity:0;transform:translateY(-2px);
+  transition:opacity .16s ease,transform .16s ease;
+  top:-9999px;left:-9999px;
+}
+.rg-tooltip.visible{opacity:1;transform:translateY(0)}
+/* Momentarily rendered off-screen but with real dimensions so JS can
+   measure width/height before flipping to the visible position. */
+.rg-tooltip.measuring{opacity:0;transition:none}
+.rg-tooltip::after{
+  content:"";position:absolute;left:22px;width:10px;height:10px;
+  background:rgba(12,18,48,.96);
+  border-right:1px solid var(--line-strong);
+  border-bottom:1px solid var(--line-strong);
+  transform:rotate(45deg);
+}
+.rg-tooltip[data-pos="above"]::after{bottom:-6px}
+.rg-tooltip[data-pos="below"]::after{
+  top:-6px;border-right:none;border-bottom:none;
+  border-top:1px solid var(--line-strong);border-left:1px solid var(--line-strong);
+}
 .p-icons{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 /* Streak column on the wins tab. Chip sits centered under the "Streak"
    header so empty rows still balance visually. */

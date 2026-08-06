@@ -301,7 +301,7 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     nameEl = node("span", { className: "p-name p-name-static" });
   }
   nameEl.textContent = player.name;
-  nameEl.title = lastPlayed;
+  attachTooltip(nameEl, lastPlayed);
   if (glow) nameEl.style.textShadow = glow;
   nameWrap.append(nameEl);
 
@@ -504,6 +504,54 @@ function formatLastPlayed(player) {
   const ts = lastActivityMs(player);
   const ago = formatAgo(ts);
   return ago ? `Last played: ${ago}` : "Last played: unknown";
+}
+
+// Single shared floating tooltip so multiple .p-name hovers don't spawn
+// duplicate DOM. Portaled to <body> so the row's overflow:hidden clip
+// (which contains the shimmer background) can't chop off the tooltip.
+let sharedTooltip = null;
+function ensureTooltip() {
+  if (sharedTooltip) return sharedTooltip;
+  sharedTooltip = document.createElement("div");
+  sharedTooltip.className = "rg-tooltip";
+  sharedTooltip.setAttribute("role", "tooltip");
+  document.body.appendChild(sharedTooltip);
+  return sharedTooltip;
+}
+function positionTooltip(target) {
+  const el = ensureTooltip();
+  const targetRect = target.getBoundingClientRect();
+  // Measure after we've made it visible-but-transparent so getBoundingClientRect
+  // reads the correct pill width. .visible flips opacity; layout is stable.
+  el.classList.add("measuring");
+  const tipRect = el.getBoundingClientRect();
+  el.classList.remove("measuring");
+  const scrollY = window.scrollY || document.documentElement.scrollTop;
+  const scrollX = window.scrollX || document.documentElement.scrollLeft;
+  const above = targetRect.top - tipRect.height - 10;
+  const useAbove = above > 8;
+  el.dataset.pos = useAbove ? "above" : "below";
+  const top = useAbove
+    ? targetRect.top + scrollY - tipRect.height - 10
+    : targetRect.bottom + scrollY + 10;
+  const rawLeft = targetRect.left + scrollX + Math.min(24, targetRect.width / 2);
+  const maxLeft = document.documentElement.clientWidth - tipRect.width - 8 + scrollX;
+  const left = Math.max(8 + scrollX, Math.min(rawLeft, maxLeft));
+  el.style.top = `${top}px`;
+  el.style.left = `${left}px`;
+}
+function attachTooltip(el, text) {
+  const label = String(text || "").trim();
+  if (!label) return;
+  el.addEventListener("mouseenter", () => {
+    const tip = ensureTooltip();
+    tip.textContent = label;
+    tip.classList.add("visible");
+    positionTooltip(el);
+  });
+  el.addEventListener("mouseleave", () => {
+    sharedTooltip?.classList.remove("visible");
+  });
 }
 
 // Admin diagnostic: group everyone by HUD @version so the admin can eyeball
