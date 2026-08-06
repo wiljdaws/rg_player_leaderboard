@@ -646,7 +646,14 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
    names stay static. Pause on hover / focus so users can read mid-scroll. */
 .marquee{overflow:hidden;text-align:left}
 .marquee-inner{
-  display:inline-block;white-space:nowrap;will-change:transform;
+  display:inline-block;white-space:nowrap;
+  /* Keep intrinsic width regardless of parent layout — needed because .p-name
+     is inline-flex, and flex-shrink would otherwise collapse this span to fit
+     the container, hiding the overflow that we want to marquee. */
+  flex:0 0 auto;
+  will-change:transform;
+}
+.marquee .marquee-inner{
   animation:marquee-scroll var(--marquee-duration,8s) ease-in-out infinite;
 }
 @keyframes marquee-scroll{
