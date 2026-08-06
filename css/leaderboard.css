@@ -210,10 +210,12 @@ h1{
 /* Grow to fill the remaining space in .p-ident (after the fixed-width flag),
    so long names get all the room they can — without this the wrap sits at
    content width, which on narrow mobile columns clipped names to ~80px. */
-.p-name-wrap{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:3px}
+/* Row keeps name + icons on a single line so trophies read as an inline
+   accent right after the name (Pal wanted this to match the old site). */
+.p-name-wrap{min-width:0;flex:1 1 auto;display:flex;flex-direction:row;align-items:center;gap:10px}
 .p-name{
   display:inline-flex;align-items:center;gap:8px;min-width:0;
-  font-family:var(--display);font-weight:700;font-size:16.5px;letter-spacing:.02em;
+  font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.01em;
   background:transparent;border:none;color:inherit;text-align:left;padding:0;cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
@@ -255,7 +257,7 @@ h1{
   top:-6px;border-right:none;border-bottom:none;
   border-top:1px solid var(--line-strong);border-left:1px solid var(--line-strong);
 }
-.p-icons{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.p-icons{display:flex;align-items:center;gap:5px;flex:0 0 auto;flex-wrap:wrap}
 /* Streak column on the wins tab. Chip sits centered under the "Streak"
    header so empty rows still balance visually. */
 .p-streak{display:flex;align-items:center;justify-content:center;min-width:0}
