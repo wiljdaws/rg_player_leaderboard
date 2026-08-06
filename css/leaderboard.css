@@ -246,7 +246,9 @@ h1{
 .p-name:hover{color:var(--grad-a)}
 .p-name:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px;border-radius:6px}
 /* Non-admin viewers see the name as a static label with a hover tooltip. */
-.p-name.p-name-static{cursor:help}
+/* Non-admin viewers see the name as a plain label — no cursor hint, since
+   the tooltip lives on the flag now. */
+.p-name.p-name-static{cursor:default}
 .p-name.p-name-static:hover{color:inherit}
 
 /* Custom tooltip pill — used for player name hover. Native title looked
