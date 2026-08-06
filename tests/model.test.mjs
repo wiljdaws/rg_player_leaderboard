@@ -106,6 +106,17 @@ test("normalizePlayerDocument leaves currentStreak null when missing", () => {
   assert.equal(result.player.currentStreak, null);
 });
 
+test("normalizePlayerDocument passes through currentStreak on ranked docs too", () => {
+  // HUD 17.2+ mirrors the streak on ranked docs so the chip renders on
+  // 1v1/2v2/3v3 tabs. Regression: the ranked branch was dropping the field.
+  const result = normalizePlayerDocument(
+    { id: "x", playlist: "1v1", name: "A", mmr: 1234, currentStreak: 7 },
+    "1v1",
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.player.currentStreak, 7);
+});
+
 test("normalizePlayerDocument quarantines wins > matches", () => {
   const result = normalizePlayerDocument(
     { id: "x", playlist: "wins", name: "A", wins: 10, matches: 5 },

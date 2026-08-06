@@ -113,11 +113,16 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
     const delta = finiteNumber(raw?.sessionMmrDelta);
     const startedAt = finiteNumber(raw?.sessionStartedAt);
     const lastSeen = finiteNumber(raw?.sessionLastSeen);
+    // HUD 17.2+ mirrors the total-streak value on ranked docs too so the
+    // streak chip can render on 1v1/2v2/3v3 tabs. Pre-17.2 docs won't have
+    // this field; the chip just stays hidden for those rows.
+    const streak = finiteNumber(raw?.currentStreak);
     score = {
       mmr,
       sessionMmrDelta: delta == null ? null : Math.trunc(delta),
       sessionStartedAt: startedAt == null ? null : Math.trunc(startedAt),
       sessionLastSeen: lastSeen == null ? null : Math.trunc(lastSeen),
+      currentStreak: streak == null ? null : Math.max(-999, Math.min(999, Math.trunc(streak))),
     };
   }
 
