@@ -114,12 +114,67 @@ test("wins playlist tracks the wins count instead of MMR", () => {
   assert.equal(gain.samples, 2);
 });
 
-test("wins playlist ignores rows missing a wins count", () => {
+test("wins playlist ignores rows missing a wins/matches count", () => {
   const storage = makeStorage();
   const store = new MmrHistoryStore({ storage, now: () => 0 });
   store.record("wins", [{ id: "a", mmr: 1000 }], 0);
   const gain = store.gainFor("wins", "a", 0);
   assert.equal(gain.samples, 0);
+});
+
+test("streakFor extends a clean win streak with each pure-win block", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("wins", [{ id: "a", wins: 100, matches: 150 }], 0);
+  store.record("wins", [{ id: "a", wins: 102, matches: 152 }], 60_000); // +2W
+  store.record("wins", [{ id: "a", wins: 105, matches: 155 }], 120_000); // +3W
+  const result = store.streakFor("a", 120_000);
+  assert.equal(result.streak, 5);
+  assert.equal(result.confident, true);
+});
+
+test("streakFor flips negative on a pure-loss block", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("wins", [{ id: "a", wins: 100, matches: 150 }], 0);
+  store.record("wins", [{ id: "a", wins: 102, matches: 152 }], 60_000); // +2W → streak 2
+  store.record("wins", [{ id: "a", wins: 102, matches: 154 }], 120_000); // +2L → streak -2
+  const result = store.streakFor("a", 120_000);
+  assert.equal(result.streak, -2);
+});
+
+test("streakFor collapses a mixed block to +/- 1", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  store.record("wins", [{ id: "a", wins: 100, matches: 150 }], 0);
+  // 3 games: 2 wins, 1 loss → mixed, net positive → +1
+  store.record("wins", [{ id: "a", wins: 102, matches: 153 }], 60_000);
+  const result = store.streakFor("a", 60_000);
+  assert.equal(result.streak, 1);
+});
+
+test("topStreaks only surfaces positive streaks of at least minStreak", () => {
+  const storage = makeStorage();
+  const store = new MmrHistoryStore({ storage, now: () => 0 });
+  // Player A: 3-win streak
+  store.record("wins", [{ id: "a", wins: 100, matches: 150 }], 0);
+  store.record("wins", [{ id: "a", wins: 103, matches: 153 }], 60_000);
+  // Player B: only 2 wins, below threshold
+  store.record("wins", [{ id: "b", wins: 100, matches: 150 }], 0);
+  store.record("wins", [{ id: "b", wins: 102, matches: 152 }], 60_000);
+  // Player C: 4-loss streak — should never appear
+  store.record("wins", [{ id: "c", wins: 100, matches: 150 }], 0);
+  store.record("wins", [{ id: "c", wins: 100, matches: 154 }], 60_000);
+
+  const streaks = store.topStreaks(
+    [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+      { id: "c", name: "C" },
+    ],
+    { ts: 60_000 },
+  );
+  assert.deepEqual(streaks.map((s) => [s.player.id, s.streak]), [["a", 3]]);
 });
 
 test("ranked playlist ignores rows missing an MMR", () => {

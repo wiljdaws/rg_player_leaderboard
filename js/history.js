@@ -1,9 +1,9 @@
 // Rolling 60-minute per-player stat window kept in localStorage. Tracks MMR
-// for ranked playlists and wins for the wins playlist — same shape either
-// way. The cap keeps the store bounded across long-lived browser sessions.
+// for ranked playlists; on the wins playlist each sample also carries the
+// matches count so we can reconstruct win streaks the same way ATLAS does.
 
 const WINDOW_MS = 60 * 60_000;
-const STORAGE_KEY = "rgPlayerLb:statHistory:v2";
+const STORAGE_KEY = "rgPlayerLb:statHistory:v3";
 const MAX_SNAPSHOTS_PER_PLAYER = 240;
 const MAX_PLAYERS_PER_PLAYLIST = 300;
 
@@ -16,13 +16,23 @@ function fallbackStorage() {
   };
 }
 
-const blank = () => ({ version: 2, playlists: {} });
+const blank = () => ({ version: 3, playlists: {} });
 
-function statFrom(playlist, row) {
+function entryFrom(playlist, row, ts) {
   if (playlist === "wins") {
-    return typeof row?.wins === "number" && Number.isFinite(row.wins) ? row.wins : null;
+    if (typeof row?.wins !== "number" || !Number.isFinite(row.wins)) return null;
+    if (typeof row?.matches !== "number" || !Number.isFinite(row.matches)) return null;
+    return { value: row.wins, matches: row.matches, ts };
   }
-  return typeof row?.mmr === "number" && Number.isFinite(row.mmr) ? row.mmr : null;
+  if (typeof row?.mmr !== "number" || !Number.isFinite(row.mmr)) return null;
+  return { value: row.mmr, ts };
+}
+
+function entriesEqual(a, b, playlist) {
+  if (!a || !b) return false;
+  if (a.value !== b.value) return false;
+  if (playlist === "wins" && a.matches !== b.matches) return false;
+  return true;
 }
 
 export class MmrHistoryStore {
@@ -41,7 +51,7 @@ export class MmrHistoryStore {
   load() {
     try {
       const parsed = JSON.parse(this.storage.getItem(STORAGE_KEY) || "null");
-      if (parsed?.version === 2 && parsed.playlists && typeof parsed.playlists === "object") {
+      if (parsed?.version === 3 && parsed.playlists && typeof parsed.playlists === "object") {
         return parsed;
       }
     } catch {
@@ -67,14 +77,14 @@ export class MmrHistoryStore {
 
     for (const row of rows) {
       if (!row?.id) continue;
-      const value = statFrom(playlist, row);
-      if (value === null) continue;
+      const entry = entryFrom(playlist, row, ts);
+      if (!entry) continue;
 
       const series = store.players[row.id] ?? [];
       const last = series[series.length - 1];
       // Skip near-duplicates so a burst of unchanged snapshots doesn't fill the series.
-      if (last && last.value === value && ts - last.ts < 30_000) continue;
-      series.push({ value, ts });
+      if (last && entriesEqual(last, entry, playlist) && ts - last.ts < 30_000) continue;
+      series.push(entry);
 
       // Keep at least the newest sample even when the whole window is stale,
       // so a chip can render as soon as the next reading lands.
@@ -132,6 +142,54 @@ export class MmrHistoryStore {
       rows.push({ player, gained, spanMs });
     }
     rows.sort((a, b) => Math.abs(b.gained) - Math.abs(a.gained));
+    return rows.slice(0, max);
+  }
+
+  // Session win/loss streak reconstructed from wins/matches deltas. Mirrors
+  // the ATLAS HUD's advanceOpponentStreak: a clean run of wins extends the
+  // streak, a clean run of losses flips it negative, and any mixed block
+  // collapses to +/- 1 because we can't know the game order.
+  //
+  // Returns { streak, confident, samples }. streak is positive for wins,
+  // negative for losses, zero when we haven't seen a decisive block yet.
+  streakFor(playerId, ts = this.now()) {
+    const series = this.data.playlists.wins?.players?.[playerId] ?? [];
+    if (series.length < 2) return { streak: 0, confident: false, samples: series.length };
+
+    let streak = 0;
+    let confident = false;
+    for (let i = 1; i < series.length; i += 1) {
+      const prev = series[i - 1];
+      const curr = series[i];
+      if (typeof prev.matches !== "number" || typeof curr.matches !== "number") continue;
+      const matchDiff = curr.matches - prev.matches;
+      const winDiff = curr.value - prev.value;
+      if (matchDiff <= 0) continue;
+      const losses = matchDiff - winDiff;
+      if (winDiff > 0 && losses === 0) {
+        streak = streak > 0 ? streak + winDiff : winDiff;
+      } else if (losses > 0 && winDiff === 0) {
+        streak = streak < 0 ? streak - losses : -losses;
+      } else {
+        streak = winDiff >= losses ? 1 : -1;
+      }
+      confident = true;
+    }
+    return { streak, confident, samples: series.length, ts };
+  }
+
+  // Everyone on a positive streak of at least minStreak, ordered longest
+  // first. Loss streaks are intentionally excluded — the site is for
+  // celebrating heaters, not for airing anyone's rough night.
+  topStreaks(players, { minStreak = 3, max = 8, ts = this.now() } = {}) {
+    const rows = [];
+    for (const player of players ?? []) {
+      const { streak, confident } = this.streakFor(player.id, ts);
+      if (!confident) continue;
+      if (streak < minStreak) continue;
+      rows.push({ player, streak });
+    }
+    rows.sort((a, b) => b.streak - a.streak);
     return rows.slice(0, max);
   }
 

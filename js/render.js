@@ -173,13 +173,18 @@ export function renderRecentGains(playlist, players, historyStore) {
   const heading = $("gainsHeading");
   if (!host || !strip) return;
 
-  const isRanked = isRankedPlaylist(playlist);
-  const statLabel = isRanked ? "MMR" : "wins";
-  const statValueOf = (player) => (isRanked ? player.mmr : player.wins);
-
   host.hidden = false;
-  host.setAttribute("aria-label", `Recent ${statLabel} changes`);
-  if (heading) heading.textContent = `Recent ${statLabel} changes`;
+
+  if (playlist === "wins") {
+    renderStreakStrip({ players, historyStore, host, strip, windowLabel, heading });
+  } else if (isRankedPlaylist(playlist)) {
+    renderMoverStrip({ playlist, players, historyStore, host, strip, windowLabel, heading });
+  }
+}
+
+function renderMoverStrip({ playlist, players, historyStore, host, strip, windowLabel, heading }) {
+  host.setAttribute("aria-label", "Recent MMR changes");
+  if (heading) heading.textContent = "Recent MMR changes";
 
   const movers = historyStore?.topMovers(playlist, players) ?? [];
 
@@ -199,24 +204,54 @@ export function renderRecentGains(playlist, players, historyStore) {
     const message =
       spanMin > 0
         ? `Building history · ${spanMin} min so far. Movers land once we have at least 10 min of readings.`
-        : `Watching for ${statLabel} changes — check back after the next sync.`;
+        : `Watching for MMR changes — check back after the next sync.`;
     strip.append(node("div", { className: "gains-empty", text: message }));
     return;
   }
 
-  const metaLabel = isRanked ? "MMR" : "Wins";
   for (const { player, gained } of movers) {
     const card = node("div", { className: gained < 0 ? "gain-card neg" : "gain-card" });
     card.append(flagCell(player, "flag"));
     const body = node("div", { className: "body" });
     body.append(node("div", { className: "n", text: player.name }));
-    const value = statValueOf(player);
-    if (typeof value === "number") {
-      body.append(node("div", { className: "r", text: `${value.toLocaleString()} ${metaLabel}` }));
+    if (typeof player.mmr === "number") {
+      body.append(node("div", { className: "r", text: `${player.mmr.toLocaleString()} MMR` }));
     }
     card.append(body);
     const sign = gained > 0 ? "+" : gained < 0 ? "-" : "";
     card.append(node("div", { className: "d", text: `${sign}${Math.abs(Math.round(gained)).toLocaleString()}` }));
+    strip.append(card);
+  }
+}
+
+function renderStreakStrip({ players, historyStore, host, strip, windowLabel, heading }) {
+  host.setAttribute("aria-label", "Current win streaks");
+  if (heading) heading.textContent = "Win streaks";
+  if (windowLabel) windowLabel.textContent = "session";
+
+  const streaks = historyStore?.topStreaks(players) ?? [];
+
+  strip.replaceChildren();
+  if (!streaks.length) {
+    strip.append(
+      node("div", {
+        className: "gains-empty",
+        text: "No one on a 3+ win streak yet — check back once players start heating up.",
+      }),
+    );
+    return;
+  }
+
+  for (const { player, streak } of streaks) {
+    const card = node("div", { className: "gain-card streak" });
+    card.append(flagCell(player, "flag"));
+    const body = node("div", { className: "body" });
+    body.append(node("div", { className: "n", text: player.name }));
+    if (typeof player.wins === "number") {
+      body.append(node("div", { className: "r", text: `${player.wins.toLocaleString()} Wins` }));
+    }
+    card.append(body);
+    card.append(node("div", { className: "d", text: `🔥 x${streak}` }));
     strip.append(card);
   }
 }

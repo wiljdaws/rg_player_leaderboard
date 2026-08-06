@@ -152,6 +152,10 @@ h1{
   background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.25);
 }
 .gain-card.neg{background:rgba(251,113,133,.05);border-color:rgba(251,113,133,.25)}
+.gain-card.streak{
+  background:rgba(255,122,0,.08);border-color:rgba(255,122,0,.35);
+}
+.gain-card.streak .d{color:#ff9a3c;text-shadow:0 0 12px rgba(255,122,0,.35)}
 .gain-card .flag{
   flex:none;width:32px;height:32px;border-radius:9px;overflow:hidden;
   background:rgba(255,255,255,.05);border:1px solid var(--line);
