@@ -616,6 +616,29 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .step.p1 .pscore{font-size:26px}
   .step .plast{grid-column:2}
   .gains-strip{grid-template-columns:1fr 1fr}
+
+  /* Names were getting truncated to 3-4 chars on phones. Drop the "Last hour"
+     column on ranked and the "Matches" column on wins to give names room. */
+  .board-head,.player-row{padding:11px 12px;gap:8px}
+  .board-head:not([data-playlist="wins"]),
+  .player-row:not([data-playlist="wins"]){
+    grid-template-columns:40px minmax(0,1fr) 88px;
+  }
+  .player-row.admin:not([data-playlist="wins"]){
+    grid-template-columns:40px minmax(0,1fr) 88px auto;
+  }
+  .board-head:not([data-playlist="wins"]) > :nth-child(4),
+  .player-row:not([data-playlist="wins"]) .momentum-cell{display:none}
+
+  .board-head[data-playlist="wins"],
+  .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 62px 62px auto}
+  .board-head[data-playlist="wins"] > :nth-child(4),
+  .player-row[data-playlist="wins"] > :nth-child(4){display:none}
+
+  .p-flag{width:28px;height:28px}
+  .p-name{font-size:14px}
+  .p-score{font-size:15px}
+  .p-winrate{font-size:14px}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
