@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/leaderboard.css">
+<link rel="stylesheet" href="css/leaderboard.css?v=a8ddc53">
 </head>
 <body>
 <div class="wrap">
@@ -241,6 +241,29 @@
     <a href="https://discord.gg/nFe5xpGnEk" target="_blank" rel="noopener noreferrer">Join the Rocket Goal Championship Discord</a>
   </footer>
 </div>
-<script type="module" src="js/app.js"></script>
+<!-- Import map: bump the version query on every deploy to bust module cache
+     in one place. Import map keys are relative to this document, so they
+     must match the fully-resolved URL of each module (e.g. app.js imports
+     "./render.js" which resolves to <base>/js/render.js). Without this,
+     mobile browsers hold onto old .js files even after the HTML refreshes,
+     which delays visual fixes for hours. -->
+<script type="importmap">
+{
+  "imports": {
+    "./js/admin.js":            "./js/admin.js?v=a8ddc53",
+    "./js/config.js":           "./js/config.js?v=a8ddc53",
+    "./js/firebase.js":         "./js/firebase.js?v=a8ddc53",
+    "./js/flag-directory.js":   "./js/flag-directory.js?v=a8ddc53",
+    "./js/history.js":          "./js/history.js?v=a8ddc53",
+    "./js/listener-manager.js": "./js/listener-manager.js?v=a8ddc53",
+    "./js/local-cache.js":      "./js/local-cache.js?v=a8ddc53",
+    "./js/model.js":            "./js/model.js?v=a8ddc53",
+    "./js/momentum.js":         "./js/momentum.js?v=a8ddc53",
+    "./js/render.js":           "./js/render.js?v=a8ddc53",
+    "./js/url-state.js":        "./js/url-state.js?v=a8ddc53"
+  }
+}
+</script>
+<script type="module" src="js/app.js?v=a8ddc53" data-asset-version="a8ddc53"></script>
 </body>
 </html>
