@@ -191,8 +191,15 @@ function openEdit(player) {
 
 function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   if (!isPlaylist(playlist)) return;
+  if (playlist === state.playlist) return;
   state.playlist = playlist;
+  // Drop the previous playlist's rows so the intermediate render doesn't
+  // paint wins-shaped data into an MMR-shaped board (or vice versa) while
+  // the new listener is spinning up.
+  state.rows = [];
+  state.quarantined = [];
   state.playerId = "";
+  state.status = { kind: "loading", message: `Loading ${playlist} rankings…` };
   const dialog = $("playerDialog");
   if (dialog) {
     dialog.dataset.playerId = "";
