@@ -13,10 +13,14 @@
 html{scrollbar-color:var(--grad-a) var(--navy-1)}
 body{
   font-family:var(--body);color:var(--ink);min-height:100vh;
+  /* Rocket Goal art as the base layer with a heavy navy tint on top so
+     text stays legible. Gradient hotspots keep the neon accent Pal likes. */
   background:
-    radial-gradient(1200px 560px at 72% -12%, rgba(168,85,247,.20), transparent 62%),
-    radial-gradient(900px 500px at 8% -4%, rgba(56,132,255,.13), transparent 55%),
-    radial-gradient(700px 700px at 50% 115%, rgba(228,75,224,.08), transparent 60%),
+    radial-gradient(1200px 560px at 72% -12%, rgba(168,85,247,.22), transparent 62%),
+    radial-gradient(900px 500px at 8% -4%, rgba(56,132,255,.15), transparent 55%),
+    radial-gradient(700px 700px at 50% 115%, rgba(228,75,224,.10), transparent 60%),
+    linear-gradient(180deg, rgba(6,10,24,.86), rgba(12,18,48,.90)),
+    url("https://i.imgur.com/tOmR41o.jpeg") center/cover no-repeat fixed,
     var(--navy-0);
   padding:clamp(14px,3vw,44px);
 }
