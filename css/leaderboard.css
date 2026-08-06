@@ -78,10 +78,13 @@ h1{
 #authStatus{color:var(--ink-dim);font-size:11px;letter-spacing:.08em}
 
 /* ---------- Controls (tabs + share) ---------- */
+/* Tabs sit centered; share button floats right without pulling the tabs
+   off-axis. Position:relative anchors the absolute share button. */
 .controls{
-  display:flex;justify-content:space-between;align-items:center;
-  gap:12px;margin-bottom:18px;
+  display:flex;justify-content:center;align-items:center;
+  gap:12px;margin-bottom:18px;position:relative;
 }
+.controls .share-btn{position:absolute;right:0;top:50%;transform:translateY(-50%)}
 .tabs{
   display:inline-flex;border:1px solid var(--line);border-radius:999px;
   padding:3px;background:rgba(12,18,48,.65);backdrop-filter:blur(4px);
@@ -201,12 +204,33 @@ h1{
 
 .p-ident{display:flex;align-items:center;gap:12px;min-width:0}
 .p-flag{
-  flex:none;width:34px;height:34px;border-radius:10px;overflow:hidden;
+  flex:none;width:34px;height:34px;border-radius:10px;
   background:rgba(255,255,255,.05);border:1px solid var(--line-strong);
   display:flex;align-items:center;justify-content:center;
   color:var(--ink-dim);font-family:var(--display);font-weight:700;font-size:12px;
+  position:relative;cursor:help;
 }
-.p-flag img{width:100%;height:100%;object-fit:cover}
+.p-flag img{width:100%;height:100%;object-fit:cover;border-radius:9px}
+/* Activity dot on the top-right corner of the flag. Colored buckets
+   mirror the clan site's freshness signal:
+     hot     · green pulsing · seen in last 5 min
+     warm    · gold          · seen in last hour
+     recent  · orange        · seen today
+     cold    · grey          · seen more than a day ago
+     none    · hidden        · never seen
+*/
+.p-flag::after{
+  content:"";position:absolute;top:-3px;right:-3px;
+  width:10px;height:10px;border-radius:50%;
+  border:2px solid var(--navy-1);background:var(--ink-dim);
+  transition:background .3s ease,box-shadow .3s ease,opacity .3s ease;
+  pointer-events:none;
+}
+.p-flag.status-hot::after{background:var(--gain);box-shadow:0 0 8px var(--gain);animation:pulse 1.8s infinite}
+.p-flag.status-warm::after{background:var(--gold);box-shadow:0 0 6px rgba(255,210,74,.55)}
+.p-flag.status-recent::after{background:#ff9a3c;box-shadow:0 0 6px rgba(255,154,60,.55)}
+.p-flag.status-cold::after{background:var(--ink-dim);opacity:.6}
+.p-flag.status-none::after{display:none}
 /* Grow to fill the remaining space in .p-ident (after the fixed-width flag),
    so long names get all the room they can — without this the wrap sits at
    content width, which on narrow mobile columns clipped names to ~80px. */

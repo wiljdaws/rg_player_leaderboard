@@ -284,14 +284,19 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   row.append(node("div", { className: `rank ${rankClass(index)}`, text: `#${index + 1}` }));
 
   const ident = node("div", { className: "p-ident" });
-  ident.append(flagCell(player));
+  // Flag carries the activity dot (green/gold/orange/grey based on last
+  // HUD activity) and the "Last played" hover tooltip. Pal wanted the
+  // freshness indicator on the flag corner, matching the clan site.
+  const flag = flagCell(player);
+  flag.classList.add(activityStatus(player));
+  attachTooltip(flag, formatLastPlayed(player));
+  ident.append(flag);
   const nameWrap = node("div", { className: "p-name-wrap" });
 
-  // Non-admin viewers get a plain span with a hover tooltip; admins get a
-  // clickable button that opens the full details modal (version, source,
-  // last updated). Pal asked us to strip that info from the public view.
+  // Non-admin viewers see the name as a plain label — clicks belong to
+  // admins so they can open the full details modal (version, source,
+  // last updated). Everyone else sees just the styled name.
   const glow = playerGlow(player);
-  const lastPlayed = formatLastPlayed(player);
   let nameEl;
   if (admin) {
     nameEl = node("button", { className: "p-name", type: "button" });
@@ -301,7 +306,6 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     nameEl = node("span", { className: "p-name p-name-static" });
   }
   nameEl.textContent = player.name;
-  attachTooltip(nameEl, lastPlayed);
   if (glow) nameEl.style.textShadow = glow;
   nameWrap.append(nameEl);
 
@@ -504,6 +508,24 @@ function formatLastPlayed(player) {
   const ts = lastActivityMs(player);
   const ago = formatAgo(ts);
   return ago ? `Last played: ${ago}` : "Last played: unknown";
+}
+
+// Activity dot on the flag corner. Bucket by how recently the HUD wrote —
+// green pulsing = still playing, gold = last hour, orange = today, grey
+// = older/offline, none = never seen. Same idea as the clan site's .ava
+// freshness dot so the visual language stays consistent.
+const STATUS_HOT_MS = 5 * 60_000;
+const STATUS_WARM_MS = 60 * 60_000;
+const STATUS_RECENT_MS = 24 * 60 * 60_000;
+function activityStatus(player, now = Date.now()) {
+  const ts = lastActivityMs(player);
+  if (!Number.isFinite(ts)) return "status-none";
+  const age = now - ts;
+  if (age < 0) return "status-hot";
+  if (age < STATUS_HOT_MS) return "status-hot";
+  if (age < STATUS_WARM_MS) return "status-warm";
+  if (age < STATUS_RECENT_MS) return "status-recent";
+  return "status-cold";
 }
 
 // Single shared floating tooltip so multiple .p-name hovers don't spawn
