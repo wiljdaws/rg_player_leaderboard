@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { FlagDirectory, labelForFlagUrl } from "../js/flag-directory.js";
+import {
+  COUNTRIES,
+  FlagDirectory,
+  canonicalCountry,
+  isRealCountry,
+  labelForFlagUrl,
+} from "../js/flag-directory.js";
 
 function makeStorage() {
   const map = new Map();
@@ -83,4 +89,63 @@ test("subscribe fires when a new URL is registered", () => {
   unsubscribe();
   dir.add("https://flagcdn.com/de.svg"); // after unsubscribe — no callback
   assert.equal(calls, 2);
+});
+
+test("COUNTRIES list validates real names case-insensitively", () => {
+  assert.ok(COUNTRIES.length > 150);
+  assert.ok(isRealCountry("Brazil"));
+  assert.ok(isRealCountry("brazil"));
+  assert.ok(isRealCountry("United States"));
+  assert.ok(!isRealCountry("Atlantis"));
+  assert.equal(canonicalCountry("brazil"), "Brazil");
+  assert.equal(canonicalCountry("UNITED STATES"), "United States");
+  assert.equal(canonicalCountry("wut"), "");
+});
+
+test("addWithCountry stores a custom label and prevents duplicate countries", () => {
+  const dir = new FlagDirectory({ storage: makeStorage() });
+  const first = dir.addWithCountry("https://example.com/br1.png", "Brazil");
+  // Brazil is already claimed by the static known-flag map (imgur/saBa4s8),
+  // so any addWithCountry("Brazil") on a *different* URL should reject.
+  assert.equal(first.ok, false);
+  assert.match(first.error, /Brazil/);
+
+  const second = dir.addWithCountry("https://example.com/pl.png", "Poland");
+  assert.equal(second.ok, true);
+  assert.equal(dir.labelFor("https://example.com/pl.png"), "Poland");
+  assert.ok(dir.hasCountry("Poland"));
+
+  const third = dir.addWithCountry("https://example.com/other.png", "Poland");
+  assert.equal(third.ok, false);
+});
+
+test("addWithCountry rejects made-up country names", () => {
+  const dir = new FlagDirectory({ storage: makeStorage() });
+  const result = dir.addWithCountry("https://example.com/x.png", "Atlantis");
+  assert.equal(result.ok, false);
+  assert.match(result.error, /real country/i);
+});
+
+test("remove drops the entry from the picker", () => {
+  const dir = new FlagDirectory({ storage: makeStorage() });
+  dir.addWithCountry("https://example.com/pl.png", "Poland");
+  assert.equal(dir.list().length, 1);
+  assert.equal(dir.remove("https://example.com/pl.png"), true);
+  assert.equal(dir.list().length, 0);
+  assert.ok(!dir.hasCountry("Poland"));
+});
+
+test("v1 URL array migrates into v2 entries on load", () => {
+  const storage = makeStorage();
+  storage.setItem(
+    "rgPlayerLb:flagDirectory:v1",
+    JSON.stringify(["https://flagcdn.com/br.svg", "https://flagcdn.com/jp.svg"]),
+  );
+  const dir = new FlagDirectory({ storage });
+  assert.deepEqual(
+    dir.list().map((e) => e.url),
+    ["https://flagcdn.com/br.svg", "https://flagcdn.com/jp.svg"],
+  );
+  // v1 key is removed after migration.
+  assert.equal(storage.getItem("rgPlayerLb:flagDirectory:v1"), null);
 });

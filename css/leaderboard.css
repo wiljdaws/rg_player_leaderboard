@@ -518,6 +518,16 @@ h1{
   min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font:600 14px var(--body);
 }
+/* Remove-from-directory affordance on every real option. Kept dim by default
+   so it doesn't compete with the label, brightens on hover. */
+.flag-option-remove{
+  flex:none;background:transparent;border:none;color:var(--ink-dim);
+  padding:2px 8px;margin-left:6px;border-radius:6px;
+  font:700 16px var(--body);line-height:1;cursor:pointer;
+  transition:color .12s ease,background .12s ease;
+}
+.flag-option-remove:hover{color:var(--loss);background:rgba(251,113,133,.12)}
+.flag-option-remove:focus-visible{outline:2px solid var(--loss);outline-offset:2px}
 .flag-empty{padding:16px;color:var(--ink-dim);text-align:center;font-size:13px}
 .flag-add{
   margin:0;padding:10px 14px;border:none;border-top:1px solid var(--line);
@@ -529,7 +539,7 @@ h1{
 
 .flag-custom{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .flag-custom[hidden]{display:none}
-.flag-custom-input{flex:1;min-width:180px}
+.flag-custom-input,.flag-custom-country{flex:1 1 180px;min-width:150px}
 .flag-custom-add,.flag-custom-cancel{
   padding:11px 16px;border-radius:9px;cursor:pointer;
   font:700 11px var(--display);letter-spacing:.14em;text-transform:uppercase;
@@ -540,6 +550,11 @@ h1{
   box-shadow:0 6px 18px rgba(168,85,247,.24);
 }
 .flag-custom-cancel:hover{border-color:var(--line-strong)}
+.flag-custom-error{
+  flex-basis:100%;color:var(--loss);font:600 12px var(--body);
+  padding:4px 2px 0;
+}
+.flag-custom-error[hidden]{display:none}
 
 .admin-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
 .admin-primary,.admin-secondary{

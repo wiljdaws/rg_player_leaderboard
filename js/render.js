@@ -1,5 +1,5 @@
 import { PLAYLIST_LABELS, PLAYLISTS, isRankedPlaylist } from "./config.js";
-import { labelForFlagUrl } from "./flag-directory.js";
+import { COUNTRIES, canonicalCountry, labelForFlagUrl } from "./flag-directory.js";
 import { playerGlow, winRate } from "./model.js";
 import { formatWindow, momentumChip } from "./momentum.js";
 
@@ -754,6 +754,24 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   customInput.placeholder = "https://…/flag.svg";
   customInput.autocomplete = "off";
   customInput.className = "flag-custom-input";
+  // Country autocomplete via native <datalist>. Admins must pick a real
+  // country so the picker keeps its meaning and can dedupe by country.
+  const countryInput = document.createElement("input");
+  countryInput.type = "text";
+  countryInput.placeholder = "Country (e.g. Brazil)";
+  countryInput.autocomplete = "off";
+  countryInput.className = "flag-custom-country";
+  countryInput.setAttribute("list", "rgFlagCountries");
+  if (!document.getElementById("rgFlagCountries")) {
+    const dl = document.createElement("datalist");
+    dl.id = "rgFlagCountries";
+    for (const c of COUNTRIES) {
+      const opt = document.createElement("option");
+      opt.value = c;
+      dl.append(opt);
+    }
+    document.body.appendChild(dl);
+  }
   const customAdd = document.createElement("button");
   customAdd.type = "button";
   customAdd.textContent = "Add";
@@ -762,7 +780,10 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   customCancel.type = "button";
   customCancel.textContent = "Cancel";
   customCancel.className = "flag-custom-cancel";
-  customRow.append(customInput, customAdd, customCancel);
+  const customError = document.createElement("div");
+  customError.className = "flag-custom-error";
+  customError.hidden = true;
+  customRow.append(customInput, countryInput, customAdd, customCancel, customError);
 
   menu.append(searchWrap, list, addBtn);
   root.append(hidden, trigger, menu, customRow);
@@ -838,6 +859,23 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
       label.textContent = entry.label;
       item.append(label);
       item.addEventListener("click", () => choose(entry.url));
+      // Every actual flag entry gets an inline remove button. The "— No flag —"
+      // sentinel (empty url) doesn't. Clicking × removes the URL from the
+      // directory without changing whichever player is currently selected —
+      // it just stops offering that URL as a picker suggestion.
+      if (entry.url) {
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "flag-option-remove";
+        removeBtn.textContent = "×";
+        removeBtn.setAttribute("aria-label", `Remove ${entry.label}`);
+        removeBtn.title = `Remove ${entry.label} from the picker`;
+        removeBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          directory.remove?.(entry.url);
+        });
+        item.append(removeBtn);
+      }
       list.append(item);
     });
 
@@ -895,30 +933,52 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     items[nextIndex].scrollIntoView({ block: "nearest" });
   }
 
+  function showCustomError(message) {
+    customError.textContent = message;
+    customError.hidden = false;
+  }
+
+  function clearCustomError() {
+    customError.hidden = true;
+  }
+
   function commitCustomUrl() {
+    clearCustomError();
     const raw = customInput.value.trim();
+    const country = countryInput.value.trim();
     if (!raw) {
       customInput.focus();
+      showCustomError("Enter a flag URL.");
       return;
     }
     let parsed;
     try {
       parsed = new URL(raw);
     } catch {
-      customInput.setCustomValidity("Enter a valid URL.");
-      customInput.reportValidity();
+      showCustomError("Enter a valid URL.");
       return;
     }
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      customInput.setCustomValidity("Flag URL must use http or https.");
-      customInput.reportValidity();
+      showCustomError("Flag URL must use http or https.");
       return;
     }
-    customInput.setCustomValidity("");
+    const canonical = canonicalCountry(country);
+    if (!canonical) {
+      showCustomError("Pick a real country from the list.");
+      countryInput.focus();
+      return;
+    }
     const url = parsed.href;
-    directory.add(url);
+    const result = directory.addWithCountry?.(url, canonical)
+      ?? { ok: directory.add(url), error: null };
+    if (!result.ok) {
+      showCustomError(result.error || "Couldn't add that flag.");
+      return;
+    }
     onNewFlag?.(url);
     customRow.hidden = true;
+    customInput.value = "";
+    countryInput.value = "";
     choose(url);
   }
 
@@ -957,6 +1017,8 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     menu.hidden = true;
     customRow.hidden = false;
     customInput.value = "";
+    countryInput.value = "";
+    clearCustomError();
     customInput.focus();
   });
 
@@ -966,6 +1028,15 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     openMenu();
   });
   customInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitCustomUrl();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      customRow.hidden = true;
+    }
+  });
+  countryInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       commitCustomUrl();
