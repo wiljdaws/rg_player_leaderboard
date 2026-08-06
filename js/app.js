@@ -22,7 +22,6 @@ import {
   renderBoard,
   renderIconKey,
   renderPlayerDialog,
-  renderPodium,
   renderRecentGains,
   setActiveTab,
   setDataStatus,
@@ -137,7 +136,6 @@ function render() {
   );
 
   $("clearSearch").hidden = !state.search;
-  renderPodium(state.playlist, state.rows, historyStore);
   renderRecentGains(state.playlist, state.rows, historyStore);
   renderBoard({
     playlist: state.playlist,

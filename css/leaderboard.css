@@ -77,63 +77,6 @@ h1{
 .admin-access button:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px}
 #authStatus{color:var(--ink-dim);font-size:11px;letter-spacing:.08em}
 
-/* ---------- Podium ---------- */
-.podium{
-  display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:14px;align-items:end;
-  margin:clamp(22px,4vw,36px) 0 20px;
-}
-.step{
-  position:relative;border-radius:16px;padding:22px 18px 18px;text-align:center;
-  background:linear-gradient(180deg,rgba(20,28,68,.85),rgba(12,18,48,.9));
-  border:1px solid var(--line);overflow:hidden;
-  box-shadow:0 16px 44px rgba(0,0,0,.4);
-}
-.step::before{
-  content:"";position:absolute;inset:0 0 auto 0;height:3px;
-  background:var(--metal,var(--line-strong));
-  box-shadow:0 0 18px var(--metal,transparent);
-}
-.step.p1{
-  --metal:var(--gold);padding-top:30px;padding-bottom:26px;
-  background:linear-gradient(180deg,rgba(48,38,10,.35),rgba(12,18,48,.92)),
-             linear-gradient(180deg,rgba(20,28,68,.85),rgba(12,18,48,.9));
-}
-.step.p2{--metal:var(--silver)}
-.step.p3{--metal:var(--bronze)}
-.step .place{
-  font-family:var(--display);font-style:italic;font-weight:700;font-size:15px;
-  letter-spacing:.3em;color:var(--metal);text-transform:uppercase;
-}
-.step .flag{
-  width:54px;height:54px;margin:12px auto 10px;border-radius:14px;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(255,255,255,.05);border:1px solid var(--line-strong);
-  color:var(--ink);font-family:var(--display);font-weight:700;font-size:20px;
-  overflow:hidden;
-}
-.step .flag img{width:100%;height:100%;object-fit:cover}
-.step.p1 .flag{width:64px;height:64px;font-size:22px}
-.step .pname{
-  font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:.02em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.step .pmeta{font-size:13px;color:var(--ink-dim);font-weight:600;margin-top:2px}
-.step .pscore{
-  font-family:var(--display);font-weight:700;font-size:28px;margin-top:10px;
-  color:var(--gain);font-variant-numeric:tabular-nums;
-}
-.step.p1 .pscore{font-size:34px}
-.step .pscore small{
-  display:block;font-size:10.5px;letter-spacing:.22em;
-  color:var(--ink-dim);font-weight:600;margin-top:2px;text-transform:uppercase;
-}
-.step .plast{
-  margin-top:8px;font-family:var(--display);font-weight:700;font-size:12px;
-  letter-spacing:.05em;color:var(--gain);
-}
-.step .plast.neg{color:var(--loss)}
-.step .plast.flat{color:var(--ink-dim)}
-
 /* ---------- Recent gains strip ---------- */
 .recent-gains{
   margin:0 0 20px;padding:16px 20px;border-radius:16px;
@@ -673,18 +616,6 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .field-grid,.field-section{grid-template-columns:minmax(0,1fr)}
   .field-wide{grid-column:1}
   .dialog-panel{padding:22px 20px}
-  .podium{grid-template-columns:1fr;gap:10px}
-  .step{display:grid;grid-template-columns:auto 1fr auto;align-items:center;text-align:left;gap:4px 14px;padding:14px 16px}
-  .step .place{grid-row:1}
-  .step .flag{grid-row:1 / span 3;grid-column:1;margin:0;width:46px;height:46px;font-size:14px}
-  .step.p1 .flag{width:52px;height:52px;font-size:15px}
-  .step .pname{grid-column:2}
-  .step .pmeta{grid-column:2}
-  .step .pscore{grid-row:1 / span 3;grid-column:3;margin:0;font-size:22px;text-align:right}
-  .step.p1 .pscore{font-size:26px}
-  .step .plast{grid-column:2}
-  /* No mobile-specific gains-strip override needed: cards are 200px flex
-     items and the .overflowing carousel handles narrow viewports. */
 
   /* Names were getting truncated to 3-4 chars on phones. Drop the "Last hour"
      column on ranked and the "Matches" column on wins to give names room. */

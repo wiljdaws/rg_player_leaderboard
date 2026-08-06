@@ -248,66 +248,6 @@ export function handleTabKeydown(event, onActivate) {
   onActivate(PLAYLISTS[nextIndex]);
 }
 
-export function renderPodium(playlist, players, historyStore) {
-  const host = $("podium");
-  if (!host) return;
-  if (playlist === "wins" || players.length < 3) {
-    host.style.display = "none";
-    host.replaceChildren();
-    return;
-  }
-  const [first, second, third] = players;
-  // Visual order: silver on the left, gold in the center, bronze on the right.
-  const order = [
-    { player: second, place: "2nd", cls: "p2" },
-    { player: first, place: "Champion", cls: "p1" },
-    { player: third, place: "3rd", cls: "p3" },
-  ];
-
-  host.style.display = "grid";
-  host.replaceChildren();
-  for (const { player, place, cls } of order) {
-    const step = node("div", { className: `step ${cls}` });
-    step.append(node("div", { className: "place", text: place }));
-    step.append(flagCell(player, "flag"));
-
-    const name = node("div", { className: "pname", text: player.name });
-    const glow = playerGlow(player);
-    if (glow) name.style.textShadow = glow;
-    step.append(name);
-
-    const meta =
-      playlist === "wins"
-        ? `${player.wins} W · ${player.matches} M · ${winRate(player)}%`
-        : PLAYLIST_LABELS[playlist];
-    step.append(node("div", { className: "pmeta", text: meta }));
-
-    const scoreValue = playlist === "wins" ? player.wins.toLocaleString() : player.mmr.toLocaleString();
-    const scoreLabel = playlist === "wins" ? "Wins" : "MMR";
-    const scoreEl = node("div", { className: "pscore" });
-    scoreEl.textContent = scoreValue;
-    scoreEl.append(node("small", { text: scoreLabel }));
-    step.append(scoreEl);
-
-    if (isRankedPlaylist(playlist) && historyStore) {
-      const { gained, spanMs, samples } = historyStore.gainFor(playlist, player.id);
-      if (samples >= 2 && gained != null) {
-        const cls =
-          gained > 0 ? "" : gained < 0 ? " neg" : " flat";
-        const rounded = Math.round(gained);
-        const magnitude = Math.abs(rounded).toLocaleString();
-        const label =
-          rounded === 0
-            ? `— flat ${formatWindow(spanMs)}`
-            : `${rounded > 0 ? "+" : "-"}${magnitude} ${formatWindow(spanMs)}`;
-        step.append(node("div", { className: `plast${cls}`, text: label }));
-      }
-    }
-    host.append(step);
-  }
-  applyMarquees(host);
-}
-
 export function renderRecentGains(playlist, players, historyStore) {
   const host = $("recentGains");
   const strip = $("gainsStrip");
