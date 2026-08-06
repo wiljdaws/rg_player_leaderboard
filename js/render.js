@@ -251,7 +251,7 @@ export function handleTabKeydown(event, onActivate) {
 export function renderPodium(playlist, players, historyStore) {
   const host = $("podium");
   if (!host) return;
-  if (players.length < 3) {
+  if (playlist === "wins" || players.length < 3) {
     host.style.display = "none";
     host.replaceChildren();
     return;
@@ -513,14 +513,14 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     row.append(node("div", { className: "p-score small", text: player.matches.toLocaleString() }));
     row.append(node("div", { className: "p-winrate", text: `${winRate(player)}%` }));
 
-    // Dedicated streak column — same 3+ threshold as the old top strip.
-    // Chip cell always renders (even when empty) so the grid columns stay
-    // aligned across every row and the header line above them stays honest.
+    // Empty cell still renders so grid columns line up across every row.
     const streakCell = node("div", { className: "p-streak" });
     const { streak } = effectiveStreak(player, historyStore);
     if (streak >= 3) {
-      const chip = node("span", { className: "streak-chip", text: `🔥 x${streak}` });
+      const chip = node("span", { className: "streak-chip" });
       chip.title = `${streak}-win streak`;
+      chip.append(node("span", { className: "streak-flame", text: "🔥" }));
+      chip.append(node("span", { className: "streak-count", text: `x${streak}` }));
       streakCell.append(chip);
     }
     row.append(streakCell);

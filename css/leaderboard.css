@@ -41,14 +41,21 @@ header{position:relative;text-align:center;margin-bottom:clamp(24px,4vw,44px)}
 .chip[data-state="error"] .dot{background:var(--loss);box-shadow:0 0 9px var(--loss);animation:none}
 @keyframes pulse{50%{opacity:.35}}
 
-.site-logo{
-  display:block;margin:26px auto 8px;width:min(240px,60%);height:auto;
-  filter:drop-shadow(0 6px 30px rgba(168,85,247,.28));
+.title-block{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  margin:26px auto 8px;
+}
+.title-kicker{
+  font-family:var(--display);font-weight:700;font-size:12.5px;letter-spacing:.42em;
+  text-transform:uppercase;color:var(--ink-dim);
+  padding:6px 16px;border-radius:999px;
+  border:1px solid var(--line-strong);background:rgba(12,18,48,.7);
+  backdrop-filter:blur(4px);
 }
 h1{
   font-family:var(--display);font-style:italic;font-weight:700;
   font-size:clamp(36px,7vw,66px);line-height:.98;letter-spacing:-.015em;
-  margin:10px 0 12px;text-transform:uppercase;
+  margin:6px 0 12px;text-transform:uppercase;
   background:linear-gradient(93deg,var(--grad-a) 8%,var(--grad-b) 52%,var(--gold) 108%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 6px 30px rgba(168,85,247,.38));
@@ -267,19 +274,19 @@ h1{
   position:sticky;top:0;background:rgba(12,18,48,.92);backdrop-filter:blur(8px);z-index:5;
 }
 .board-head .num{text-align:right}
-.board-head[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 80px}
-.board-head[data-playlist="wins"] > :last-child{text-align:left}
+.board-head[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 84px}
+.board-head[data-playlist="wins"] > :nth-child(6){text-align:center}
 
 .player-row{
   display:grid;grid-template-columns:64px 1fr 130px 150px;gap:12px;align-items:center;
   padding:14px 22px;border-bottom:1px solid var(--line);
   transition:background .16s ease;
 }
-.player-row[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 80px}
+.player-row[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 84px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
 .player-row.admin{grid-template-columns:64px 1fr 130px 150px auto}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 80px auto}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:64px 1fr 90px 90px 80px 84px auto}
 
 .rank{font-family:var(--display);font-style:italic;font-weight:700;font-size:23px;color:var(--ink-dim)}
 .rank.r1{color:var(--gold);text-shadow:0 0 18px rgba(255,210,74,.4)}
@@ -307,22 +314,23 @@ h1{
 .p-name:hover{color:var(--grad-a)}
 .p-name:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px;border-radius:6px}
 .p-icons{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
-/* Streak column on the wins tab. Chip is a pill with a subtle gradient
-   so the "🔥 x12" reads clearly against the row background. Empty cell
-   still occupies its grid slot so columns line up across every row. */
-.p-streak{display:flex;align-items:center;justify-content:flex-start;min-width:0}
+/* Streak column on the wins tab. Chip sits centered under the "Streak"
+   header so empty rows still balance visually. */
+.p-streak{display:flex;align-items:center;justify-content:center;min-width:0}
 .streak-chip{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:4px 10px;border-radius:999px;
-  background:linear-gradient(90deg,rgba(255,122,0,.24),rgba(255,154,60,.18));
-  border:1px solid rgba(255,154,60,.55);
-  color:#ffd7ad;
-  font:700 12px var(--display);letter-spacing:.06em;
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px 3px 8px;border-radius:999px;
+  background:linear-gradient(135deg,rgba(255,122,0,.28),rgba(255,72,120,.20));
+  border:1px solid rgba(255,154,60,.6);
+  color:#ffe0bf;
+  font:700 12px var(--display);letter-spacing:.04em;
   text-shadow:0 0 8px rgba(255,122,0,.45);
-  box-shadow:0 4px 14px rgba(255,122,0,.14),inset 0 0 0 1px rgba(255,255,255,.04);
+  box-shadow:0 4px 12px rgba(255,90,0,.18),inset 0 0 0 1px rgba(255,255,255,.05);
   white-space:nowrap;
   font-variant-numeric:tabular-nums;
 }
+.streak-chip .streak-flame{filter:drop-shadow(0 0 4px rgba(255,140,40,.75));font-size:12px;line-height:1}
+.streak-chip .streak-count{color:#fff}
 .p-icon{
   width:var(--icon-size,18px);height:var(--icon-size,18px);object-fit:contain;
   border-radius:3px;
