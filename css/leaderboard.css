@@ -141,91 +141,51 @@ h1{
 .player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px auto}
 
 /* =========================================================
-   Preview styles — one variant per tab so Pal can compare
-   in context. Remove after we pick the winner.
-   1v1: W5 · Wash + edge bar
-   2v2: F3 · Vertical shimmer
-   3v3: F4 · Prismatic rainbow
-   wins: F5 · Full-row shimmer
+   Top-3 / top-10 podium treatment — applied to every playlist.
+   Combines the two variants Pal + you agreed on:
+     · W5  horizontal metal wash + glowing left edge bar
+     · F3  vertical shimmer sweep across the podium names
+   Top 4-10 gets a subtler purple version so the elite tier still
+   reads distinct from the rest of the board.
    ========================================================= */
 
-/* Foil sweep keyframes shared across the shimmer variants. */
-@keyframes preview-foil-sweep{0%{background-position:250% 0,0 0}100%{background-position:-150% 0,0 0}}
-@keyframes preview-foil-vertical{0%{background-position:0 250%,0 0}100%{background-position:0 -150%,0 0}}
-@keyframes preview-row-sweep{0%{background-position:250% 0}100%{background-position:-100% 0}}
+@keyframes rg-foil-vertical{0%{background-position:0 250%,0 0}100%{background-position:0 -150%,0 0}}
 
-/* ---- 1v1: W5 (wash + left edge bar) --------------------- */
-.player-row[data-playlist="1v1"]{padding-left:26px}
-.player-row[data-playlist="1v1"]::before{
+/* --- Left edge bar (shared by top-3 + top-10) ------------ */
+.player-row{padding-left:26px}
+.player-row::before{
   content:"";position:absolute;left:0;top:0;bottom:0;width:5px;z-index:0;pointer-events:none;
+  opacity:0;
 }
-.player-row[data-playlist="1v1"][data-rank="1"]{background:linear-gradient(90deg,rgba(255,210,74,.34),transparent 70%)}
-.player-row[data-playlist="1v1"][data-rank="1"]::before{background:linear-gradient(180deg,#FFEDA0,var(--gold));box-shadow:0 0 16px var(--gold)}
-.player-row[data-playlist="1v1"][data-rank="2"]{background:linear-gradient(90deg,rgba(201,212,232,.30),transparent 70%)}
-.player-row[data-playlist="1v1"][data-rank="2"]::before{background:linear-gradient(180deg,#F1F6FF,var(--silver));box-shadow:0 0 12px var(--silver)}
-.player-row[data-playlist="1v1"][data-rank="3"]{background:linear-gradient(90deg,rgba(224,154,92,.30),transparent 70%)}
-.player-row[data-playlist="1v1"][data-rank="3"]::before{background:linear-gradient(180deg,#F0B87F,var(--bronze));box-shadow:0 0 12px var(--bronze)}
-.player-row[data-playlist="1v1"].top10{background:linear-gradient(90deg,rgba(168,85,247,.16),transparent 70%)}
-.player-row[data-playlist="1v1"].top10::before{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));opacity:.7}
+.player-row[data-rank="1"]::before,
+.player-row[data-rank="2"]::before,
+.player-row[data-rank="3"]::before,
+.player-row.top10::before{opacity:1}
+.player-row[data-rank="1"]::before{background:linear-gradient(180deg,#FFEDA0,var(--gold));box-shadow:0 0 16px var(--gold)}
+.player-row[data-rank="2"]::before{background:linear-gradient(180deg,#F1F6FF,var(--silver));box-shadow:0 0 12px var(--silver)}
+.player-row[data-rank="3"]::before{background:linear-gradient(180deg,#F0B87F,var(--bronze));box-shadow:0 0 12px var(--bronze)}
+.player-row.top10::before{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));opacity:.7}
 
-/* ---- 2v2: F3 (vertical shimmer name) -------------------- */
-.player-row[data-playlist="2v2"][data-rank="1"] .p-name,
-.player-row[data-playlist="2v2"][data-rank="2"] .p-name,
-.player-row[data-playlist="2v2"][data-rank="3"] .p-name{
+/* --- Horizontal wash (metal color fading toward the row middle) --- */
+.player-row[data-rank="1"]{background:linear-gradient(90deg,rgba(255,210,74,.34),transparent 70%)}
+.player-row[data-rank="2"]{background:linear-gradient(90deg,rgba(201,212,232,.30),transparent 70%)}
+.player-row[data-rank="3"]{background:linear-gradient(90deg,rgba(224,154,92,.30),transparent 70%)}
+.player-row.top10{background:linear-gradient(90deg,rgba(168,85,247,.16),transparent 70%)}
+
+/* --- Vertical foil shimmer on the podium name ------------ */
+.player-row[data-rank="1"] .p-name,
+.player-row[data-rank="2"] .p-name,
+.player-row[data-rank="3"] .p-name{
   background-clip:text;-webkit-background-clip:text;color:transparent;
   background-size:100% 250%,100% 100%;
-  animation:preview-foil-vertical 4s linear infinite;
+  animation:rg-foil-vertical 4s linear infinite;
 }
-.player-row[data-playlist="2v2"][data-rank="1"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
-.player-row[data-playlist="2v2"][data-rank="2"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
-.player-row[data-playlist="2v2"][data-rank="3"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
-.player-row[data-playlist="2v2"].top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
+.player-row[data-rank="1"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-rank="2"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-rank="3"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row.top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
 
-/* ---- 3v3: F4 (prismatic rainbow name) ------------------- */
-.player-row[data-playlist="3v3"][data-rank="1"] .p-name,
-.player-row[data-playlist="3v3"][data-rank="2"] .p-name,
-.player-row[data-playlist="3v3"][data-rank="3"] .p-name{
-  background-clip:text;-webkit-background-clip:text;color:transparent;
-  background-size:250% 100%,100% 100%;
-  animation:preview-foil-sweep 4.5s linear infinite;
-}
-.player-row[data-playlist="3v3"][data-rank="1"] .p-name{background:linear-gradient(115deg,transparent 15%,rgba(255,120,180,.5) 35%,rgba(120,220,255,.5) 50%,rgba(255,240,120,.5) 65%,transparent 80%),linear-gradient(90deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
-.player-row[data-playlist="3v3"][data-rank="2"] .p-name{background:linear-gradient(115deg,transparent 15%,rgba(255,120,180,.5) 35%,rgba(120,220,255,.5) 50%,rgba(255,240,120,.5) 65%,transparent 80%),linear-gradient(90deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
-.player-row[data-playlist="3v3"][data-rank="3"] .p-name{background:linear-gradient(115deg,transparent 15%,rgba(255,120,180,.5) 35%,rgba(120,220,255,.5) 50%,rgba(255,240,120,.5) 65%,transparent 80%),linear-gradient(90deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
-.player-row[data-playlist="3v3"].top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
-
-/* ---- wins: F5 (full-row shimmer + shimmer name) --------- */
-.player-row[data-playlist="wins"][data-rank="1"]{
-  background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.10) 45%,transparent 60%),
-             linear-gradient(90deg,rgba(255,210,74,.20),transparent 85%);
-  background-size:250% 100%,100% 100%;
-  animation:preview-row-sweep 5s linear infinite;
-}
-.player-row[data-playlist="wins"][data-rank="2"]{
-  background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.12) 45%,transparent 60%),
-             linear-gradient(90deg,rgba(201,212,232,.18),transparent 85%);
-  background-size:250% 100%,100% 100%;
-  animation:preview-row-sweep 5s linear infinite;animation-delay:.7s;
-}
-.player-row[data-playlist="wins"][data-rank="3"]{
-  background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.10) 45%,transparent 60%),
-             linear-gradient(90deg,rgba(224,154,92,.18),transparent 85%);
-  background-size:250% 100%,100% 100%;
-  animation:preview-row-sweep 5s linear infinite;animation-delay:1.4s;
-}
-.player-row[data-playlist="wins"][data-rank="1"] .p-name,
-.player-row[data-playlist="wins"][data-rank="2"] .p-name,
-.player-row[data-playlist="wins"][data-rank="3"] .p-name{
-  background-clip:text;-webkit-background-clip:text;color:transparent;
-  background-size:250% 100%,100% 100%;
-  animation:preview-foil-sweep 4.5s linear infinite;
-}
-.player-row[data-playlist="wins"][data-rank="1"] .p-name{background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.4) 45%,transparent 60%),linear-gradient(90deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
-.player-row[data-playlist="wins"][data-rank="2"] .p-name{background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.5) 45%,transparent 60%),linear-gradient(90deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
-.player-row[data-playlist="wins"][data-rank="3"] .p-name{background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.4) 45%,transparent 60%),linear-gradient(90deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:250% 100%,100% 100%}
-.player-row[data-playlist="wins"].top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
-
-/* Keep rank + MMR + Recent above the animated backgrounds. */
+/* Keep interactive/text cells above the tinted background layer. */
 .player-row .rank,
 .player-row .p-ident,
 .player-row .p-score,
