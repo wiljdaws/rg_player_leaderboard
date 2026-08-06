@@ -84,15 +84,27 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
     if (wins !== null && matches !== null && wins > matches) reasons.push("wins exceed matches");
     if (matches !== null && matches > 100_000) reasons.push("matches exceed limit");
     const streak = finiteNumber(raw?.currentStreak);
+    const startedAt = finiteNumber(raw?.sessionStartedAt);
+    const lastSeen = finiteNumber(raw?.sessionLastSeen);
     score = {
       wins,
       matches,
       currentStreak: streak == null ? null : Math.max(-999, Math.min(999, Math.trunc(streak))),
+      sessionStartedAt: startedAt == null ? null : Math.trunc(startedAt),
+      sessionLastSeen: lastSeen == null ? null : Math.trunc(lastSeen),
     };
   } else {
     const mmr = finiteNumber(raw?.mmr);
     if (mmr === null || mmr < 0 || mmr > 35_000) reasons.push("invalid MMR");
-    score = { mmr };
+    const delta = finiteNumber(raw?.sessionMmrDelta);
+    const startedAt = finiteNumber(raw?.sessionStartedAt);
+    const lastSeen = finiteNumber(raw?.sessionLastSeen);
+    score = {
+      mmr,
+      sessionMmrDelta: delta == null ? null : Math.trunc(delta),
+      sessionStartedAt: startedAt == null ? null : Math.trunc(startedAt),
+      sessionLastSeen: lastSeen == null ? null : Math.trunc(lastSeen),
+    };
   }
 
   if (reasons.length) {

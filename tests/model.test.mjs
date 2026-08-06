@@ -19,6 +19,52 @@ test("normalizePlayerDocument accepts a valid MMR doc", () => {
   assert.equal(result.player.provenance.kind, "Manual admin entry");
 });
 
+test("normalizePlayerDocument passes through session fields on ranked docs", () => {
+  const result = normalizePlayerDocument(
+    {
+      id: "abc",
+      playlist: "1v1",
+      name: "Player",
+      mmr: 1234,
+      sessionMmrDelta: 42,
+      sessionStartedAt: 1_700_000_000_000,
+      sessionLastSeen: 1_700_000_000_500,
+    },
+    "1v1",
+  );
+  assert.equal(result.player.sessionMmrDelta, 42);
+  assert.equal(result.player.sessionStartedAt, 1_700_000_000_000);
+  assert.equal(result.player.sessionLastSeen, 1_700_000_000_500);
+});
+
+test("normalizePlayerDocument leaves session fields null when missing", () => {
+  const result = normalizePlayerDocument(
+    { id: "abc", playlist: "1v1", name: "Player", mmr: 1234 },
+    "1v1",
+  );
+  assert.equal(result.player.sessionMmrDelta, null);
+  assert.equal(result.player.sessionStartedAt, null);
+  assert.equal(result.player.sessionLastSeen, null);
+});
+
+test("normalizePlayerDocument passes through session fields on wins docs", () => {
+  const result = normalizePlayerDocument(
+    {
+      id: "x",
+      playlist: "wins",
+      name: "A",
+      wins: 10,
+      matches: 20,
+      currentStreak: 5,
+      sessionStartedAt: 1_700_000_000_000,
+      sessionLastSeen: 1_700_000_000_500,
+    },
+    "wins",
+  );
+  assert.equal(result.player.sessionStartedAt, 1_700_000_000_000);
+  assert.equal(result.player.sessionLastSeen, 1_700_000_000_500);
+});
+
 test("normalizePlayerDocument passes through currentStreak on wins docs", () => {
   const result = normalizePlayerDocument(
     { id: "x", playlist: "wins", name: "A", wins: 10, matches: 20, currentStreak: 5 },

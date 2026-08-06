@@ -182,34 +182,111 @@ export function renderRecentGains(playlist, players, historyStore) {
   }
 }
 
+// Build a chip label for the standings row. A "published" delta comes from
+// ATLAS's session baseline (always trustworthy, no minimum span check), while
+// an "observed" delta reuses the existing momentum-chip logic that requires
+// a 10-min minimum window to avoid noisy short readings.
+function chipFromDelta(delta, historyStore, playlist, playerId) {
+  if (delta.source === "observed") {
+    return momentumChip(historyStore.gainFor(playlist, playerId));
+  }
+  if (delta.source !== "published" || delta.gained == null) {
+    return { className: "momentum warming", label: "warming up", title: "Building a session baseline" };
+  }
+  const rounded = Math.round(delta.gained);
+  const magnitude = Math.abs(rounded).toLocaleString();
+  if (rounded > 0) {
+    return {
+      className: "momentum hot",
+      label: `🔥 +${magnitude} session`,
+      title: `Gained ${magnitude} MMR this session`,
+    };
+  }
+  if (rounded < 0) {
+    return {
+      className: "momentum cold",
+      label: `❄ -${magnitude} session`,
+      title: `Lost ${magnitude} MMR this session`,
+    };
+  }
+  return { className: "momentum flat", label: "— flat session", title: "No change this session" };
+}
+
+// Match ATLAS's own idle threshold (rg_hud.user.js `SESSION_IDLE_MS`) so the
+// site and HUD agree on when a play session is over.
+const STALE_SESSION_MS = 2 * 60 * 60_000;
+
+// Pre-16.7 docs don't publish sessionLastSeen; without it we can't tell if the
+// session is stale, so treat unknown as fresh and preserve backwards compat.
+function sessionIsStale(player, now) {
+  const lastSeen = Number.isFinite(player?.sessionLastSeen) ? player.sessionLastSeen : null;
+  if (lastSeen == null) return false;
+  return now - lastSeen > STALE_SESSION_MS;
+}
+
+// Prefer the ATLAS-published session delta (immediate, session-scoped)
+// and fall back to the observation-based rolling window when the doc
+// predates ATLAS 16.6 or hasn't been re-synced yet. A published delta is
+// dropped if the session went stale (HUD hasn't written in >2h), so a
+// midnight viewer doesn't see a 6-hour-old +50 as if it were current.
+export function effectiveMmrDelta(player, playlist, historyStore, now = Date.now()) {
+  const published = Number.isFinite(player?.sessionMmrDelta) ? Math.trunc(player.sessionMmrDelta) : null;
+  const startedAt = Number.isFinite(player?.sessionStartedAt) ? player.sessionStartedAt : null;
+  const lastSeen = Number.isFinite(player?.sessionLastSeen) ? player.sessionLastSeen : null;
+  if (published != null && startedAt && !sessionIsStale(player, now)) {
+    // Use actual playtime (baseline → last write) for the label, not wall-clock,
+    // so the strip doesn't count seconds while nobody's playing.
+    const spanMs = lastSeen != null
+      ? Math.max(0, lastSeen - startedAt)
+      : Math.max(0, now - startedAt);
+    return { gained: published, spanMs, source: "published" };
+  }
+  const observed = historyStore?.gainFor?.(playlist, player.id);
+  if (observed?.samples >= 2 && observed.gained != null) {
+    return { gained: observed.gained, spanMs: observed.spanMs, source: "observed" };
+  }
+  return { gained: null, spanMs: 0, source: "none" };
+}
+
 function renderMoverStrip({ playlist, players, historyStore, host, strip, windowLabel, heading }) {
   host.setAttribute("aria-label", "Recent MMR changes");
   if (heading) heading.textContent = "Recent MMR changes";
 
-  const movers = historyStore?.topMovers(playlist, players) ?? [];
+  const now = Date.now();
+  const movers = [];
+  for (const player of players ?? []) {
+    const { gained, spanMs, source } = effectiveMmrDelta(player, playlist, historyStore, now);
+    if (gained == null) continue;
+    if (Math.abs(gained) < 1) continue;
+    // For observation-based deltas we still require the 10-min minimum so a
+    // 1-minute reading doesn't sneak in; published deltas are always trusted.
+    if (source === "observed" && spanMs < 10 * 60_000) continue;
+    movers.push({ player, gained, spanMs, source });
+  }
+  movers.sort((a, b) => Math.abs(b.gained) - Math.abs(a.gained));
+  const trimmed = movers.slice(0, 8);
 
   if (windowLabel) {
-    if (movers.length) {
-      const widestSpan = Math.max(...movers.map((mover) => mover.spanMs));
+    if (trimmed.length) {
+      const widestSpan = Math.max(...trimmed.map((mover) => mover.spanMs));
       windowLabel.textContent = formatWindow(widestSpan);
     } else {
-      windowLabel.textContent = "last hour";
+      windowLabel.textContent = "session";
     }
   }
 
   strip.replaceChildren();
-  if (!movers.length) {
-    const progress = historyStore?.warmupProgress(playlist);
-    const spanMin = Math.max(0, Math.round((progress?.spanMs ?? 0) / 60_000));
-    const message =
-      spanMin > 0
-        ? `Building history · ${spanMin} min so far. Movers land once we have at least 10 min of readings.`
-        : `Watching for MMR changes — check back after the next sync.`;
-    strip.append(node("div", { className: "gains-empty", text: message }));
+  if (!trimmed.length) {
+    strip.append(
+      node("div", {
+        className: "gains-empty",
+        text: "No MMR movement this session yet. Movers appear as players play.",
+      }),
+    );
     return;
   }
 
-  for (const { player, gained } of movers) {
+  for (const { player, gained } of trimmed) {
     const card = node("div", { className: gained < 0 ? "gain-card neg" : "gain-card" });
     card.append(flagCell(player, "flag"));
     const body = node("div", { className: "body" });
@@ -225,10 +302,12 @@ function renderMoverStrip({ playlist, players, historyStore, host, strip, window
 }
 
 // Prefer the streak ATLAS publishes on the wins doc (immediate, authoritative)
-// and fall back to whatever we've observed since the tab opened.
-export function effectiveStreak(player, historyStore) {
+// and fall back to whatever we've observed since the tab opened. A published
+// streak is ignored when the session is stale so a 3h-old "🔥 x6" doesn't
+// keep parading long after the player logged off.
+export function effectiveStreak(player, historyStore, now = Date.now()) {
   const published = Number.isFinite(player?.currentStreak) ? Math.trunc(player.currentStreak) : null;
-  if (published != null && published !== 0) {
+  if (published != null && published !== 0 && !sessionIsStale(player, now)) {
     return { streak: published, source: "published" };
   }
   const observed = historyStore?.streakFor?.(player.id);
@@ -319,10 +398,8 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     row.append(node("div", { className: "p-score", text: player.mmr.toLocaleString() }));
 
     const momentumWrap = node("div", { className: "momentum-cell" });
-    const chip = momentumChip(historyStore.gainFor(playlist, player.id));
-    // Only surface a chip when the player has actually moved this window —
-    // "warming up" and "flat" both mean "nothing to show for this row", and
-    // stamping them on every row was just visual noise.
+    const delta = effectiveMmrDelta(player, playlist, historyStore);
+    const chip = chipFromDelta(delta, historyStore, playlist, player.id);
     if (chip.className === "momentum hot" || chip.className === "momentum cold") {
       const chipEl = node("span", { className: chip.className, text: chip.label });
       chipEl.title = chip.title;
