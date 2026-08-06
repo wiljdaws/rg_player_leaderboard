@@ -146,7 +146,32 @@ h1{
   margin-left:auto;color:var(--ink-dim);
   font:700 11px var(--display);letter-spacing:.18em;text-transform:uppercase;
 }
-.gains-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+/* .gains-strip is the mask; .gains-track is the moving element inside.
+   Cards flex-grow to fill when they fit; when the total content exceeds
+   the mask, JS duplicates the cards and .overflowing enables the loop
+   animation so the strip cycles horizontally like a marquee. */
+.gains-strip{position:relative;overflow:hidden}
+.gains-strip.overflowing::before,
+.gains-strip.overflowing::after{
+  content:"";position:absolute;top:0;bottom:0;width:24px;z-index:2;pointer-events:none;
+}
+.gains-strip.overflowing::before{left:0;background:linear-gradient(90deg,rgba(19,27,68,1),transparent)}
+.gains-strip.overflowing::after{right:0;background:linear-gradient(-90deg,rgba(19,27,68,1),transparent)}
+.gains-track{display:flex;gap:10px}
+.gains-strip .gain-card{flex:1 0 200px;min-width:200px}
+.gains-strip.overflowing .gain-card{flex:0 0 200px}
+.gains-strip.overflowing .gains-track{
+  animation:gains-scroll var(--gains-duration,30s) linear infinite;
+}
+.gains-strip.overflowing:hover .gains-track,
+.gains-strip.overflowing:focus-within .gains-track{animation-play-state:paused}
+/* Distance is set in pixels by JS (--gains-distance) rather than a percentage.
+   The track box itself is only strip-wide even though its content overflows,
+   so translateX(-50%) would only move the box, not the full content set. */
+@keyframes gains-scroll{
+  from{transform:translate3d(0,0,0)}
+  to{transform:translate3d(var(--gains-distance,-100%),0,0)}
+}
 .gain-card{
   display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;
   background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.25);
@@ -174,8 +199,7 @@ h1{
 }
 .gain-card.neg .d{color:var(--loss)}
 .gains-empty{
-  color:var(--ink-dim);font-size:13px;padding:8px 4px;
-  grid-column:1/-1;font-style:italic;
+  color:var(--ink-dim);font-size:13px;padding:8px 4px;font-style:italic;
 }
 
 /* ---------- Controls (tabs + search + share) ---------- */
@@ -618,7 +642,8 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .step .pscore{grid-row:1 / span 3;grid-column:3;margin:0;font-size:22px;text-align:right}
   .step.p1 .pscore{font-size:26px}
   .step .plast{grid-column:2}
-  .gains-strip{grid-template-columns:1fr 1fr}
+  /* No mobile-specific gains-strip override needed: cards are 200px flex
+     items and the .overflowing carousel handles narrow viewports. */
 
   /* Names were getting truncated to 3-4 chars on phones. Drop the "Last hour"
      column on ranked and the "Matches" column on wins to give names room. */
@@ -643,49 +668,6 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .p-score{font-size:15px}
   .p-winrate{font-size:14px}
 }
-/* ---------- Player ticker (mobile only) ---------- */
-/* A single-line horizontal auto-scroll of every player in the current
-   playlist. Rendered above the standings board only on mobile — desktop
-   already shows names in full so a ticker there is just noise. Content is
-   doubled by JS and the animation runs 0 → -50%, giving a seamless loop. */
-.player-ticker{
-  display:none;
-  overflow:hidden;
-  border:1px solid var(--line);
-  border-radius:12px;
-  background:rgba(12,18,48,.65);
-  backdrop-filter:blur(4px);
-  margin-bottom:14px;
-  position:relative;
-  height:40px;
-  align-items:center;
-}
-.player-ticker::before,
-.player-ticker::after{
-  content:"";position:absolute;top:0;bottom:0;width:32px;z-index:2;pointer-events:none;
-}
-.player-ticker::before{left:0;background:linear-gradient(90deg,rgba(12,18,48,1),transparent)}
-.player-ticker::after{right:0;background:linear-gradient(-90deg,rgba(12,18,48,1),transparent)}
-.player-ticker-track{
-  display:flex;gap:28px;padding:0 12px;white-space:nowrap;
-  animation:player-ticker-scroll var(--ticker-duration,30s) linear infinite;
-}
-.player-ticker-item{
-  font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.02em;
-  display:inline-flex;align-items:center;gap:6px;color:var(--ink);
-}
-.player-ticker-item .r{color:var(--grad-a)}
-.player-ticker-item .s{color:var(--gain);font-variant-numeric:tabular-nums}
-.player-ticker:hover .player-ticker-track,
-.player-ticker:focus-within .player-ticker-track{animation-play-state:paused}
-@keyframes player-ticker-scroll{
-  from{transform:translateX(0)}
-  to{transform:translateX(-50%)}
-}
-@media (max-width:680px){
-  .player-ticker.has-items{display:flex}
-}
-
 /* ---------- Marquee ---------- */
 /* Auto-scroll long names when text exceeds their container. Only elements
    that actually overflow get the .marquee class attached by JS, so short
@@ -715,8 +697,7 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .marquee-inner{animation:none!important}
-  .player-ticker-track{animation:none!important}
-  /* Give reduced-motion users a way to still see everything: enable
-     horizontal scroll so they can swipe through the ticker manually. */
-  .player-ticker{overflow-x:auto}
+  .gains-track{animation:none!important}
+  /* Reduced-motion users still get access: strip becomes swipable. */
+  .gains-strip.overflowing{overflow-x:auto}
 }

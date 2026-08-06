@@ -62,6 +62,58 @@ function attachMarquee(el) {
   el.dataset.marquee = "on";
 }
 
+// Auto-scroll the mover / streak strip when the cards don't fit in one row.
+// Cards flex-grow to fill when there's room; when they overflow we duplicate
+// the whole set inside the track and the CSS animation slides 0 → -50%, so
+// the second copy takes over seamlessly as the first scrolls off.
+const GAINS_SCROLL_SLACK = 4;
+const GAINS_SCROLL_PX_PER_SEC = 70;
+
+function refreshGainsCarousel(strip) {
+  const track = strip?.querySelector(".gains-track");
+  if (!track) {
+    strip?.classList.remove("overflowing");
+    return;
+  }
+  // Reset from any prior overflowing state so the measurement is clean.
+  strip.classList.remove("overflowing");
+  track.style.removeProperty("--gains-duration");
+  track.style.removeProperty("--gains-distance");
+  track
+    .querySelectorAll(":scope > [data-dup='1']")
+    .forEach((clone) => clone.remove());
+
+  const overshoot = track.scrollWidth - strip.clientWidth;
+  if (overshoot <= GAINS_SCROLL_SLACK) return;
+
+  const originals = [...track.children];
+  for (const card of originals) {
+    const clone = card.cloneNode(true);
+    clone.setAttribute("data-dup", "1");
+    clone.setAttribute("aria-hidden", "true");
+    track.appendChild(clone);
+  }
+  strip.classList.add("overflowing");
+  const halfContent = track.scrollWidth / 2;
+  const seconds = Math.max(10, Math.round(halfContent / GAINS_SCROLL_PX_PER_SEC));
+  track.style.setProperty("--gains-duration", `${seconds}s`);
+  // Explicit pixel distance so the animation shifts by exactly one full set
+  // of original cards; the duplicated set slides into their place seamlessly.
+  track.style.setProperty("--gains-distance", `-${halfContent}px`);
+}
+
+export function applyGainsCarousels(root = document) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      // querySelectorAll searches descendants only, so a strip passed as
+      // root would be skipped — include it explicitly when it matches.
+      const strips = new Set(root.querySelectorAll?.(".gains-strip") ?? []);
+      if (root.classList?.contains?.("gains-strip")) strips.add(root);
+      strips.forEach(refreshGainsCarousel);
+    });
+  });
+}
+
 export function applyMarquees(root = document) {
   // Double-rAF: iOS Safari occasionally runs the first rAF before layout is
   // fully painted. The second guarantees measurement against final geometry.
@@ -85,6 +137,7 @@ if (typeof window !== "undefined") {
     requestAnimationFrame(() => {
       scheduled = false;
       applyMarquees();
+      applyGainsCarousels();
     });
   });
 
@@ -92,7 +145,12 @@ if (typeof window !== "undefined") {
   // uses fallback metrics, so a name that "just fits" in the fallback can be
   // wider after the display font arrives — re-run once fonts settle.
   if (typeof document !== "undefined" && document.fonts?.ready) {
-    document.fonts.ready.then(() => applyMarquees()).catch(() => {});
+    document.fonts.ready
+      .then(() => {
+        applyMarquees();
+        applyGainsCarousels();
+      })
+      .catch(() => {});
   }
 }
 
@@ -250,50 +308,6 @@ export function renderPodium(playlist, players, historyStore) {
   applyMarquees(host);
 }
 
-export function renderPlayerTicker(playlist, players) {
-  const host = $("playerTicker");
-  const track = $("playerTickerTrack");
-  if (!host || !track) return;
-
-  if (!players?.length) {
-    host.classList.remove("has-items");
-    track.replaceChildren();
-    return;
-  }
-  host.classList.add("has-items");
-
-  const isWins = playlist === "wins";
-  const items = document.createDocumentFragment();
-  const buildItem = (player, rank) => {
-    const item = node("span", { className: "player-ticker-item" });
-    item.append(node("span", { className: "r", text: `#${rank}` }));
-    item.append(node("span", { className: "n", text: player.name }));
-    const scoreText = isWins
-      ? `${player.wins.toLocaleString()} W`
-      : `${player.mmr.toLocaleString()}`;
-    item.append(node("span", { className: "s", text: scoreText }));
-    return item;
-  };
-  // Content is doubled so the animation from 0 → -50% loops seamlessly:
-  // when the first copy scrolls off, the second is already in its place.
-  for (let repeat = 0; repeat < 2; repeat += 1) {
-    players.forEach((player, index) => {
-      items.append(buildItem(player, index + 1));
-    });
-  }
-  track.replaceChildren(items);
-
-  // Scale duration to content width so scroll speed feels consistent
-  // regardless of how many players are in the current playlist. ~70 px/s
-  // keeps names legible without dragging on for minutes when the roster is
-  // large. Cap at 5 min so short lists don't zoom past too fast either.
-  requestAnimationFrame(() => {
-    const halfWidth = track.scrollWidth / 2;
-    const seconds = Math.min(300, Math.max(12, Math.round(halfWidth / 70)));
-    track.style.setProperty("--ticker-duration", `${seconds}s`);
-  });
-}
-
 export function renderRecentGains(playlist, players, historyStore) {
   const host = $("recentGains");
   const strip = $("gainsStrip");
@@ -420,6 +434,7 @@ function renderMoverStrip({ playlist, players, historyStore, host, strip, window
     return;
   }
 
+  const track = node("div", { className: "gains-track" });
   for (const { player, gained } of trimmed) {
     const card = node("div", { className: gained < 0 ? "gain-card neg" : "gain-card" });
     card.append(flagCell(player, "flag"));
@@ -431,9 +446,11 @@ function renderMoverStrip({ playlist, players, historyStore, host, strip, window
     card.append(body);
     const sign = gained > 0 ? "+" : gained < 0 ? "-" : "";
     card.append(node("div", { className: "d", text: `${sign}${Math.abs(Math.round(gained)).toLocaleString()}` }));
-    strip.append(card);
+    track.append(card);
   }
+  strip.append(track);
   applyMarquees(strip);
+  applyGainsCarousels(strip);
 }
 
 // Prefer the streak ATLAS publishes on the wins doc (immediate, authoritative)
@@ -478,6 +495,7 @@ function renderStreakStrip({ players, historyStore, host, strip, windowLabel, he
     return;
   }
 
+  const track = node("div", { className: "gains-track" });
   for (const { player, streak } of trimmed) {
     const card = node("div", { className: "gain-card streak" });
     card.append(flagCell(player, "flag"));
@@ -488,9 +506,11 @@ function renderStreakStrip({ players, historyStore, host, strip, windowLabel, he
     }
     card.append(body);
     card.append(node("div", { className: "d", text: `🔥 x${streak}` }));
-    strip.append(card);
+    track.append(card);
   }
+  strip.append(track);
   applyMarquees(strip);
+  applyGainsCarousels(strip);
 }
 
 function playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete }) {
