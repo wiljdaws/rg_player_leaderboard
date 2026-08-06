@@ -306,6 +306,20 @@ h1{
 .p-name:hover{color:var(--grad-a)}
 .p-name:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px;border-radius:6px}
 .p-icons{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+/* Row-level streak badge on the wins tab — orange fire theme mirrors the
+   streak card in the top strip so the same "🔥 x12" reads the same in both
+   contexts. align-self:flex-start so the chip hugs the left under the name,
+   never stretches to full name-column width. */
+.row-streak-chip{
+  align-self:flex-start;
+  padding:2px 8px;border-radius:999px;
+  background:rgba(255,122,0,.14);
+  border:1px solid rgba(255,122,0,.4);
+  color:#ff9a3c;
+  font:700 11px var(--display);letter-spacing:.05em;
+  text-shadow:0 0 6px rgba(255,122,0,.35);
+  white-space:nowrap;
+}
 .p-icon{
   width:var(--icon-size,18px);height:var(--icon-size,18px);object-fit:contain;
   border-radius:3px;

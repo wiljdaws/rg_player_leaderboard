@@ -541,6 +541,19 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
     }
     nameWrap.append(icons);
   }
+
+  // Inline win-streak chip on wins-tab rows, same 3+ threshold as the top
+  // streaks strip. The strip still shows the top streaks up top; this puts
+  // the badge next to the player it belongs to so people can spot their own.
+  if (playlist === "wins") {
+    const { streak } = effectiveStreak(player, historyStore);
+    if (streak >= 3) {
+      const chip = node("span", { className: "row-streak-chip", text: `🔥 x${streak}` });
+      chip.title = `${streak}-win streak`;
+      nameWrap.append(chip);
+    }
+  }
+
   ident.append(nameWrap);
   row.append(ident);
 
