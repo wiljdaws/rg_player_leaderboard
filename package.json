@@ -1,0 +1,11 @@
+{
+  "name": "rg-player-leaderboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rocket Goal player leaderboard — static site backed by the rgleaderboard Firestore project.",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve -l 5173 .",
+    "test": "node --test tests/*.mjs"
+  }
+}

@@ -1,0 +1,70 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  buildPlayerPayload,
+  filterPlayers,
+  normalizePlayerDocument,
+  normalizePlaylistRows,
+  winRate,
+} from "../js/model.js";
+
+test("normalizePlayerDocument accepts a valid MMR doc", () => {
+  const result = normalizePlayerDocument(
+    { id: "abc", playlist: "1v1", name: "Player", mmr: 1234 },
+    "1v1",
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.player.mmr, 1234);
+  assert.equal(result.player.provenance.kind, "Manual admin entry");
+});
+
+test("normalizePlayerDocument quarantines wins > matches", () => {
+  const result = normalizePlayerDocument(
+    { id: "x", playlist: "wins", name: "A", wins: 10, matches: 5 },
+    "wins",
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.quarantine.reasons.includes("wins exceed matches"));
+});
+
+test("normalizePlaylistRows sorts descending by score and quarantines duplicates", () => {
+  const { rows, quarantined } = normalizePlaylistRows(
+    [
+      { id: "a", playlist: "1v1", name: "A", mmr: 1000 },
+      { id: "b", playlist: "1v1", name: "B", mmr: 1500 },
+      { id: "b", playlist: "1v1", name: "B", mmr: 1500 }, // dup
+      { id: "c", playlist: "1v1", name: "C", mmr: -1 }, // invalid
+    ],
+    "1v1",
+  );
+  assert.deepEqual(rows.map((r) => r.id), ["b", "a"]);
+  assert.equal(quarantined.length, 2);
+});
+
+test("filterPlayers matches case-insensitively", () => {
+  const rows = [
+    { id: "1", name: "Vistvy" },
+    { id: "2", name: "Pal" },
+  ];
+  assert.equal(filterPlayers(rows, "vist").length, 1);
+  assert.equal(filterPlayers(rows, "").length, 2);
+});
+
+test("winRate reports one-decimal percent", () => {
+  assert.equal(winRate({ wins: 3, matches: 10 }), "30.0");
+  assert.equal(winRate({ wins: 0, matches: 0 }), "0.0");
+});
+
+test("buildPlayerPayload rejects invalid flag URL", () => {
+  assert.throws(
+    () =>
+      buildPlayerPayload({
+        playlist: "1v1",
+        name: "A",
+        mmr: 1000,
+        flag: "javascript:alert(1)",
+      }),
+    /Flag URL/,
+  );
+});

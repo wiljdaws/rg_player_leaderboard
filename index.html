@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Goal — Competitive Rankings</title>
+<meta name="description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
+<meta name="theme-color" content="#0C1230">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rocket Goal">
+<meta property="og:title" content="Rocket Goal — Competitive Rankings">
+<meta property="og:description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
+<meta name="twitter:card" content="summary">
+
+<link rel="icon" type="image/png" href="assets/icon.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
+<link rel="manifest" href="site.webmanifest">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/leaderboard.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="admin-access" aria-label="Admin session">
+      <button id="loginButton" type="button">Admin sign in</button>
+      <span id="authStatus" aria-live="polite"></span>
+      <button id="logoutButton" type="button" hidden>Sign out</button>
+    </div>
+    <div class="chips">
+      <span class="chip" id="statusChip"><span class="dot"></span><span id="statusChipText">Loading rankings…</span></span>
+    </div>
+    <img class="site-logo" src="https://i.imgur.com/XPoVRsE.png" alt="" aria-hidden="true">
+    <h1>Competitive Rankings</h1>
+    <p class="sub" id="subLine">Live 1v1, 2v2, 3v3, and wins standings.</p>
+  </header>
+
+  <section class="podium" id="podium" style="display:none"></section>
+
+  <section class="recent-gains" id="recentGains" aria-label="Recent MMR gains" hidden>
+    <div class="gains-heading">
+      <span class="gains-kicker">Movers</span>
+      <h2>Recent MMR gains</h2>
+      <span class="gains-window" id="gainsWindow">last hour</span>
+    </div>
+    <div class="gains-strip" id="gainsStrip"></div>
+  </section>
+
+  <div class="controls">
+    <div class="tabs" id="playlistTabs" role="tablist" aria-label="Leaderboard playlist">
+      <button class="tab active" role="tab" data-playlist="1v1" aria-selected="true" tabindex="0">1v1</button>
+      <button class="tab" role="tab" data-playlist="2v2" aria-selected="false" tabindex="-1">2v2</button>
+      <button class="tab" role="tab" data-playlist="3v3" aria-selected="false" tabindex="-1">3v3</button>
+      <button class="tab" role="tab" data-playlist="wins" aria-selected="false" tabindex="-1">Wins</button>
+    </div>
+    <div class="search-wrap">
+      <input type="search" id="playerSearch" placeholder="Search this playlist" aria-label="Search players" maxlength="80" autocomplete="off">
+      <button class="clear-btn" id="clearSearch" type="button" aria-label="Clear search" hidden>Clear</button>
+    </div>
+    <button class="share-btn" id="shareView" type="button" title="Copy shareable link" aria-label="Share view">↗</button>
+  </div>
+
+  <section class="board" aria-label="Rankings">
+    <div class="board-head" id="boardHead">
+      <span>Rank</span><span>Player</span><span class="num">MMR</span><span class="num">Last hour</span>
+    </div>
+    <div id="boardBody">
+      <div class="skeleton"><div class="sk-row"></div><div class="sk-row"></div><div class="sk-row"></div></div>
+    </div>
+  </section>
+
+  <aside class="icon-key" id="iconKey" aria-label="Player icon key" hidden></aside>
+
+  <section class="admin-panel" id="adminBox" aria-labelledby="adminPanelTitle" hidden>
+    <div class="admin-panel-head">
+      <div>
+        <span class="admin-kicker">Private controls</span>
+        <h2 id="adminPanelTitle">Admin panel</h2>
+        <p>Add, edit, or remove players and manage the icon key.</p>
+      </div>
+    </div>
+
+    <form id="adminForm" class="admin-form">
+      <h3>Add player</h3>
+      <div class="admin-form-grid">
+        <label>Playlist
+          <select id="playlist" name="playlist">
+            <option value="1v1">1v1</option>
+            <option value="2v2">2v2</option>
+            <option value="3v3">3v3</option>
+            <option value="wins">Wins</option>
+          </select>
+        </label>
+        <label>Player name
+          <input id="playerName" name="name" type="text" maxlength="80" required>
+        </label>
+
+        <div class="admin-score-group" data-score-fields="ranked">
+          <label>MMR
+            <input id="playerMMR" name="mmr" type="number" required>
+          </label>
+        </div>
+
+        <div class="admin-score-group" data-score-fields="wins" hidden>
+          <label>Wins
+            <input id="playerWins" name="wins" type="number" min="0" value="0">
+          </label>
+          <label>Matches
+            <input id="playerMatches" name="matches" type="number" min="0" value="0">
+          </label>
+        </div>
+
+        <label>Flag image URL
+          <input id="playerFlag" name="flag" type="url" inputmode="url">
+        </label>
+        <label>Icon URLs (comma separated)
+          <input id="playerIcons" name="icons" type="text">
+        </label>
+        <label>Icon size
+          <input id="playerIconSize" name="iconSize" type="number" min="12" max="50" value="18">
+        </label>
+        <label>Glow color
+          <input id="playerGlowColor" name="glowColor" type="color" value="#ffffff">
+        </label>
+        <label>Glow strength
+          <input id="playerGlowStrength" name="glowStrength" type="range" min="0" max="50" value="0">
+        </label>
+      </div>
+      <div class="admin-actions">
+        <button class="admin-primary" type="submit">Add player</button>
+      </div>
+    </form>
+
+    <hr>
+
+    <form id="iconForm" class="admin-form">
+      <h3>Icon key</h3>
+      <div class="admin-form-grid two-col">
+        <label>Icon URL
+          <input id="iconKeyURL" name="icon" type="url" inputmode="url" required>
+        </label>
+        <label>Icon meaning
+          <input id="iconKeyLabel" name="label" type="text" maxlength="100" required>
+        </label>
+      </div>
+      <div class="admin-actions">
+        <button class="admin-secondary" type="submit">Add icon</button>
+      </div>
+    </form>
+  </section>
+
+  <p id="writeStatus" class="write-status" data-state="idle" role="alert" hidden></p>
+
+  <dialog id="editDialog" class="modal" aria-labelledby="editDialogTitle">
+    <form id="editForm" class="dialog-panel">
+      <h2 id="editDialogTitle" class="dialog-title">Edit player</h2>
+      <input name="playlist" type="hidden">
+      <div class="admin-form-grid">
+        <label>Player name
+          <input id="editName" name="name" type="text" maxlength="80" required>
+        </label>
+        <div class="admin-score-group" data-score-fields="ranked">
+          <label>MMR
+            <input id="editMMR" name="mmr" type="number">
+          </label>
+        </div>
+        <div class="admin-score-group" data-score-fields="wins" hidden>
+          <label>Wins
+            <input id="editWins" name="wins" type="number" min="0">
+          </label>
+          <label>Matches
+            <input id="editMatches" name="matches" type="number" min="0">
+          </label>
+        </div>
+        <label>Flag URL
+          <input id="editFlag" name="flag" type="url" inputmode="url">
+        </label>
+        <label>Icon URLs
+          <input id="editIcons" name="icons" type="text">
+        </label>
+        <label>Icon size
+          <input id="editIconSize" name="iconSize" type="number" min="12" max="50">
+        </label>
+        <label>Glow color
+          <input id="editGlowColor" name="glowColor" type="color">
+        </label>
+        <label>Glow strength
+          <input id="editGlowStrength" name="glowStrength" type="range" min="0" max="50">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button id="cancelEdit" class="admin-secondary" type="button">Cancel</button>
+        <button class="admin-primary" type="submit">Save changes</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="playerDialog" class="modal"></dialog>
+
+  <footer>
+    <div class="footer-title">Rocket Goal Leaderboard Hub</div>
+    <p>Made by <span class="accent">Vistvy</span> · updated by <span class="accent">Pal</span> and <span class="accent">JesusDied4U</span></p>
+    <p>Want your stats added or need a rank update?</p>
+    <a href="https://discord.gg/nFe5xpGnEk" target="_blank" rel="noopener noreferrer">Join the Rocket Goal Championship Discord</a>
+  </footer>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
