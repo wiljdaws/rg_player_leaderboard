@@ -11,6 +11,7 @@ import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
 import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache } from "./local-cache.js";
 import { createReadTelemetryUploader } from "./read-telemetry.js";
+import { createReadsView } from "./reads-view.js";
 import {
   buildIconPayload,
   buildPlayerPayload,
@@ -283,29 +284,40 @@ function syncPlayerDialog() {
 function render() {
   setActiveTab(state.playlist);
   setDataStatus(effectiveStatus());
-  setSubLine(
-    state.rows.length
-      ? `${PLAYLIST_LABELS[state.playlist]} · ${state.rows.length} ${state.rows.length === 1 ? "player" : "players"}`
-      : `Live 1v1, 2v2, 3v3, and wins standings.`,
-  );
+  // Reads tab doesn't have a per-playlist row count — keep the default
+  // subline so the sentence doesn't try to pluralize a playlist that
+  // isn't a real one.
+  if (state.playlist === "reads") {
+    setSubLine("Admin read insights.");
+  } else {
+    setSubLine(
+      state.rows.length
+        ? `${PLAYLIST_LABELS[state.playlist]} · ${state.rows.length} ${state.rows.length === 1 ? "player" : "players"}`
+        : `Live 1v1, 2v2, 3v3, and wins standings.`,
+    );
+  }
 
-  renderBoard({
-    playlist: state.playlist,
-    rows: state.rows,
-    historyStore,
-    admin: state.admin,
-    emptyMessage: emptyMessage(),
-    onInspect: openPlayerDetails,
-    onEdit: openEdit,
-    onDelete: (player) => writes?.deletePlayer(player.id),
-  });
-  renderIconKey({
-    rows: state.icons,
-    admin: state.admin,
-    loading: state.iconLoading,
-    error: state.iconError,
-    onDelete: (item) => writes?.deleteIcon(item.id),
-  });
+  // Skip leaderboard + icon-key paints while the reads view is active —
+  // both containers are hidden and renderBoard doesn't know "reads".
+  if (state.playlist !== "reads") {
+    renderBoard({
+      playlist: state.playlist,
+      rows: state.rows,
+      historyStore,
+      admin: state.admin,
+      emptyMessage: emptyMessage(),
+      onInspect: openPlayerDetails,
+      onEdit: openEdit,
+      onDelete: (player) => writes?.deletePlayer(player.id),
+    });
+    renderIconKey({
+      rows: state.icons,
+      admin: state.admin,
+      loading: state.iconLoading,
+      error: state.iconError,
+      onDelete: (item) => writes?.deleteIcon(item.id),
+    });
+  }
   syncPlayerDialog();
 }
 
@@ -339,13 +351,31 @@ function openEdit(player) {
   else dialog.setAttribute("open", "");
 }
 
+// "reads" is an admin-only pseudo-playlist that swaps the board for the
+// read-insights dashboard. Skip the usual listener + rows plumbing so
+// activating it doesn't spin up a Firestore subscription.
 function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
+  if (playlist === "reads") {
+    if (!state.admin) return;               // never accept without admin
+    if (state.playlist === "reads") return;
+    listenerManager?.disconnect();          // stop burning reads on the previous playlist
+    const prev = state.playlist;
+    state.playlist = "reads";
+    state.rows = [];
+    state.quarantined = [];
+    state.playerId = "";
+    setActiveTab("reads");
+    $("boardSection").hidden = true;
+    readsView?.activate();
+    if (updateUrl) urlState(push);
+    // Preserve the last real playlist so switching back defaults there.
+    lastRealPlaylist = isPlaylist(prev) ? prev : lastRealPlaylist;
+    return;
+  }
   if (!isPlaylist(playlist)) return;
+  const leavingReads = state.playlist === "reads";
   if (playlist === state.playlist) return;
   state.playlist = playlist;
-  // Drop the previous playlist's rows so the intermediate render doesn't
-  // paint wins-shaped data into an MMR-shaped board (or vice versa) while
-  // the new listener is spinning up.
   state.rows = [];
   state.quarantined = [];
   state.playerId = "";
@@ -358,10 +388,17 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   const adminPlaylist = $("playlist");
   if (adminPlaylist) adminPlaylist.value = playlist;
   togglePlaylistFields($("adminForm"), playlist);
+  if (leavingReads) {
+    readsView?.deactivate();
+    $("boardSection").hidden = false;
+  }
   if (updateUrl) urlState(push);
   render();
   listenerManager?.activate(playlist);
 }
+
+let readsView = null;
+let lastRealPlaylist = "1v1";
 
 async function copyText(value) {
   if (navigator.clipboard?.writeText) {
@@ -568,6 +605,8 @@ async function boot() {
     return;
   }
 
+  readsView = createReadsView({ gateway });
+
   writes = new AdminWriteService({
     gateway,
     isAdmin: () => state.admin,
@@ -607,6 +646,13 @@ async function boot() {
       : user
         ? "Signed in without admin access"
         : "";
+    // Reveal the admin-only Reads tab; hide + kick the user back to a real
+    // playlist if they were viewing it while their admin session ended.
+    const readsTabEl = $("readsTab");
+    if (readsTabEl) readsTabEl.hidden = !state.admin;
+    if (!state.admin && state.playlist === "reads") {
+      activatePlaylist(lastRealPlaylist || "1v1", { push: false });
+    }
     render();
     if (state.admin) {
       loadVersionBreakdown();
