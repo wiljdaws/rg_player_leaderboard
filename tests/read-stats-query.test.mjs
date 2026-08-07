@@ -75,7 +75,7 @@ test("fetchRange returns the range and empty aggregate for a zero-doc result", a
   assert.equal(result.aggregate.totalReads, 0);
   assert.equal(result.aggregate.totalWrites, 0);
   assert.deepEqual(result.aggregate.byDate, {});
-  assert.deepEqual(result.aggregate.bySource, { site: 0, clanSite: 0, hud: 0, other: 0 });
+  assert.deepEqual(result.aggregate.bySource, { site: 0, clanSite: 0, hud: 0, other: 0, unknown: 0 });
   assert.deepEqual(result.aggregate.byHudVersion, {});
   assert.deepEqual(result.aggregate.byLabel, { site: [], hud: [] });
   assert.deepEqual(result.aggregate.byHudUser, []);
@@ -369,4 +369,172 @@ test("invalidateCache with no storage is a no-op (does not throw)", () => {
     logger,
   });
   q.invalidateCache();
+});
+
+test("bySource: source='clan' lands in clanSite regardless of userAgent", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      {
+        date: "2026-08-01",
+        sessionId: "clan-1",
+        total: 25,
+        perLabel: {},
+        // UA doesn't say "clan" — the explicit source field should still win.
+        userAgent: "Mozilla/5.0 (Macintosh)",
+        source: "clan",
+      },
+    ],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.bySource.clanSite, 25);
+  assert.equal(result.aggregate.bySource.site, 0);
+});
+
+test("bySource: source='player' lands in site", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      {
+        date: "2026-08-01",
+        sessionId: "p-1",
+        total: 12,
+        perLabel: {},
+        // UA mentions "clan" — explicit source should still win and route to site.
+        userAgent: "Mozilla/5.0 (rgClan)",
+        source: "player",
+      },
+    ],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.bySource.site, 12);
+  assert.equal(result.aggregate.bySource.clanSite, 0);
+});
+
+test("bySource: source='site' (legacy alias) still counts as site", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      {
+        date: "2026-08-01",
+        sessionId: "legacy-1",
+        total: 7,
+        perLabel: {},
+        userAgent: "Mozilla/5.0 (Macintosh)",
+        source: "site",
+      },
+    ],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.bySource.site, 7);
+});
+
+test("bySource: missing source field falls back to userAgent regex", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      // No `source` — falls back to UA sniff. Pre-migration doc.
+      {
+        date: "2026-08-01",
+        sessionId: "old-1",
+        total: 8,
+        perLabel: {},
+        userAgent: "Mozilla/5.0 (rgClan)",
+      },
+      {
+        date: "2026-08-01",
+        sessionId: "old-2",
+        total: 4,
+        perLabel: {},
+        userAgent: "Mozilla/5.0 (Macintosh)",
+      },
+    ],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.bySource.clanSite, 8);
+  assert.equal(result.aggregate.bySource.site, 4);
+});
+
+test("bySource: unknown source string lands in unknown bucket", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      {
+        date: "2026-08-01",
+        sessionId: "drift-1",
+        total: 3,
+        perLabel: {},
+        userAgent: "Mozilla/5.0",
+        source: "hud", // not a valid site-facing value
+      },
+    ],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.bySource.unknown, 3);
+  assert.equal(result.aggregate.bySource.site, 0);
+  assert.equal(result.aggregate.bySource.clanSite, 0);
+});
+
+test("bySource: mixed docs aggregate correctly across all buckets", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      { date: "2026-08-01", sessionId: "p-1", total: 10, perLabel: {}, source: "player" },
+      { date: "2026-08-01", sessionId: "c-1", total: 20, perLabel: {}, source: "clan" },
+      { date: "2026-08-01", sessionId: "s-1", total: 5, perLabel: {}, source: "site" },
+      // Pre-migration doc with clan UA — falls back to clanSite.
+      { date: "2026-08-01", sessionId: "old-c", total: 4, perLabel: {}, userAgent: "clan" },
+      // Pre-migration doc with plain UA — falls back to site.
+      { date: "2026-08-01", sessionId: "old-s", total: 3, perLabel: {}, userAgent: "Mozilla" },
+      // Drift value.
+      { date: "2026-08-01", sessionId: "drift", total: 2, perLabel: {}, source: "weird" },
+    ],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.bySource.site, 10 + 5 + 3);
+  assert.equal(result.aggregate.bySource.clanSite, 20 + 4);
+  assert.equal(result.aggregate.bySource.unknown, 2);
+  assert.equal(result.aggregate.totalReads, 10 + 20 + 5 + 4 + 3 + 2);
 });

@@ -32,6 +32,7 @@ export function createReadTelemetryUploader({
   gateway,
   budget,
   isAdmin,
+  source = "player",
   uploadIntervalMs = 60_000,
   logger = typeof console !== "undefined" ? console : null,
   now = () => Date.now(),
@@ -39,6 +40,13 @@ export function createReadTelemetryUploader({
   if (!gateway || typeof gateway.setReadStat !== "function") {
     return { start() {}, stop() {}, upload: async () => {}, sessionId: SESSION_ID };
   }
+
+  // Clamp to <=16 chars to match the Firestore rule; fall back to "player"
+  // if a caller passes something unexpected. This is the field the
+  // aggregator prefers over userAgent for source attribution.
+  const normalizedSource = typeof source === "string" && source.length > 0
+    ? source.slice(0, 16)
+    : "player";
 
   let intervalHandle = null;
   let lastPayloadKey = "";
@@ -62,6 +70,7 @@ export function createReadTelemetryUploader({
       perLabel: snap.perLabel && typeof snap.perLabel === "object" ? { ...snap.perLabel } : {},
       tripped: Boolean(snap.tripped),
       userAgent: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 200) : "",
+      source: normalizedSource,
     };
 
     try {

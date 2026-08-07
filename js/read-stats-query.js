@@ -23,15 +23,31 @@
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_STORAGE_KEY = "rgLB:readStatsCache:v1";
 
-// Detect a "clan site" session by userAgent match. Open question: modern
-// browsers don't include the origin URL in userAgent, so this is a weak
-// signal. The clan-site build strips its userAgent identity too. Until we
-// add an explicit `source` field to the write path (see rg_hud.user.js and
-// this repo's setReadStat), we lump anything not matching the pattern into
-// "site" and expose a small "clanSite" bucket for the pattern-matched
-// subset. When we can rewrite the schema, add `source: "site" | "clanSite"`
-// to admin_read_stats writes and drop this heuristic.
+// Source attribution for admin_read_stats docs. Every writer now stamps an
+// explicit `source` field ("player" from the leaderboard site, "clan" from
+// the clan site). We prefer that field; the userAgent regex is only a
+// fallback for pre-migration docs that pre-date the field. Once every
+// dashboard write predates the migration cutover, the regex path can be
+// deleted along with CLAN_SITE_UA_PATTERN.
 const CLAN_SITE_UA_PATTERN = /clan/i;
+
+function bucketForDoc(doc) {
+  // Explicit `source` field wins when present. "clan" is the clan site;
+  // "player" (new) and "site" (legacy alias) both land in the site bucket.
+  // Anything else lands in "unknown" so data drift is visible in the
+  // dashboard instead of quietly rolling up into the wrong bucket.
+  const src = typeof doc?.source === "string" ? doc.source : "";
+  if (src) {
+    if (src === "clan") return "clanSite";
+    if (src === "player" || src === "site") return "site";
+    return "unknown";
+  }
+  // Fallback for pre-migration docs (no `source` field): sniff the
+  // userAgent for the clan-site marker. This path can be dropped once
+  // enough time has passed for all cached docs to age out.
+  const ua = typeof doc?.userAgent === "string" ? doc.userAgent : "";
+  return CLAN_SITE_UA_PATTERN.test(ua) ? "clanSite" : "site";
+}
 
 function safeStorage() {
   try {
@@ -44,11 +60,6 @@ function safeStorage() {
 function shortUserAgent(userAgent) {
   if (typeof userAgent !== "string") return "";
   return userAgent.length > 80 ? `${userAgent.slice(0, 77)}...` : userAgent;
-}
-
-function isClanSiteSession(doc) {
-  const ua = typeof doc?.userAgent === "string" ? doc.userAgent : "";
-  return CLAN_SITE_UA_PATTERN.test(ua);
 }
 
 // Sums a `{ label: count }` map into an accumulator. Missing / non-object
@@ -76,7 +87,7 @@ function safeNumber(value) {
 
 function aggregate({ siteDocs, hudDocs }) {
   const byDate = {};
-  const bySource = { site: 0, clanSite: 0, hud: 0, other: 0 };
+  const bySource = { site: 0, clanSite: 0, hud: 0, other: 0, unknown: 0 };
   const byHudVersion = {};
   const siteLabels = {};
   const hudLabels = {};
@@ -90,7 +101,7 @@ function aggregate({ siteDocs, hudDocs }) {
     if (!doc || typeof doc !== "object") continue;
     const date = typeof doc.date === "string" ? doc.date : "unknown";
     const reads = safeNumber(doc.total);
-    const bucket = isClanSiteSession(doc) ? "clanSite" : "site";
+    const bucket = bucketForDoc(doc);
 
     totalReads += reads;
     bySource[bucket] += reads;
