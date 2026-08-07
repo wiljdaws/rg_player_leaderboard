@@ -639,6 +639,11 @@ async function boot() {
         gateway,
         budget: gateway.readBudget,
         isAdmin: () => state.admin,
+        // Captures which admin is signed in so the dashboard's Site
+        // Sessions table can distinguish Pal from JesusDied4U on the
+        // same site deployment. Only sent when we actually have a
+        // signed-in admin.
+        getAdminEmail: () => (state.admin && state.user?.email) || null,
       });
 
   gateway.observeAuth((user) => {

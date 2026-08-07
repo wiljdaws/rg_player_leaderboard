@@ -33,6 +33,7 @@ export function createReadTelemetryUploader({
   budget,
   isAdmin,
   source = "player",
+  getAdminEmail = null,        // () => string | null — the signed-in admin's email
   uploadIntervalMs = 60_000,
   logger = typeof console !== "undefined" ? console : null,
   now = () => Date.now(),
@@ -47,6 +48,18 @@ export function createReadTelemetryUploader({
   const normalizedSource = typeof source === "string" && source.length > 0
     ? source.slice(0, 16)
     : "player";
+
+  function resolveAdminEmail() {
+    if (typeof getAdminEmail !== "function") return null;
+    try {
+      const raw = getAdminEmail();
+      if (typeof raw !== "string" || !raw.length) return null;
+      return raw.slice(0, 200);
+    } catch (err) {
+      logger?.warn?.("[rgLB] resolveAdminEmail failed:", err?.message || err);
+      return null;
+    }
+  }
 
   let intervalHandle = null;
   let lastPayloadKey = "";
@@ -72,6 +85,12 @@ export function createReadTelemetryUploader({
       userAgent: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 200) : "",
       source: normalizedSource,
     };
+
+    // Only include adminEmail when we actually have one — omitting the key
+    // (rather than sending null) keeps the Firestore rule's hasOnly check
+    // happy without needing to allow null in the schema.
+    const email = resolveAdminEmail();
+    if (email) payload.adminEmail = email;
 
     try {
       await gateway.setReadStat(docKey(payload.date), payload);
