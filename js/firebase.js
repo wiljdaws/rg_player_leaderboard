@@ -311,6 +311,8 @@ export async function createFirebaseGateway() {
   const provider = new GoogleAuthProvider();
   const leaderboard = collection(db, "leaderboard");
   const iconKey = collection(db, "iconKey");
+  const adminReadStats = collection(db, "admin_read_stats");
+  const hudReadStats = collection(db, "hud_read_stats");
   let iconKeyCache = null;
 
   // --- Read budget ---------------------------------------------------------
@@ -543,5 +545,31 @@ export async function createFirebaseGateway() {
     // admin writers.
     setReadStat: (docKey, payload) =>
       setDoc(doc(db, "admin_read_stats", docKey), payload, { merge: true }),
+    // Query the admin_read_stats collection for a date range. Both `from`
+    // and `to` are inclusive `YYYY-MM-DD` strings; the field they compare
+    // against is a string, and `YYYY-MM-DD` sorts lexicographically the
+    // same way it sorts chronologically, so `>=` / `<=` are safe. This is
+    // the read half of the "Reads" admin dashboard — the write half is
+    // setReadStat above. Charged reads use the "readStatsQuery" label so
+    // opening the dashboard shows up cleanly in the read budget breakdown.
+    fetchAdminReadStats: async (from, to) => {
+      const snapshot = await chargedGetDocs(
+        query(adminReadStats, where("date", ">=", from), where("date", "<=", to)),
+        "readStatsQuery",
+      );
+      return rawDocuments(snapshot);
+    },
+    // Same as fetchAdminReadStats but for hud_read_stats — one doc per HUD
+    // per day, merge-updated every ~5 min. `readTotal` / `writeTotal` are
+    // the running totals for the HUD's session, not per-window counters,
+    // so aggregation should treat them as latest-known-state, not sums
+    // over time. Charged with the "hudStatsQuery" label.
+    fetchHudReadStats: async (from, to) => {
+      const snapshot = await chargedGetDocs(
+        query(hudReadStats, where("date", ">=", from), where("date", "<=", to)),
+        "hudStatsQuery",
+      );
+      return rawDocuments(snapshot);
+    },
   };
 }

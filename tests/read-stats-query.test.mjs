@@ -1,0 +1,372 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { createReadStatsQuery } from "../js/read-stats-query.js";
+
+// ------ helpers ------
+
+function makeStorage(initial = {}) {
+  const map = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => { map.set(key, String(value)); },
+    removeItem: (key) => { map.delete(key); },
+    _map: map,
+  };
+}
+
+function makeClock(startAt = 1_000_000) {
+  let ms = startAt;
+  return {
+    now: () => ms,
+    advance(by) { ms += by; },
+    set(to) { ms = to; },
+  };
+}
+
+function silentLogger() {
+  const calls = { warn: [], error: [], info: [], log: [] };
+  return {
+    logger: {
+      warn: (...args) => calls.warn.push(args),
+      error: (...args) => calls.error.push(args),
+      info: (...args) => calls.info.push(args),
+      log: (...args) => calls.log.push(args),
+    },
+    calls,
+  };
+}
+
+// A mock gateway that records call counts so we can assert cache behavior.
+function makeGateway({ siteDocs = [], hudDocs = [] } = {}) {
+  const calls = { site: 0, hud: 0, ranges: [] };
+  return {
+    calls,
+    fetchAdminReadStats: async (from, to) => {
+      calls.site += 1;
+      calls.ranges.push({ kind: "site", from, to });
+      return siteDocs;
+    },
+    fetchHudReadStats: async (from, to) => {
+      calls.hud += 1;
+      calls.ranges.push({ kind: "hud", from, to });
+      return hudDocs;
+    },
+  };
+}
+
+// ------ tests ------
+
+test("fetchRange returns the range and empty aggregate for a zero-doc result", async () => {
+  const gateway = makeGateway({ siteDocs: [], hudDocs: [] });
+  const { logger } = silentLogger();
+  const clock = makeClock();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: clock.now,
+    logger,
+  });
+
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.deepEqual(result.range, { from: "2026-08-01", to: "2026-08-07" });
+  assert.deepEqual(result.site, []);
+  assert.deepEqual(result.hud, []);
+  assert.equal(result.aggregate.totalReads, 0);
+  assert.equal(result.aggregate.totalWrites, 0);
+  assert.deepEqual(result.aggregate.byDate, {});
+  assert.deepEqual(result.aggregate.bySource, { site: 0, clanSite: 0, hud: 0, other: 0 });
+  assert.deepEqual(result.aggregate.byHudVersion, {});
+  assert.deepEqual(result.aggregate.byLabel, { site: [], hud: [] });
+  assert.deepEqual(result.aggregate.byHudUser, []);
+  assert.deepEqual(result.aggregate.bySiteSession, []);
+});
+
+test("aggregate sums reads/writes across site + hud and sorts byLabel desc", async () => {
+  const siteDocs = [
+    {
+      date: "2026-08-01",
+      sessionId: "s1",
+      updatedAt: "2026-08-01T12:00:00.000Z",
+      total: 40,
+      perLabel: { leaderboardSub: 30, iconKey: 10 },
+      userAgent: "Mozilla/5.0 (Macintosh)",
+    },
+    {
+      date: "2026-08-02",
+      sessionId: "s2",
+      updatedAt: "2026-08-02T12:00:00.000Z",
+      total: 60,
+      perLabel: { leaderboardSub: 50, adminRoster: 10 },
+      userAgent: "Mozilla/5.0 (rgClan)",
+    },
+  ];
+  const hudDocs = [
+    {
+      date: "2026-08-01",
+      sourceUserId: "u1",
+      readTotal: 20,
+      writeTotal: 3,
+      scriptVersion: "17.4",
+      versionNum: 17.4,
+      updatedAt: "2026-08-01T10:00:00.000Z",
+      perLabelReads: { leaderboard: 15, clans: 5 },
+      perLabelWrites: { leaderboard: 2, clans: 1 },
+    },
+    {
+      date: "2026-08-02",
+      sourceUserId: "u1",
+      readTotal: 10,
+      writeTotal: 2,
+      scriptVersion: "17.4",
+      versionNum: 17.4,
+      updatedAt: "2026-08-02T10:00:00.000Z",
+      perLabelReads: { leaderboard: 5, clans: 5 },
+    },
+    {
+      date: "2026-08-02",
+      sourceUserId: "u2",
+      readTotal: 5,
+      writeTotal: 1,
+      scriptVersion: "17.3",
+      versionNum: 17.3,
+      updatedAt: "2026-08-02T09:00:00.000Z",
+      perLabelReads: { leaderboard: 5 },
+    },
+  ];
+  const gateway = makeGateway({ siteDocs, hudDocs });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-02" });
+  assert.equal(result.aggregate.totalReads, 40 + 60 + 20 + 10 + 5);
+  assert.equal(result.aggregate.totalWrites, 3 + 2 + 1);
+  assert.deepEqual(result.aggregate.byDate, {
+    "2026-08-01": { site: 40, hud: 20 },
+    "2026-08-02": { site: 60, hud: 15 },
+  });
+  // s2's userAgent matches /clan/i so it lands in clanSite; s1 stays site.
+  assert.equal(result.aggregate.bySource.site, 40);
+  assert.equal(result.aggregate.bySource.clanSite, 60);
+  assert.equal(result.aggregate.bySource.hud, 35);
+  assert.deepEqual(result.aggregate.byHudVersion, { "17.4": 30, "17.3": 5 });
+
+  // byLabel is sorted desc.
+  assert.deepEqual(result.aggregate.byLabel.site, [
+    { label: "leaderboardSub", total: 80 },
+    { label: "iconKey", total: 10 },
+    { label: "adminRoster", total: 10 },
+  ]);
+  assert.deepEqual(result.aggregate.byLabel.hud, [
+    { label: "leaderboard", total: 25 },
+    { label: "clans", total: 10 },
+  ]);
+
+  // byHudUser combines the two u1 docs.
+  assert.equal(result.aggregate.byHudUser.length, 2);
+  const u1 = result.aggregate.byHudUser.find((row) => row.sourceUserId === "u1");
+  assert.equal(u1.reads, 30);
+  assert.equal(u1.writes, 5);
+  assert.equal(u1.versionNum, 17.4);
+  assert.equal(u1.lastUpdatedAt, "2026-08-02T10:00:00.000Z");
+
+  // bySiteSession sorted desc by total.
+  assert.equal(result.aggregate.bySiteSession[0].sessionId, "s2");
+  assert.equal(result.aggregate.bySiteSession[0].total, 60);
+  assert.equal(result.aggregate.bySiteSession[1].sessionId, "s1");
+});
+
+test("cache hit within TTL avoids the second fetch", async () => {
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "s1", total: 5, perLabel: {} }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const clock = makeClock();
+  const q = createReadStatsQuery({
+    gateway,
+    cache: { ttlMs: 5 * 60_000, storageKey: "rgLB:readStatsCache:test" },
+    storage: makeStorage(),
+    now: clock.now,
+    logger,
+  });
+
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gateway.calls.site, 1);
+  assert.equal(gateway.calls.hud, 1);
+
+  clock.advance(60_000); // still within 5-min TTL
+  const second = await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gateway.calls.site, 1, "second call should be a cache hit");
+  assert.equal(gateway.calls.hud, 1, "second call should be a cache hit");
+  assert.equal(second.aggregate.totalReads, 5, "cache hit still returns aggregate");
+});
+
+test("cache miss after TTL triggers a refetch", async () => {
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "s1", total: 7, perLabel: {} }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const clock = makeClock();
+  const q = createReadStatsQuery({
+    gateway,
+    cache: { ttlMs: 5 * 60_000, storageKey: "rgLB:readStatsCache:test" },
+    storage: makeStorage(),
+    now: clock.now,
+    logger,
+  });
+
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  clock.advance(5 * 60_000 + 1);
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gateway.calls.site, 2, "expired cache should refetch site");
+  assert.equal(gateway.calls.hud, 2, "expired cache should refetch hud");
+});
+
+test("different ranges use separate cache slots", async () => {
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "s1", total: 1, perLabel: {} }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const clock = makeClock();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: clock.now,
+    logger,
+  });
+
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  await q.fetchRange({ from: "2026-08-08", to: "2026-08-14" });
+  assert.equal(gateway.calls.site, 2);
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gateway.calls.site, 2, "reusing the first range should hit cache");
+});
+
+test("invalidateCache forces a refetch on the next call", async () => {
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "s1", total: 3, perLabel: {} }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const clock = makeClock();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: clock.now,
+    logger,
+  });
+
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  q.invalidateCache();
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gateway.calls.site, 2, "invalidateCache should force a refetch");
+});
+
+test("missing perLabel / perLabelReads fields don't crash aggregation", async () => {
+  const gateway = makeGateway({
+    siteDocs: [
+      { date: "2026-08-01", sessionId: "s1", total: 5 }, // no perLabel
+      { date: "2026-08-01", sessionId: "s2", total: 3, perLabel: null }, // null perLabel
+      { date: "2026-08-01", sessionId: "s3", total: 2, perLabel: "wat" }, // wrong type
+    ],
+    hudDocs: [
+      { date: "2026-08-01", sourceUserId: "u1", readTotal: 10 }, // no perLabelReads
+      { date: "2026-08-01", sourceUserId: "u2", readTotal: 5, perLabelReads: null },
+    ],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(result.aggregate.totalReads, 5 + 3 + 2 + 10 + 5);
+  assert.deepEqual(result.aggregate.byLabel.site, []);
+  assert.deepEqual(result.aggregate.byLabel.hud, []);
+});
+
+test("fetchRange throws when from/to are missing", async () => {
+  const gateway = makeGateway();
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  await assert.rejects(() => q.fetchRange({}), /YYYY-MM-DD/);
+  await assert.rejects(() => q.fetchRange({ from: "2026-08-01" }), /YYYY-MM-DD/);
+});
+
+test("fetch logs a cost breadcrumb via logger.info", async () => {
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "s1", total: 1, perLabel: {} }],
+    hudDocs: [
+      { date: "2026-08-01", sourceUserId: "u1", readTotal: 1 },
+      { date: "2026-08-01", sourceUserId: "u2", readTotal: 1 },
+    ],
+  });
+  const { logger, calls } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(calls.info.length, 1);
+  const [msg, meta] = calls.info[0];
+  assert.equal(msg, "[rgLB] read-stats fetched");
+  assert.equal(meta.docs, 3);
+  assert.equal(meta.cost, 3);
+});
+
+test("gateway missing required methods throws at construction", () => {
+  assert.throws(() => createReadStatsQuery({ gateway: {} }), /fetchAdminReadStats/);
+  assert.throws(
+    () => createReadStatsQuery({ gateway: { fetchAdminReadStats: async () => [] } }),
+    /fetchHudReadStats/,
+  );
+});
+
+test("cache survives across factory instances (localStorage-backed)", async () => {
+  const storage = makeStorage();
+  const siteDocs = [{ date: "2026-08-01", sessionId: "s1", total: 9, perLabel: {} }];
+  const clock = makeClock();
+  const { logger } = silentLogger();
+
+  const gwA = makeGateway({ siteDocs, hudDocs: [] });
+  const qA = createReadStatsQuery({ gateway: gwA, storage, now: clock.now, logger });
+  await qA.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gwA.calls.site, 1);
+
+  // Fresh instance sharing the storage should hit the same cache.
+  const gwB = makeGateway({ siteDocs, hudDocs: [] });
+  const qB = createReadStatsQuery({ gateway: gwB, storage, now: clock.now, logger });
+  const result = await qB.fetchRange({ from: "2026-08-01", to: "2026-08-07" });
+  assert.equal(gwB.calls.site, 0, "cross-instance cache should still hit");
+  assert.equal(result.aggregate.totalReads, 9);
+});
+
+test("invalidateCache with no storage is a no-op (does not throw)", () => {
+  const gateway = makeGateway();
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: null,
+    now: () => 0,
+    logger,
+  });
+  q.invalidateCache();
+});
