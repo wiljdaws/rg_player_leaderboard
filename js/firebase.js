@@ -218,7 +218,12 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
       etag = nextEtag;
       consecutiveFailures = 0;
       writePlaylistCache(playlist, rows);
-      handlers.next({ rows, fromCache: false });
+      // First live poll has no baseline → changes:[]. Every subsequent poll
+      // diffs against the last poll's rows so the render layer can animate
+      // MMR/streak deltas and top-100 entries/exits.
+      const changes = computeRowChanges(previousRows, rows);
+      previousRows = rows;
+      handlers.next({ rows, fromCache: false, changes });
     } catch (error) {
       if (!active || fallbackUnsubscribe) return;
       consecutiveFailures += 1;
@@ -315,10 +320,13 @@ export async function createFirebaseGateway() {
       limit(spec.limit),
     );
     let active = true;
+    // Same "no baseline until first live payload" rule as the JSON path so
+    // both read sources produce identical event shapes for the render layer.
+    let previousRows = null;
 
     const local = readPlaylistCache(playlist);
     if (local?.rows?.length) {
-      handlers.next({ rows: local.rows, fromCache: true });
+      handlers.next({ rows: local.rows, fromCache: true, changes: [] });
     }
 
     const unsubscribe = onSnapshot(
@@ -328,7 +336,15 @@ export async function createFirebaseGateway() {
         if (!active) return;
         const rows = rawDocuments(snapshot);
         if (!snapshot.metadata.fromCache) writePlaylistCache(playlist, rows);
-        handlers.next({ rows, fromCache: snapshot.metadata.fromCache });
+        // Only diff live (non-cache) snapshots — cache metadata snapshots are
+        // just Firestore telling us it painted from local; they don't carry
+        // fresh field values worth animating on.
+        let changes = [];
+        if (!snapshot.metadata.fromCache) {
+          changes = computeRowChanges(previousRows, rows);
+          previousRows = rows;
+        }
+        handlers.next({ rows, fromCache: snapshot.metadata.fromCache, changes });
       },
       async (error) => {
         if (!active) return;
@@ -343,9 +359,11 @@ export async function createFirebaseGateway() {
             if (!active) return;
             const rows = rawDocuments(snapshot);
             writePlaylistCache(playlist, rows);
+            // One-shot getDocs fallback — no baseline, no animation.
             handlers.next({
               rows,
               fromCache: true,
+              changes: [],
               degradedReason:
                 `${spec.playlist} is using a one-time fallback until the ` +
                 `playlist + ${spec.orderField} descending index is ready.`,
