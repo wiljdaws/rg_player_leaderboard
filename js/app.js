@@ -267,7 +267,13 @@ function effectiveStatus() {
 
 function emptyMessage() {
   if (state.status.kind === "loading") return "Loading rankings…";
-  if (state.status.kind === "error") return "Rankings are unavailable right now. Please try again shortly.";
+  if (state.status.kind === "error") {
+    return (
+      "Live data is briefly unavailable — usually a Firestore free-tier " +
+      "hiccup that clears within an hour. Rankings will reappear on the " +
+      "next refresh once the hourly cache rebuilds."
+    );
+  }
   return `No ${state.playlist} rankings have been added yet.`;
 }
 
