@@ -126,12 +126,13 @@ export function initials(name) {
   return first ? first[0].toUpperCase() : "?";
 }
 
-// When a flag URL 404s the container swaps to the player's initial so the
-// space stays the same size instead of collapsing to an empty box.
+// When a flag URL is missing or 404s the container shows a "?" so the space
+// stays the same size instead of collapsing. Reads cleaner than the
+// player's initial (which was easy to mistake for a real avatar letter).
 function flagCell(player, className = "p-flag") {
   const wrap = node("div", { className });
   const fallback = () => {
-    wrap.textContent = initials(player?.name);
+    wrap.textContent = "?";
     wrap.classList.add("no-flag");
   };
   if (player?.flag) {
