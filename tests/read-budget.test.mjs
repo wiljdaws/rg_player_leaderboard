@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createReadBudget } from "../js/read-budget.js";
+import { computeSnapshotCharge } from "../js/firebase.js";
 
 // ------ helpers ------
 
@@ -255,6 +256,34 @@ test("onTrip returns an unsubscribe function", () => {
   off();
   b.charge("x", 30);
   assert.equal(fired, 0, "unsubscribed listener should not fire");
+});
+
+// ------ computeSnapshotCharge (onSnapshot charging model) ------
+
+test("computeSnapshotCharge: first fire charges snapshot.size", () => {
+  assert.equal(computeSnapshotCharge({ isFirstFire: true, size: 100, changeCount: 0 }), 100);
+  assert.equal(computeSnapshotCharge({ isFirstFire: true, size: 50, changeCount: 42 }), 50);
+});
+
+test("computeSnapshotCharge: first fire of an empty result still costs 1", () => {
+  assert.equal(computeSnapshotCharge({ isFirstFire: true, size: 0 }), 1);
+  assert.equal(computeSnapshotCharge({ isFirstFire: true }), 1);
+});
+
+test("computeSnapshotCharge: later fires charge docChanges.length", () => {
+  assert.equal(computeSnapshotCharge({ isFirstFire: false, size: 100, changeCount: 3 }), 3);
+  assert.equal(computeSnapshotCharge({ isFirstFire: false, size: 100, changeCount: 1 }), 1);
+});
+
+test("computeSnapshotCharge: metadata-only fire (0 doc-changes) charges 0", () => {
+  // This is the core regression. Before the fix, Math.max(1, 0) = 1 charged
+  // one read per metadata flip. Now it's 0.
+  assert.equal(computeSnapshotCharge({ isFirstFire: false, size: 100, changeCount: 0 }), 0);
+});
+
+test("computeSnapshotCharge: negative/NaN change counts are floored to 0", () => {
+  assert.equal(computeSnapshotCharge({ isFirstFire: false, changeCount: -5 }), 0);
+  assert.equal(computeSnapshotCharge({ isFirstFire: false, changeCount: NaN }), 0);
 });
 
 test("trip does not multi-fire when charges keep landing after tripping", () => {

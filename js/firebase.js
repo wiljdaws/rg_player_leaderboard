@@ -55,6 +55,24 @@ function rawDocuments(snapshot) {
 // entered); the render layer only needs enough to sparkle, not audit.
 export const MAX_CHANGES_PER_POLL = 50;
 
+// Pure helper: given whether this is the first snapshot for a subscription,
+// the snapshot's total doc count, and how many doc-level changes it carries,
+// return how many reads to charge the budget.
+//
+//   - First fire  → snapshot.size (full initial paint). Falls back to 1 when
+//     size is 0/missing so an empty first result still counts as one query.
+//   - Later fires → docChanges.length AS-IS (no min-1 clamp). A metadata-only
+//     fire has 0 doc-changes and MUST cost 0 reads — clamping it to 1 is
+//     what produced the 721-reads-in-6-seconds telemetry spike on 1v1.
+//
+// Exported for unit tests. Callers pass raw numbers; snapshot inspection
+// stays in the onSnapshot wrapper.
+export function computeSnapshotCharge({ isFirstFire, size = 0, changeCount = 0 } = {}) {
+  if (isFirstFire) return Math.max(1, Number(size) || 1);
+  const changes = Number(changeCount) || 0;
+  return changes > 0 ? changes : 0;
+}
+
 function numericOrNull(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -365,23 +383,40 @@ export async function createFirebaseGateway() {
     return snapshot;
   }
 
-  // Wraps onSnapshot with the read budget. First snapshot charges snapshot.size,
-  // subsequent snapshots charge docChanges().length so a re-hydration on tab
-  // focus doesn't cost N reads every time. Uses includeMetadataChanges:false so
-  // fromCache flips don't get charged as reads.
+  // Wraps onSnapshot with the read budget.
+  //
+  // Charging model:
+  //   - First data snapshot: snapshot.size (initial paint = full set)
+  //   - Subsequent snapshots: snapshot.docChanges().length (deltas only,
+  //     no min-1 clamp — a metadata-only fire is 0 real doc reads and should
+  //     stay 0 in the counter).
+  //
+  // We intentionally do NOT pass { includeMetadataChanges: true } here.
+  // With it on, Firestore fires the callback again every time it flips
+  // metadata.fromCache from true→false (and back again on network hiccups).
+  // Those fires carry zero real doc changes but were previously charged
+  // Math.max(1, 0) = 1 read each, and each unsubscribe/resubscribe
+  // (tab-focus, visibility change) re-armed the "first snapshot" branch and
+  // charged another snapshot.size worth of reads. Telemetry caught a session
+  // charging 721 reads for one playlist in ~6s — that's this bug.
+  //
+  // snapshot.metadata.fromCache is still populated on data snapshots without
+  // the flag, so downstream callers (listener-manager status pills) keep
+  // working. What we lose is the standalone "server caught up, no data
+  // changed" fire — the site does not need it.
   function chargedOnSnapshot(target, label, next, error) {
     let firstDelivered = false;
     const unsub = onSnapshot(
       target,
-      { includeMetadataChanges: true },
       (snap) => {
-        if (!firstDelivered) {
-          firstDelivered = true;
-          budget.charge(label, Math.max(1, snap.size || 1));
-        } else {
-          const changes = snap.docChanges({ includeMetadataChanges: false });
-          budget.charge(label, Math.max(1, changes.length));
-        }
+        const isFirstFire = !firstDelivered;
+        if (isFirstFire) firstDelivered = true;
+        const cost = computeSnapshotCharge({
+          isFirstFire,
+          size: snap.size,
+          changeCount: snap.docChanges().length,
+        });
+        if (cost > 0) budget.charge(label, cost);
         try { next?.(snap); } catch (err) { console.error("[rgLB] onSnapshot handler threw", err); }
       },
       (err) => { try { error?.(err); } catch {} },
