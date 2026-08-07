@@ -365,7 +365,14 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
     state.quarantined = [];
     state.playerId = "";
     setActiveTab("reads");
+    // Reads is a focused view — hide everything that belongs to the
+    // leaderboard chrome (board, icon-key legend, admin panel form) so
+    // the dashboard has the page to itself.
     $("boardSection").hidden = true;
+    const iconKeyHost = $("iconKey");
+    if (iconKeyHost) iconKeyHost.hidden = true;
+    const adminBoxHost = $("adminBox");
+    if (adminBoxHost) adminBoxHost.hidden = true;
     readsView?.activate();
     if (updateUrl) urlState(push);
     // Preserve the last real playlist so switching back defaults there.
@@ -391,6 +398,12 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   if (leavingReads) {
     readsView?.deactivate();
     $("boardSection").hidden = false;
+    // Admin panel returns for admins; the icon-key legend re-shows on the
+    // next renderIconKey() (fired below via render()).
+    if (state.admin || READ_BUDGET_DEBUG) {
+      const adminBoxHost = $("adminBox");
+      if (adminBoxHost) adminBoxHost.hidden = false;
+    }
   }
   if (updateUrl) urlState(push);
   render();
