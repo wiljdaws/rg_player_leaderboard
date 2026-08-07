@@ -9,6 +9,7 @@ import { createFirebaseGateway } from "./firebase.js";
 import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
+import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache } from "./local-cache.js";
 import {
   buildIconPayload,
   buildPlayerPayload,
@@ -67,12 +68,23 @@ function mountFlagPickers() {
   }
 }
 
-async function loadVersionBreakdown() {
+// 5-minute cache on the admin roster so re-signins and page reloads don't
+// each burn 100 Firestore reads. Refresh button clears the cache first.
+async function loadVersionBreakdown({ force = false } = {}) {
   const host = $("versionBreakdown");
   if (!host) return;
+  if (!force) {
+    const cached = readAdminRosterCache();
+    if (cached?.rows?.length) {
+      const normalized = normalizePlaylistRows(cached.rows, "wins");
+      renderVersionBreakdown(host, normalized.rows);
+      return;
+    }
+  }
   host.replaceChildren(document.createTextNode("Loading roster…"));
   try {
     const raw = await gateway.loadPlayerRoster();
+    writeAdminRosterCache(raw);
     const normalized = normalizePlaylistRows(raw, "wins");
     renderVersionBreakdown(host, normalized.rows);
   } catch (error) {
@@ -336,7 +348,9 @@ function wireEvents() {
   });
 
   $("refreshVersions")?.addEventListener("click", () => {
-    if (state.admin) loadVersionBreakdown();
+    if (!state.admin) return;
+    clearAdminRosterCache();
+    loadVersionBreakdown({ force: true });
   });
 
   $("editForm").addEventListener("submit", async (event) => {

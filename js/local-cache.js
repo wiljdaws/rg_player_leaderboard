@@ -2,7 +2,11 @@
 
 const PLAYLIST_PREFIX = "rgPlayerLb:playlist:v1:";
 const ICON_KEY = "rgPlayerLb:iconKey:v1";
+const ADMIN_ROSTER = "rgPlayerLb:adminRoster:v1";
 export const LOCAL_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+// Admin roster is only used for the "who's on which version" diagnostic;
+// short TTL is fine and saves 100 reads per admin sign-in / reload.
+export const ROSTER_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function storage() {
   try {
@@ -48,4 +52,13 @@ export function readIconKeyCache() {
 }
 export function writeIconKeyCache(rows) {
   return writeTimedCache(ICON_KEY, rows);
+}
+export function readAdminRosterCache() {
+  return readTimedCache(ADMIN_ROSTER, ROSTER_CACHE_TTL_MS);
+}
+export function writeAdminRosterCache(rows) {
+  return writeTimedCache(ADMIN_ROSTER, rows);
+}
+export function clearAdminRosterCache() {
+  try { storage()?.removeItem(ADMIN_ROSTER); } catch {}
 }
