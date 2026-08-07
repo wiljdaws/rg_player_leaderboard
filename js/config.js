@@ -31,11 +31,14 @@ export const SDK = "10.12.2";
 // serves public reads from a pre-built JSON blob on the CDN so HUD writes no
 // longer charge N reads across every open tab.
 export const READ_SOURCE_MODES = Object.freeze(["firestore", "static"]);
-export const READ_SOURCE_DEFAULT = "firestore";
+export const READ_SOURCE_DEFAULT = "static";
 
-// Set at build time or via URL param ?readSource=static / persisted in localStorage.
-export const STATIC_JSON_URL_TEMPLATE = "https://cdn.rocketgoal.example/leaderboard-{playlist}.json";
-export const STATIC_JSON_POLL_MS = 30_000;
+// jsDelivr fronts the data branch of this repo. The publish-leaderboard-json
+// workflow in Tampermonkeys writes the JSON hourly and pokes jsDelivr's purge
+// endpoint so freshness is ~30s globally after each rebuild.
+export const STATIC_JSON_URL_TEMPLATE =
+  "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/leaderboard/{playlist}.json";
+export const STATIC_JSON_POLL_MS = 300_000;
 // Falls back to firestore on repeated fetch errors so a bad CDN deploy can't
 // take the site down.
 export const STATIC_JSON_MAX_CONSECUTIVE_FAILURES = 3;
