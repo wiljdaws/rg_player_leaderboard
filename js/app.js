@@ -68,6 +68,136 @@ function mountFlagPickers() {
   }
 }
 
+// ---------- Read-budget admin widget ----------
+//
+// Compact chip in the admin panel showing Reads/hr with a per-label expand.
+// Green (<250), yellow (>= soft or softTripped), red (hard-tripped). Polls
+// gateway.readBudget every 3s. Also renders whenever ?readBudget=debug is
+// present so it's easy to smoke-test the counter without admin access.
+const READ_BUDGET_POLL_MS = 3_000;
+const READ_BUDGET_DEBUG = (() => {
+  try { return new URL(window.location.href).searchParams.get("readBudget") === "debug"; }
+  catch { return false; }
+})();
+let readBudgetPollHandle = null;
+let readBudgetLastTripAt = 0;
+
+function ensureReadBudgetWidget() {
+  const host = document.getElementById("adminBox");
+  if (!host) return null;
+  let widget = document.getElementById("readBudgetWidget");
+  if (widget) return widget;
+  widget = document.createElement("section");
+  widget.id = "readBudgetWidget";
+  widget.className = "read-budget-widget";
+  widget.setAttribute("aria-label", "Firestore read budget");
+  widget.innerHTML = `
+    <button type="button" class="read-budget-chip" data-state="ok" aria-expanded="false">
+      <span class="read-budget-dot"></span>
+      <span class="read-budget-label">Reads/hr:</span>
+      <span class="read-budget-value">0</span>
+    </button>
+    <div class="read-budget-detail" hidden></div>
+  `;
+  const chip = widget.querySelector(".read-budget-chip");
+  chip.addEventListener("click", () => {
+    const detail = widget.querySelector(".read-budget-detail");
+    const expanded = chip.getAttribute("aria-expanded") === "true";
+    chip.setAttribute("aria-expanded", String(!expanded));
+    detail.hidden = expanded;
+  });
+  // Insert just after the panel head so it sits at the top of the panel.
+  const head = host.querySelector(".admin-panel-head");
+  if (head?.nextSibling) host.insertBefore(widget, head.nextSibling);
+  else host.appendChild(widget);
+  return widget;
+}
+
+function paintReadBudgetWidget(snap) {
+  const widget = ensureReadBudgetWidget();
+  if (!widget) return;
+  const chip = widget.querySelector(".read-budget-chip");
+  const valueEl = widget.querySelector(".read-budget-value");
+  const detail = widget.querySelector(".read-budget-detail");
+
+  valueEl.textContent = String(snap.total);
+  let stateAttr = "ok";
+  if (snap.tripped) stateAttr = "tripped";
+  else if (snap.softTripped || snap.total >= (snap.soft ?? 500)) stateAttr = "warn";
+  else if (snap.total >= 250) stateAttr = "warn";
+  chip.dataset.state = stateAttr;
+
+  const perLabelEntries = Object.entries(snap.perLabel || {})
+    .sort((a, b) => b[1] - a[1]);
+  if (!perLabelEntries.length) {
+    detail.textContent = "No reads recorded yet.";
+  } else {
+    detail.innerHTML = "";
+    const list = document.createElement("ul");
+    list.className = "read-budget-list";
+    for (const [label, count] of perLabelEntries) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="rb-label"></span><span class="rb-count"></span>`;
+      li.querySelector(".rb-label").textContent = label;
+      li.querySelector(".rb-count").textContent = String(count);
+      list.appendChild(li);
+    }
+    detail.appendChild(list);
+    if (snap.tripped) {
+      const p = document.createElement("p");
+      p.className = "read-budget-note";
+      const untilMs = Number(snap.trippedUntil) || 0;
+      const remainMs = Math.max(0, untilMs - Date.now());
+      const remainMin = Math.ceil(remainMs / 60_000);
+      p.textContent = `Hard cap tripped. Live updates paused for ~${remainMin} more min.`;
+      detail.appendChild(p);
+    }
+  }
+
+  // console.info on every hard trip transition — helps spot repeat trips in
+  // devtools without hunting for the warn.
+  const trippedUntil = Number(snap.trippedUntil) || 0;
+  if (snap.tripped && trippedUntil !== readBudgetLastTripAt) {
+    readBudgetLastTripAt = trippedUntil;
+    console.info("[rgLB] read budget hard cap tripped", snap);
+  }
+}
+
+function shouldShowReadBudget() {
+  return Boolean(READ_BUDGET_DEBUG || state.admin);
+}
+
+function stopReadBudgetPoll() {
+  if (readBudgetPollHandle != null) {
+    clearInterval(readBudgetPollHandle);
+    readBudgetPollHandle = null;
+  }
+  const widget = document.getElementById("readBudgetWidget");
+  if (widget) widget.remove();
+}
+
+function startReadBudgetPoll() {
+  const budget = gateway?.readBudget;
+  if (!budget) return;
+  if (readBudgetPollHandle != null) return;
+  paintReadBudgetWidget(budget.snapshot());
+  readBudgetPollHandle = setInterval(() => {
+    paintReadBudgetWidget(budget.snapshot());
+  }, READ_BUDGET_POLL_MS);
+}
+
+function syncReadBudgetWidget() {
+  if (shouldShowReadBudget()) startReadBudgetPoll();
+  else stopReadBudgetPoll();
+}
+
+// If we booted straight into a cool-off, `firebase.js` fires this event so
+// the widget can paint red the moment it's mounted.
+document.addEventListener("rgLB:read-budget-tripped", (event) => {
+  if (!shouldShowReadBudget()) return;
+  paintReadBudgetWidget(event.detail || {});
+});
+
 // 5-minute cache on the admin roster so re-signins and page reloads don't
 // each burn 100 Firestore reads. Refresh button clears the cache first.
 async function loadVersionBreakdown({ force = false } = {}) {
@@ -451,7 +581,9 @@ async function boot() {
       const dialog = $("editDialog");
       if (dialog?.open) dialog.close();
     }
-    $("adminBox").hidden = !state.admin;
+    // In debug mode we force the admin panel visible so the widget renders
+    // for any user. Otherwise the panel follows real admin state.
+    $("adminBox").hidden = !state.admin && !READ_BUDGET_DEBUG;
     $("loginButton").hidden = Boolean(user);
     $("logoutButton").hidden = !user;
     $("authStatus").textContent = state.admin
@@ -461,6 +593,7 @@ async function boot() {
         : "";
     render();
     if (state.admin) loadVersionBreakdown();
+    syncReadBudgetWidget();
   });
 
   listenerManager = new PlaylistListenerManager({
@@ -483,6 +616,11 @@ async function boot() {
   refreshIcons();
   listenerManager.setVisible(!document.hidden);
   listenerManager.activate(state.playlist);
+
+  // Debug/ops override — makes the widget visible for any user (still needs
+  // adminBox visible for its parent to layout, which the auth block above
+  // handles). Idempotent — the sync helper no-ops when already polling.
+  if (READ_BUDGET_DEBUG) syncReadBudgetWidget();
 }
 
 boot();

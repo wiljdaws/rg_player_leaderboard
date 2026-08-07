@@ -16,6 +16,7 @@ import {
   writeIconKeyCache,
   writePlaylistCache,
 } from "./local-cache.js";
+import { createReadBudget } from "./read-budget.js";
 
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
@@ -311,7 +312,96 @@ export async function createFirebaseGateway() {
   const iconKey = collection(db, "iconKey");
   let iconKeyCache = null;
 
+  // --- Read budget ---------------------------------------------------------
+  //
+  // Guards runtime Firestore reads. Soft cap warns, hard cap tears down
+  // every live listener and flips a 15-min cool-off flag to localStorage so
+  // a cache-bust storm can't blast the quota. Query-string overrides:
+  //   ?readBudget=off   → count but don't enforce
+  //   ?readBudget=debug → makes the admin widget visible for any user (used
+  //                       in app.js, not here — kept as a doc breadcrumb)
+  const readBudgetParam = (() => {
+    try { return new URL(window.location.href).searchParams.get("readBudget"); }
+    catch { return null; }
+  })();
+  const enforcementDisabled = readBudgetParam === "off";
+  const budget = createReadBudget({});
+  // Expose for DevTools. Nothing in the app reads this — it's an ops handle.
+  try { globalThis.__rgReadBudget = budget; } catch {}
+
+  // All live listener teardowns. On trip we drain the set and refuse to
+  // spin up new listeners until the cool-off elapses.
+  const activeUnsubscribes = new Set();
+  let blocked = budget.isTripped() && !enforcementDisabled;
+
+  function announceTrip(snap) {
+    try {
+      document.dispatchEvent(
+        new CustomEvent("rgLB:read-budget-tripped", { detail: snap }),
+      );
+    } catch {}
+  }
+
+  budget.onTrip((snap) => {
+    if (enforcementDisabled) return;
+    blocked = true;
+    for (const off of Array.from(activeUnsubscribes)) {
+      activeUnsubscribes.delete(off);
+      try { off(); } catch {}
+    }
+    announceTrip(snap);
+  });
+
+  // If we boot straight into a cool-off (persisted from a previous session),
+  // announce it once so the admin widget can paint the red chip immediately.
+  if (blocked) announceTrip(budget.snapshot());
+
+  async function chargedGetDocs(target, label) {
+    const snapshot = await getDocs(target);
+    budget.charge(label, Math.max(1, snapshot.size || 1));
+    return snapshot;
+  }
+
+  // Wraps onSnapshot with the read budget. First snapshot charges snapshot.size,
+  // subsequent snapshots charge docChanges().length so a re-hydration on tab
+  // focus doesn't cost N reads every time. Uses includeMetadataChanges:false so
+  // fromCache flips don't get charged as reads.
+  function chargedOnSnapshot(target, label, next, error) {
+    let firstDelivered = false;
+    const unsub = onSnapshot(
+      target,
+      { includeMetadataChanges: true },
+      (snap) => {
+        if (!firstDelivered) {
+          firstDelivered = true;
+          budget.charge(label, Math.max(1, snap.size || 1));
+        } else {
+          const changes = snap.docChanges({ includeMetadataChanges: false });
+          budget.charge(label, Math.max(1, changes.length));
+        }
+        try { next?.(snap); } catch (err) { console.error("[rgLB] onSnapshot handler threw", err); }
+      },
+      (err) => { try { error?.(err); } catch {} },
+    );
+
+    const wrapped = () => {
+      activeUnsubscribes.delete(wrapped);
+      try { unsub(); } catch {}
+    };
+    activeUnsubscribes.add(wrapped);
+    return wrapped;
+  }
+
   function subscribePlaylist(playlist, handlers) {
+    // Cool-off: refuse to spin up a live listener while the hard cap is
+    // still tripped. Static JSON path is orthogonal and remains available.
+    if (blocked) {
+      const wrapped = new Error("Read cap tripped — updates paused for 15 min.");
+      wrapped.userMessage = "Read cap tripped — updates paused for 15 min.";
+      try { handlers.error?.(wrapped); } catch {}
+      return () => {};
+    }
+
     const spec = playlistQuerySpec(playlist);
     const liveQuery = query(
       leaderboard,
@@ -329,9 +419,9 @@ export async function createFirebaseGateway() {
       handlers.next({ rows: local.rows, fromCache: true, changes: [] });
     }
 
-    const unsubscribe = onSnapshot(
+    const unsubscribe = chargedOnSnapshot(
       liveQuery,
-      { includeMetadataChanges: true },
+      `playlist:${spec.playlist}`,
       (snapshot) => {
         if (!active) return;
         const rows = rawDocuments(snapshot);
@@ -355,7 +445,7 @@ export async function createFirebaseGateway() {
               where("playlist", "==", spec.playlist),
               limit(spec.limit),
             );
-            const snapshot = await getDocs(fallbackQuery);
+            const snapshot = await chargedGetDocs(fallbackQuery, "leaderboardFallback");
             if (!active) return;
             const rows = rawDocuments(snapshot);
             writePlaylistCache(playlist, rows);
@@ -414,7 +504,7 @@ export async function createFirebaseGateway() {
         return iconKeyCache;
       }
     }
-    const snapshot = await getDocs(iconKey);
+    const snapshot = await chargedGetDocs(iconKey, "iconKey");
     iconKeyCache = rawDocuments(snapshot);
     writeIconKeyCache(iconKeyCache);
     return iconKeyCache;
@@ -434,11 +524,16 @@ export async function createFirebaseGateway() {
     // who's running which HUD version. Wins is the canonical "seen once ever"
     // collection since every HUD-synced player gets a wins doc.
     loadPlayerRoster: async () => {
-      const snapshot = await getDocs(query(leaderboard, where("playlist", "==", "wins"), limit(MAX_PLAYLIST_ROWS)));
+      const snapshot = await chargedGetDocs(
+        query(leaderboard, where("playlist", "==", "wins"), limit(MAX_PLAYLIST_ROWS)),
+        "adminRoster",
+      );
       return rawDocuments(snapshot);
     },
     deletePlayer: (id) => deleteDoc(doc(db, "leaderboard", id)),
     addIcon: (payload) => addDoc(iconKey, payload),
     deleteIcon: (id) => deleteDoc(doc(db, "iconKey", id)),
+    // Read budget handle — admin widget reads snapshots off this on a poll.
+    readBudget: budget,
   };
 }

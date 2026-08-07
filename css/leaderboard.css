@@ -443,6 +443,38 @@ h1{
 .v-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v-last{color:var(--ink-dim);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
 
+/* Read-budget widget — compact chip pinned near the top of the admin panel.
+   Colors follow the traffic-light convention: green ok, yellow warn (soft
+   cap or > 250), red tripped (hard cap). Uses the existing gold/loss vars
+   so it feels native to the admin panel. */
+.read-budget-widget{margin:0 0 20px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.read-budget-chip{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 12px;border-radius:999px;cursor:pointer;
+  background:rgba(12,18,48,.65);border:1px solid var(--line);
+  font:600 12px var(--display);letter-spacing:.06em;color:var(--ink);
+  transition:border-color .15s ease,background .15s ease;
+}
+.read-budget-chip:hover{border-color:var(--line-strong)}
+.read-budget-chip .read-budget-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#4ade80;box-shadow:0 0 8px rgba(74,222,128,.55);
+}
+.read-budget-chip[data-state="warn"] .read-budget-dot{background:#facc15;box-shadow:0 0 8px rgba(250,204,21,.55)}
+.read-budget-chip[data-state="tripped"] .read-budget-dot{background:var(--loss,#f87171);box-shadow:0 0 10px rgba(248,113,113,.7)}
+.read-budget-chip[data-state="tripped"]{border-color:rgba(248,113,113,.5)}
+.read-budget-chip .read-budget-value{font-variant-numeric:tabular-nums;color:var(--gold)}
+.read-budget-chip .read-budget-label{color:var(--ink-dim)}
+.read-budget-detail{
+  padding:10px 14px;border-radius:10px;background:rgba(12,18,48,.55);
+  border:1px solid var(--line);font-size:12px;color:var(--ink-dim);min-width:220px;
+}
+.read-budget-list{list-style:none;padding:0;margin:0;display:grid;gap:4px}
+.read-budget-list li{display:flex;justify-content:space-between;gap:12px}
+.read-budget-list .rb-label{color:var(--ink);font-weight:600}
+.read-budget-list .rb-count{font-variant-numeric:tabular-nums;color:var(--gold)}
+.read-budget-note{margin-top:8px;color:var(--loss,#f87171);font-size:11.5px}
+
 .field-grid{
   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
   gap:14px 16px;
