@@ -10,6 +10,7 @@ import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
 import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache } from "./local-cache.js";
+import { createReadTelemetryUploader } from "./read-telemetry.js";
 import {
   buildIconPayload,
   buildPlayerPayload,
@@ -573,6 +574,21 @@ async function boot() {
     refreshIcons,
   });
 
+  // Cross-session telemetry: every admin session pushes its read-budget
+  // snapshot to admin_read_stats/. Disabled with ?telemetry=off. Only starts
+  // once the auth-observer flips state.admin to true.
+  const telemetryDisabled = (() => {
+    try { return new URL(window.location.href).searchParams.get("telemetry") === "off"; }
+    catch { return false; }
+  })();
+  const readTelemetry = telemetryDisabled
+    ? { start() {}, stop() {}, upload: async () => {} }
+    : createReadTelemetryUploader({
+        gateway,
+        budget: gateway.readBudget,
+        isAdmin: () => state.admin,
+      });
+
   gateway.observeAuth((user) => {
     state.user = user;
     state.admin = isAdminUser(user);
@@ -592,7 +608,12 @@ async function boot() {
         ? "Signed in without admin access"
         : "";
     render();
-    if (state.admin) loadVersionBreakdown();
+    if (state.admin) {
+      loadVersionBreakdown();
+      readTelemetry.start();
+    } else {
+      readTelemetry.stop();
+    }
     syncReadBudgetWidget();
   });
 

@@ -292,6 +292,7 @@ export async function createFirebaseGateway() {
     orderBy,
     query,
     serverTimestamp,
+    setDoc,
     updateDoc,
     where,
   } = firestoreMod;
@@ -535,5 +536,12 @@ export async function createFirebaseGateway() {
     deleteIcon: (id) => deleteDoc(doc(db, "iconKey", id)),
     // Read budget handle — admin widget reads snapshots off this on a poll.
     readBudget: budget,
+    // Cross-session telemetry: uploads the current read-budget snapshot to
+    // admin_read_stats/{docKey} so we can attribute daily read totals to
+    // specific features. Merge-write so periodic polls keep updating the
+    // same doc without re-creating it. Rules restrict this collection to
+    // admin writers.
+    setReadStat: (docKey, payload) =>
+      setDoc(doc(db, "admin_read_stats", docKey), payload, { merge: true }),
   };
 }
