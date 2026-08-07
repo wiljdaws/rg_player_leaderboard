@@ -387,29 +387,53 @@ function renderExportGroup(onExport) {
 // ------------------------------------------------------------
 
 function renderBigNumbers(agg, data) {
-  const totalReads = Number(agg?.totalReads || 0);
+  const attributedReads = Number(agg?.totalReads || 0);
+  const monitoringAvailable = Boolean(agg?.monitoring?.available);
+  const monitoringReads = Number(agg?.monitoring?.totalReads || 0);
+  const untrackedReads = Number(agg?.untracked?.totalReads || 0);
   const totalWrites = Number(agg?.totalWrites || 0);
   const activeHuds = Array.isArray(agg?.byHudUser) ? agg.byHudUser.length : 0;
   const siteSessions = Array.isArray(agg?.bySiteSession)
     ? agg.bySiteSession.length
     : Array.isArray(data?.site) ? data.site.length : 0;
 
-  return el("section", { className: "rd-chips-row", attrs: { "aria-label": "Range totals" } }, [
-    chipTile("Total reads", totalReads, "gain"),
-    chipTile("Total writes", totalWrites, "gold"),
-    chipTile("Active HUDs", activeHuds, "grad"),
-    chipTile("Site sessions", siteSessions, "silver"),
-  ]);
+  // Layout is different depending on whether Cloud Monitoring totals are
+  // available. When they are, the top row shows Firestore-project-wide
+  // totals + our attributed slice + the untracked remainder. When they
+  // aren't, we show just the attributed slice so the dashboard still
+  // works before the Monitoring pipeline is deployed.
+  const chips = monitoringAvailable
+    ? [
+        chipTile("Firestore reads", monitoringReads, "gain",
+          "Total from Cloud Monitoring across every source hitting the project."),
+        chipTile("Attributed", attributedReads, "grad",
+          "Reads we can trace to a specific source via telemetry."),
+        chipTile("Untracked", untrackedReads, "gold",
+          "Firestore total minus attributed. Likely Pal's site + old HUDs + scrapers."),
+        chipTile("Active HUDs", activeHuds, "silver",
+          "Distinct HUDs that reported telemetry in the range."),
+      ]
+    : [
+        chipTile("Attributed reads", attributedReads, "gain",
+          "Reads we can trace via telemetry. Total from Cloud Monitoring not yet wired."),
+        chipTile("Total writes", totalWrites, "gold"),
+        chipTile("Active HUDs", activeHuds, "grad"),
+        chipTile("Site sessions", siteSessions, "silver"),
+      ];
+
+  return el("section", { className: "rd-chips-row", attrs: { "aria-label": "Range totals" } }, chips);
 }
 
-function chipTile(label, value, tone) {
-  return el("div", {
+function chipTile(label, value, tone, hint) {
+  const tile = el("div", {
     className: "rd-chip-tile",
     dataset: { tone: tone || "ink" },
+    attrs: hint ? { title: hint } : {},
   }, [
     el("div", { className: "rd-chip-value", text: fmtNum(value) }),
     el("div", { className: "rd-chip-label", text: label }),
   ]);
+  return tile;
 }
 
 // ------------------------------------------------------------
@@ -830,10 +854,25 @@ function renderHudUsersTable(agg) {
 
 const SITE_SESSION_COLUMNS = [
   { key: "sessionId", label: "Session", sortable: true, kind: "text" },
+  { key: "adminEmail", label: "Signed in as", sortable: true, kind: "text" },
+  { key: "source", label: "Source", sortable: true, kind: "text" },
   { key: "total", label: "Reads", sortable: true, kind: "num" },
   { key: "updatedAt", label: "Updated", sortable: true, kind: "time" },
   { key: "userAgentShort", label: "Client", sortable: true, kind: "text" },
 ];
+
+// Shortens an admin email for readable display in the table. Keeps the
+// mailbox and a fingerprint of the domain so Pal vs JesusDied4U reads
+// clearly without dumping the full address into a narrow column.
+function shortAdminEmail(email) {
+  if (typeof email !== "string" || !email.length) return "—";
+  const at = email.indexOf("@");
+  if (at <= 0) return email.length > 22 ? email.slice(0, 22) + "…" : email;
+  const mailbox = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const shortDomain = domain.length > 12 ? domain.slice(0, 12) + "…" : domain;
+  return `${mailbox}@${shortDomain}`;
+}
 
 function renderSiteSessionsTable(agg) {
   const rows = Array.isArray(agg?.bySiteSession) ? agg.bySiteSession.slice(0) : [];
@@ -848,6 +887,8 @@ function renderSiteSessionsTable(agg) {
     renderCell: (col, row) => {
       const v = row?.[col.key];
       if (col.key === "sessionId") return truncateId(v, 10);
+      if (col.key === "adminEmail") return shortAdminEmail(v);
+      if (col.key === "source") return v ? String(v) : "—";
       if (col.key === "total") return fmtNum(Number(v) || 0);
       if (col.key === "updatedAt") return fmtAgo(v);
       if (col.key === "userAgentShort") return shortUserAgent(v);

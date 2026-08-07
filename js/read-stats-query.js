@@ -85,7 +85,7 @@ function safeNumber(value) {
   return Number.isFinite(num) ? num : 0;
 }
 
-function aggregate({ siteDocs, hudDocs }) {
+function aggregate({ siteDocs, hudDocs, totalDocs }) {
   const byDate = {};
   const bySource = { site: 0, clanSite: 0, hud: 0, other: 0, unknown: 0 };
   const byHudVersion = {};
@@ -116,6 +116,8 @@ function aggregate({ siteDocs, hudDocs }) {
       total: reads,
       updatedAt: typeof doc.updatedAt === "string" ? doc.updatedAt : "",
       userAgentShort: shortUserAgent(doc.userAgent),
+      adminEmail: typeof doc.adminEmail === "string" ? doc.adminEmail : "",
+      source: typeof doc.source === "string" ? doc.source : "",
     });
   }
 
@@ -161,6 +163,41 @@ function aggregate({ siteDocs, hudDocs }) {
     hudUsersById.set(userId, prev);
   }
 
+  // Firestore-project-wide totals from the Cloud Monitoring cron. When
+  // available these expose reads/writes that our instrumentation can't
+  // see (Pal's site, old HUDs, anonymous scrapers). Every doc missing
+  // from this array just leaves that day's totals row zeroed out.
+  const monitoringByDate = {};
+  let monitoringTotalReads = 0;
+  let monitoringTotalWrites = 0;
+  let monitoringTotalDeletes = 0;
+  for (const doc of Array.isArray(totalDocs) ? totalDocs : []) {
+    if (!doc || typeof doc !== "object") continue;
+    const date = typeof doc.date === "string" ? doc.date : (doc.id || "unknown");
+    const reads = safeNumber(doc.reads);
+    const writes = safeNumber(doc.writes);
+    const deletes = safeNumber(doc.deletes);
+    monitoringByDate[date] = { reads, writes, deletes };
+    monitoringTotalReads += reads;
+    monitoringTotalWrites += writes;
+    monitoringTotalDeletes += deletes;
+  }
+
+  // Per-day "untracked" = monitoring total minus attributed (site + hud).
+  // Negative values (attributed > monitoring, usually from metric lag when
+  // the day is still open) get floored at 0 to keep the chart honest.
+  const untrackedByDate = {};
+  for (const date of Object.keys(monitoringByDate)) {
+    const tot = monitoringByDate[date];
+    const attributed = byDate[date] || { site: 0, hud: 0 };
+    const attributedReads = (attributed.site || 0) + (attributed.hud || 0);
+    untrackedByDate[date] = {
+      reads: Math.max(0, tot.reads - attributedReads),
+    };
+  }
+  const untrackedTotalReads = Math.max(0, monitoringTotalReads - totalReads);
+  const untrackedTotalWrites = Math.max(0, monitoringTotalWrites - totalWrites);
+
   return {
     totalReads,
     totalWrites,
@@ -173,6 +210,18 @@ function aggregate({ siteDocs, hudDocs }) {
     },
     byHudUser: Array.from(hudUsersById.values()).sort((a, b) => b.reads - a.reads),
     bySiteSession: sessionRows.sort((a, b) => b.total - a.total),
+    monitoring: {
+      totalReads: monitoringTotalReads,
+      totalWrites: monitoringTotalWrites,
+      totalDeletes: monitoringTotalDeletes,
+      byDate: monitoringByDate,
+      available: (Array.isArray(totalDocs) ? totalDocs : []).length > 0,
+    },
+    untracked: {
+      totalReads: untrackedTotalReads,
+      totalWrites: untrackedTotalWrites,
+      byDate: untrackedByDate,
+    },
   };
 }
 
@@ -251,21 +300,33 @@ export function createReadStatsQuery({
     }
 
     const startedAt = now();
-    const [siteDocs, hudDocs] = await Promise.all([
+    // Kick all three fetches in parallel. fetchReadStatsTotal is optional
+    // (feature is behind a Cloud Monitoring cron that may not be wired yet);
+    // when missing we gracefully degrade to attributed-only aggregates.
+    const totalsFetcher = typeof gateway.fetchReadStatsTotal === "function"
+      ? gateway.fetchReadStatsTotal(from, to)
+      : Promise.resolve([]);
+    const [siteDocs, hudDocs, totalDocs] = await Promise.all([
       gateway.fetchAdminReadStats(from, to),
       gateway.fetchHudReadStats(from, to),
+      totalsFetcher.catch((err) => {
+        logger?.warn?.("[rgLB] read_stats_total fetch failed:", err?.message || err);
+        return [];
+      }),
     ]);
 
     const site = Array.isArray(siteDocs) ? siteDocs : [];
     const hud = Array.isArray(hudDocs) ? hudDocs : [];
-    const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud });
+    const totals = Array.isArray(totalDocs) ? totalDocs : [];
+    const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: totals });
     const fetchedAt = now();
-    const docs = site.length + hud.length;
+    const docs = site.length + hud.length + totals.length;
 
     const payload = {
       range: { from, to },
       site,
       hud,
+      totals,
       aggregate: aggregateResult,
       fetchedAt,
     };

@@ -331,6 +331,7 @@ export async function createFirebaseGateway() {
   const iconKey = collection(db, "iconKey");
   const adminReadStats = collection(db, "admin_read_stats");
   const hudReadStats = collection(db, "hud_read_stats");
+  const readStatsTotal = collection(db, "read_stats_total");
   let iconKeyCache = null;
 
   // --- Read budget ---------------------------------------------------------
@@ -603,6 +604,19 @@ export async function createFirebaseGateway() {
       const snapshot = await chargedGetDocs(
         query(hudReadStats, where("date", ">=", from), where("date", "<=", to)),
         "hudStatsQuery",
+      );
+      return rawDocuments(snapshot);
+    },
+    // Firestore-project-wide totals written every 3h by the Cloud Monitoring
+    // cron (see Tampermonkeys/firebase/scripts/fetch-firestore-usage.mjs).
+    // One doc per UTC day; delta from our attributed reads = untracked
+    // (Pal's site + old HUDs + scrapers). Charged with a distinct label so
+    // the dashboard's per-label breakdown shows what the dashboard itself
+    // costs to open.
+    fetchReadStatsTotal: async (from, to) => {
+      const snapshot = await chargedGetDocs(
+        query(readStatsTotal, where("date", ">=", from), where("date", "<=", to)),
+        "totalStatsQuery",
       );
       return rawDocuments(snapshot);
     },
