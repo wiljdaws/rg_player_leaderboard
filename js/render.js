@@ -143,11 +143,12 @@ function flagCell(player, className = "p-flag") {
   return wrap;
 }
 
-function rankClass(index) {
-  if (index === 0) return "r1";
-  if (index === 1) return "r2";
-  if (index === 2) return "r3";
-  return "";
+function rankClass(rank) {
+  if (rank === 1) return "r1";
+  if (rank === 2) return "r2";
+  if (rank === 3) return "r3";
+  if (rank >= 4 && rank <= 10) return "r-top10";
+  return "r-tail";
 }
 
 export function setDataStatus(status) {
@@ -278,11 +279,14 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   const row = node("div", { className: `player-row${admin ? " admin" : ""}` });
   row.dataset.playlist = playlist;
   row.dataset.playerId = player.id;
-  const rank = index + 1;
+  // Prefer the JSON's rank field (which reflects the true worldwide position
+  // including filtered rows) over the array position, so the site matches
+  // what the HUD's Firestore count query returns.
+  const rank = Number.isFinite(player?.rank) ? player.rank : index + 1;
   row.dataset.rank = rank;
   if (rank >= 4 && rank <= 10) row.classList.add("top10");
 
-  row.append(node("div", { className: `rank ${rankClass(index)}`, text: `#${index + 1}` }));
+  row.append(node("div", { className: `rank ${rankClass(rank)}`, text: `#${rank}` }));
 
   const ident = node("div", { className: "p-ident" });
   // Flag carries the activity dot (green/gold/orange/grey based on last

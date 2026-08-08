@@ -210,6 +210,8 @@ h1{
 .rank.r1{color:var(--gold);text-shadow:0 0 18px rgba(255,210,74,.4)}
 .rank.r2{color:var(--silver)}
 .rank.r3{color:var(--bronze)}
+/* Rank 11+ leans mauve so it clearly separates from silver's cool blue-grey. */
+.rank.r-tail{color:#8B7BA0}
 
 .p-ident{display:flex;align-items:center;gap:12px;min-width:0}
 .p-flag{

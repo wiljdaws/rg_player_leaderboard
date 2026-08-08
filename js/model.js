@@ -132,6 +132,11 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
 
   const version = optionalText(String(raw.versionNum ?? raw.version ?? ""), 24);
 
+  // Published JSON rows carry an authoritative rank that reflects the true
+  // worldwide position (including filtered/blacklisted rows). Preserve it so
+  // the render layer can show the same rank the HUD's count query returns.
+  const rank = Number.isFinite(raw?.rank) ? Math.trunc(raw.rank) : null;
+
   return {
     ok: true,
     player: {
@@ -142,6 +147,7 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
       // cosmetic edits (flag, icons, glow) across a player's sibling playlist
       // docs — an edit made in 1v1 propagates to 2v2/3v3/wins.
       sourceUserId: sourceUserId || null,
+      rank,
       ...score,
       flag: sanitizeHttpUrl(raw.flag),
       icons: normalizeIcons(raw.icons),
