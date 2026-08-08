@@ -291,11 +291,14 @@ function syncPlayerDialog() {
 function render() {
   setActiveTab(state.playlist);
   setDataStatus(effectiveStatus());
-  // Reads tab doesn't have a per-playlist row count — keep the default
-  // subline so the sentence doesn't try to pluralize a playlist that
-  // isn't a real one.
+  const isAdminView = state.playlist === "reads" || state.playlist === "publish";
+  // Admin tabs don't have a per-playlist row count — swap the subline for
+  // something contextual so the header doesn't try to pluralize a
+  // playlist that isn't a real one.
   if (state.playlist === "reads") {
     setSubLine("Admin read insights.");
+  } else if (state.playlist === "publish") {
+    setSubLine("Publish pipeline health.");
   } else {
     setSubLine(
       state.rows.length
@@ -304,9 +307,10 @@ function render() {
     );
   }
 
-  // Skip leaderboard + icon-key paints while the reads view is active —
-  // both containers are hidden and renderBoard doesn't know "reads".
-  if (state.playlist !== "reads") {
+  // Skip leaderboard + icon-key paints while an admin view is active —
+  // their containers are hidden and renderBoard doesn't know these
+  // pseudo-playlists.
+  if (!isAdminView) {
     renderBoard({
       playlist: state.playlist,
       rows: state.rows,

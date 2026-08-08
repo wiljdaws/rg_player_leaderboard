@@ -190,10 +190,10 @@ function renderPlaylistTable({ status, stateFiles }) {
   const head = el("div", { className: "pp-table-head" }, [
     el("span", { text: "Playlist" }),
     el("span", { text: "Mode" }),
-    el("span", { className: "num", text: "Δ rows" }),
+    el("span", { className: "num", text: "Reads" }),
     el("span", { className: "num", text: "Snapshot" }),
-    el("span", { className: "num", text: "Cursor age" }),
-    el("span", { text: "Cursor timestamp" }),
+    el("span", { className: "num", text: "Behind by" }),
+    el("span", { text: "Newest write" }),
   ]);
   const body = rows.map(row => el("div", { className: "pp-table-row" }, [
     el("span", { className: "pp-cell-name", text: row.playlist }),
@@ -206,7 +206,7 @@ function renderPlaylistTable({ status, stateFiles }) {
   return el("div", { className: "rd-panel pp-panel" }, [
     el("div", { className: "rd-panel-head" }, [
       el("div", { className: "rd-panel-title", text: "Per-playlist state" }),
-      el("div", { className: "rd-panel-sub", text: "Cursor advances as writes come in. Snapshot grows when new players show up." }),
+      el("div", { className: "rd-panel-sub", text: "Reads = docs the delta query pulled this run. Behind by = time between the newest write we captured and this publish (small = writes are landing right up to publish time)." }),
     ]),
     el("div", { className: "pp-table" }, [head, ...body]),
   ]);
