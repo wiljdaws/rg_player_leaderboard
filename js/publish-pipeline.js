@@ -129,11 +129,11 @@ function renderHeader({ status, onRefresh }) {
   const overallMode = status?.overallMode || "—";
   return el("div", { className: "rd-header pp-header" }, [
     el("div", { className: "rd-header-title" }, [
-      el("div", { className: "rd-kicker", text: "Publish pipeline" }),
-      el("div", { className: "rd-h2", text: "CDC health" }),
+      el("div", { className: "rd-kicker", text: "Data sync" }),
+      el("div", { className: "rd-h2", text: "Firestore → CDN" }),
       el("div", { className: "pp-header-meta" }, [
         el("span", { className: `pp-mode pp-mode-${modeTone(overallMode)}`, text: modeLabel(overallMode) }),
-        el("span", { className: "pp-header-sub", text: built ? `Last publish · ${fmtAgo(built)}` : "No status yet" }),
+        el("span", { className: "pp-header-sub", text: built ? `Last sync · ${fmtAgo(built)}` : "No status yet" }),
       ]),
     ]),
     el("div", { className: "rd-header-controls" }, [
@@ -159,7 +159,7 @@ function renderTiles(status) {
     ? `${readsThisRun} of ${readsProjectedFullScan} · full-scan equivalent`
     : `${readsThisRun} (full re-sync)`;
   return el("div", { className: "rd-chips-row pp-chips" }, [
-    tile("Reads this run", fmtNum(readsThisRun), deltaLabel, "gain"),
+    tile("Reads this sync", fmtNum(readsThisRun), deltaLabel, "gain"),
     tile("Reads saved", `${fmtNum(readsSaved)}`, `${readsSavedPct.toFixed(1)}% vs full-scan`, "gold"),
     tile("Snapshot rows", fmtNum(snapshotTotal), "Persistent working set", "grad"),
     tile("Overall mode", modeLabel(status?.overallMode), status?.forceFull ? "Daily re-sync" : "Automatic cadence", "silver"),
@@ -216,12 +216,12 @@ function renderHistory({ history }) {
   const runs = history?.runs?.slice(-48) || [];
   const panel = el("div", { className: "rd-panel pp-panel" }, [
     el("div", { className: "rd-panel-head" }, [
-      el("div", { className: "rd-panel-title", text: "Recent runs" }),
-      el("div", { className: "rd-panel-sub", text: `Last ${runs.length} publishes · reads per run and mode` }),
+      el("div", { className: "rd-panel-title", text: "Recent syncs" }),
+      el("div", { className: "rd-panel-sub", text: `Last ${runs.length} syncs · reads consumed, mode per run` }),
     ]),
   ]);
   if (!runs.length) {
-    panel.appendChild(el("div", { className: "pp-empty", text: "No history yet. First run after this deploy will populate it." }));
+    panel.appendChild(el("div", { className: "pp-empty", text: "No history yet. First sync after this deploy will populate it." }));
     return panel;
   }
 
@@ -316,7 +316,7 @@ function renderLoading(container) {
   container.innerHTML = "";
   container.appendChild(el("div", { className: "read-dashboard pp-loading" }, [
     el("div", { className: "rd-panel" }, [
-      el("div", { className: "rd-panel-title", text: "Loading pipeline state…" }),
+      el("div", { className: "rd-panel-title", text: "Loading sync state…" }),
       el("div", { className: "rd-panel-sub", text: "Fetching status + snapshots from CDN" }),
     ]),
   ]));
@@ -326,7 +326,7 @@ function renderError(container, error) {
   container.innerHTML = "";
   container.appendChild(el("div", { className: "read-dashboard" }, [
     el("div", { className: "rd-panel pp-error" }, [
-      el("div", { className: "rd-panel-title", text: "Publish pipeline · error" }),
+      el("div", { className: "rd-panel-title", text: "Data sync · error" }),
       el("div", { className: "rd-panel-sub", text: String(error?.message || error) }),
     ]),
   ]));

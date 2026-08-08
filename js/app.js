@@ -298,7 +298,7 @@ function render() {
   if (state.playlist === "reads") {
     setSubLine("Admin read insights.");
   } else if (state.playlist === "publish") {
-    setSubLine("Publish pipeline health.");
+    setSubLine("Firestore → CDN sync health.");
   } else {
     setSubLine(
       state.rows.length
