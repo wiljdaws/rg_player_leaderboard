@@ -12,6 +12,7 @@ import { PlaylistListenerManager } from "./listener-manager.js";
 import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache } from "./local-cache.js";
 import { createReadTelemetryUploader } from "./read-telemetry.js";
 import { createReadsView } from "./reads-view.js";
+import { createPublishView } from "./publish-pipeline.js";
 import {
   buildIconPayload,
   buildPlayerPayload,
@@ -361,32 +362,35 @@ function openEdit(player) {
 // read-insights dashboard. Skip the usual listener + rows plumbing so
 // activating it doesn't spin up a Firestore subscription.
 function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
-  if (playlist === "reads") {
+  if (playlist === "reads" || playlist === "publish") {
     if (!state.admin) return;               // never accept without admin
-    if (state.playlist === "reads") return;
+    if (state.playlist === playlist) return;
     listenerManager?.disconnect();          // stop burning reads on the previous playlist
     const prev = state.playlist;
-    state.playlist = "reads";
+    // Swap between the two admin views if we're moving reads <-> publish.
+    if (prev === "reads") readsView?.deactivate();
+    if (prev === "publish") publishView?.deactivate();
+    state.playlist = playlist;
     state.rows = [];
     state.quarantined = [];
     state.playerId = "";
-    setActiveTab("reads");
-    // Reads is a focused view — hide everything that belongs to the
-    // leaderboard chrome (board, icon-key legend, admin panel form) so
-    // the dashboard has the page to itself.
+    setActiveTab(playlist);
+    // Admin views are focused — hide leaderboard chrome so the dashboard
+    // has the page to itself.
     $("boardSection").hidden = true;
     const iconKeyHost = $("iconKey");
     if (iconKeyHost) iconKeyHost.hidden = true;
     const adminBoxHost = $("adminBox");
     if (adminBoxHost) adminBoxHost.hidden = true;
-    readsView?.activate();
+    if (playlist === "reads") readsView?.activate();
+    if (playlist === "publish") publishView?.activate();
     if (updateUrl) urlState(push);
     // Preserve the last real playlist so switching back defaults there.
     lastRealPlaylist = isPlaylist(prev) ? prev : lastRealPlaylist;
     return;
   }
   if (!isPlaylist(playlist)) return;
-  const leavingReads = state.playlist === "reads";
+  const leavingAdminView = state.playlist === "reads" || state.playlist === "publish";
   if (playlist === state.playlist) return;
   state.playlist = playlist;
   state.rows = [];
@@ -401,8 +405,9 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   const adminPlaylist = $("playlist");
   if (adminPlaylist) adminPlaylist.value = playlist;
   togglePlaylistFields($("adminForm"), playlist);
-  if (leavingReads) {
+  if (leavingAdminView) {
     readsView?.deactivate();
+    publishView?.deactivate();
     $("boardSection").hidden = false;
     // Admin panel returns for admins; the icon-key legend re-shows on the
     // next renderIconKey() (fired below via render()).
@@ -417,6 +422,7 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
 }
 
 let readsView = null;
+let publishView = null;
 let lastRealPlaylist = "1v1";
 
 async function copyText(value) {
@@ -625,6 +631,7 @@ async function boot() {
   }
 
   readsView = createReadsView({ gateway });
+  publishView = createPublishView();
 
   writes = new AdminWriteService({
     gateway,
@@ -670,11 +677,14 @@ async function boot() {
       : user
         ? "Signed in without admin access"
         : "";
-    // Reveal the admin-only Reads tab; hide + kick the user back to a real
-    // playlist if they were viewing it while their admin session ended.
+    // Reveal the admin-only Reads + Publish tabs; hide + kick the user
+    // back to a real playlist if they were viewing one while their admin
+    // session ended.
     const readsTabEl = $("readsTab");
     if (readsTabEl) readsTabEl.hidden = !state.admin;
-    if (!state.admin && state.playlist === "reads") {
+    const publishTabEl = $("publishTab");
+    if (publishTabEl) publishTabEl.hidden = !state.admin;
+    if (!state.admin && (state.playlist === "reads" || state.playlist === "publish")) {
       activatePlaylist(lastRealPlaylist || "1v1", { push: false });
     }
     render();
