@@ -158,6 +158,23 @@ function staticJsonUrl(playlist, template = STATIC_JSON_URL_TEMPLATE) {
   return template.replace("{playlist}", encodeURIComponent(playlist));
 }
 
+// JSON rows drop id/playlist/sourceUserId to save bytes; put them back so
+// the validator accepts the row. Rows that already have `id` pass through.
+function expandCompactRow(row, playlist) {
+  if (!row || typeof row !== "object" || row.id) return row;
+  const uid = typeof row.uid === "string" ? row.uid : "";
+  return {
+    ...row,
+    id: uid ? `${uid}_${playlist}` : "",
+    playlist,
+    sourceUserId: uid,
+  };
+}
+
+function expandCompactRows(rows, playlist) {
+  return Array.isArray(rows) ? rows.map(row => expandCompactRow(row, playlist)) : [];
+}
+
 // Public read path that polls the static JSON blob on the CDN. Uses
 // If-None-Match so 304s don't re-parse, seeds first paint from the same
 // local cache the Firestore path uses, and — after
@@ -201,7 +218,7 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
   // snapshot before the first fetch resolves. Matches the Firestore path.
   const localCached = readPlaylistCache(playlist);
   if (localCached?.rows?.length) {
-    handlers.next({ rows: localCached.rows, fromCache: true, changes: [] });
+    handlers.next({ rows: expandCompactRows(localCached.rows, playlist), fromCache: true, changes: [] });
   }
 
   async function poll() {
@@ -230,7 +247,7 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
 
       const nextEtag = response.headers?.get?.("ETag") || null;
       const payload = await response.json();
-      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+      const rows = expandCompactRows(payload?.rows, playlist);
 
       if (!active || fallbackUnsubscribe) return;
 
