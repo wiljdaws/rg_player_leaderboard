@@ -790,6 +790,11 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   display:flex;flex-direction:column;gap:22px;
   color:var(--ink);font-family:var(--body);
 }
+/* .read-dashboard's display:flex would otherwise override [hidden]'s
+   display:none when the container has both. Make sure hidden wins. */
+.reads-view[hidden],
+.publish-view[hidden],
+.read-dashboard[hidden]{display:none}
 .read-dashboard .rd-panel{
   padding:22px 24px;border-radius:18px;
   background:
