@@ -3,6 +3,7 @@
   --line:rgba(168,120,255,.15); --line-strong:rgba(168,120,255,.30);
   --grad-a:#A855F7; --grad-b:#E44BE0;
   --gold:#FFD24A; --silver:#C9D4E8; --bronze:#E09A5C;
+  --top10-a:#38BDF8; --top10-b:#60A5FA;
   --gain:#4ADE80; --loss:#FB7185;
   --ink:#EAF0FF; --ink-dim:#8E9BC2;
   --display:'Chakra Petch',system-ui,sans-serif;
@@ -174,15 +175,15 @@ h1{
 .player-row[data-rank="3"]::before,
 .player-row.top10::before{opacity:1}
 .player-row[data-rank="1"]::before{background:linear-gradient(180deg,#FFEDA0,var(--gold));box-shadow:0 0 16px var(--gold)}
-.player-row[data-rank="2"]::before{background:linear-gradient(180deg,#F1F6FF,var(--silver));box-shadow:0 0 12px var(--silver)}
+.player-row[data-rank="2"]::before{background:linear-gradient(180deg,var(--grad-b),var(--grad-a));box-shadow:0 0 12px var(--grad-a)}
 .player-row[data-rank="3"]::before{background:linear-gradient(180deg,#F0B87F,var(--bronze));box-shadow:0 0 12px var(--bronze)}
-.player-row.top10::before{background:linear-gradient(180deg,var(--grad-a),var(--grad-b));opacity:.7}
+.player-row.top10::before{background:linear-gradient(180deg,var(--top10-a),var(--top10-b));opacity:.7}
 
 /* --- Horizontal wash (metal color fading toward the row middle) --- */
 .player-row[data-rank="1"]{background:linear-gradient(90deg,rgba(255,210,74,.34),transparent 70%)}
-.player-row[data-rank="2"]{background:linear-gradient(90deg,rgba(201,212,232,.30),transparent 70%)}
+.player-row[data-rank="2"]{background:linear-gradient(90deg,rgba(168,85,247,.28),transparent 70%)}
 .player-row[data-rank="3"]{background:linear-gradient(90deg,rgba(224,154,92,.30),transparent 70%)}
-.player-row.top10{background:linear-gradient(90deg,rgba(168,85,247,.16),transparent 70%)}
+.player-row.top10{background:linear-gradient(90deg,rgba(56,189,248,.16),transparent 70%)}
 
 /* --- Vertical foil shimmer on the podium name ------------ */
 .player-row[data-rank="1"] .p-name,
@@ -193,9 +194,9 @@ h1{
   animation:rg-foil-vertical 4s linear infinite;
 }
 .player-row[data-rank="1"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
-.player-row[data-rank="2"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--silver),#FFFFFF,var(--silver));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-rank="2"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--grad-a),var(--grad-b),var(--grad-a));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
 .player-row[data-rank="3"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
-.player-row.top10 .p-name{background:linear-gradient(90deg,var(--grad-a),var(--grad-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(168,85,247,.25))}
+.player-row.top10 .p-name{background:linear-gradient(90deg,var(--top10-a),var(--top10-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(56,189,248,.28))}
 
 /* Keep interactive/text cells above the tinted background layer. */
 .player-row .rank,
@@ -208,7 +209,7 @@ h1{
 
 .rank{font-family:var(--display);font-style:italic;font-weight:700;font-size:23px;color:var(--ink-dim)}
 .rank.r1{color:var(--gold);text-shadow:0 0 18px rgba(255,210,74,.4)}
-.rank.r2{color:var(--silver)}
+.rank.r2{color:var(--grad-a);text-shadow:0 0 14px rgba(168,85,247,.45)}
 .rank.r3{color:var(--bronze)}
 /* Rank 11+ leans mauve so it clearly separates from silver's cool blue-grey. */
 .rank.r-tail{color:#8B7BA0}
