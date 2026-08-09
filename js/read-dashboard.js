@@ -197,6 +197,85 @@ function isoDaysAgo(days) {
 }
 
 // ------------------------------------------------------------
+// Free-tier quota helpers
+// ------------------------------------------------------------
+//
+// Firestore spark plan gives 50k document reads per project per day. The
+// quota resets at midnight America/Los_Angeles (Google's billing day).
+// Everything below turns monitoring.byDate + wall-clock into a
+// "how close are we to the cap?" view.
+
+const DAILY_READ_QUOTA = 50000;
+
+function pacificParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const bag = {};
+  for (const p of parts) {
+    if (p.type !== "literal") bag[p.type] = p.value;
+  }
+  return {
+    iso: `${bag.year}-${bag.month}-${bag.day}`,
+    hours: Number(bag.hour) % 24,
+    minutes: Number(bag.minute),
+    seconds: Number(bag.second),
+  };
+}
+
+function pacificHoursElapsed(now = new Date()) {
+  const p = pacificParts(now);
+  return p.hours + p.minutes / 60 + p.seconds / 3600;
+}
+
+function fmtResetCountdown(now = new Date()) {
+  const p = pacificParts(now);
+  const remain = 86400 - (p.hours * 3600 + p.minutes * 60 + p.seconds);
+  const h = Math.floor(remain / 3600);
+  const m = Math.floor((remain % 3600) / 60);
+  return h >= 1 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function quotaTone(fraction) {
+  if (!Number.isFinite(fraction) || fraction < 0.6) return "ok";
+  if (fraction < 0.8) return "warn";
+  return "crit";
+}
+
+function worstTone(a, b) {
+  const order = { ok: 0, warn: 1, crit: 2 };
+  return (order[a] ?? 0) >= (order[b] ?? 0) ? a : b;
+}
+
+// Extract a monitoring snapshot for the caller's needs. If today's row
+// isn't in the current range (e.g. operator picked a historic window),
+// returns nulls so the banner/gauge hide themselves.
+function todayQuotaSnapshot(agg, now = new Date()) {
+  if (!agg?.monitoring?.available) return null;
+  const byDate = agg.monitoring.byDate || {};
+  const p = pacificParts(now);
+  const todayRow = byDate[p.iso];
+  if (!todayRow) return null;
+  const reads = Number(todayRow.reads) || 0;
+  const hoursElapsed = pacificHoursElapsed(now);
+  const projected = hoursElapsed > 0.05
+    ? Math.round((reads / hoursElapsed) * 24)
+    : reads;
+  return {
+    todayIso: p.iso,
+    reads,
+    projected,
+    fraction: reads / DAILY_READ_QUOTA,
+    projectedFraction: projected / DAILY_READ_QUOTA,
+    resetIn: fmtResetCountdown(now),
+    hoursElapsed,
+  };
+}
+
+// ------------------------------------------------------------
 // Public API
 // ------------------------------------------------------------
 
@@ -234,7 +313,11 @@ export function renderReadDashboard(container, data, options = {}) {
     return;
   }
 
+  const banner = renderQuotaBanner(aggregate);
+  if (banner) container.appendChild(banner);
   container.appendChild(renderBigNumbers(aggregate, safeData));
+  const strip = renderQuotaStrip(aggregate);
+  if (strip) container.appendChild(strip);
   container.appendChild(renderTimeChart(aggregate));
   container.appendChild(renderTwoUp(
     renderSourceBreakdown(aggregate),
@@ -383,6 +466,101 @@ function renderExportGroup(onExport) {
 }
 
 // ------------------------------------------------------------
+// Quota banner
+// ------------------------------------------------------------
+//
+// Hidden below 60% utilization on both today's actual and projected
+// day-end. Amber above 60%, red above 80% or when projected >= 90%.
+
+function renderQuotaBanner(agg) {
+  const snap = todayQuotaSnapshot(agg);
+  if (!snap) return null;
+  const tone = worstTone(quotaTone(snap.fraction), quotaTone(snap.projectedFraction));
+  if (tone === "ok") return null;
+
+  const pct = (snap.fraction * 100).toFixed(1);
+  const projPct = (snap.projectedFraction * 100).toFixed(0);
+  const kind = tone === "crit" ? "critical" : "elevated";
+
+  return el("div", {
+    className: "rd-quota-banner",
+    dataset: { tone },
+    attrs: { role: "alert" },
+  }, [
+    el("span", { className: "rd-quota-icon", text: tone === "crit" ? "⚠" : "•" }),
+    el("div", { className: "rd-quota-body" }, [
+      el("div", { className: "rd-quota-lead" }, [
+        el("b", { text: `Firestore quota · ${kind}` }),
+        el("span", {
+          className: "rd-quota-lead-detail",
+          text: `${fmtNum(snap.reads)} / ${fmtNum(DAILY_READ_QUOTA)} reads · ${pct}% used`,
+        }),
+      ]),
+      el("div", {
+        className: "rd-quota-detail",
+        text: `Projected ${fmtNum(snap.projected)} by 24:00 PT (${projPct}%) · reset in ${snap.resetIn}`,
+      }),
+    ]),
+  ]);
+}
+
+// ------------------------------------------------------------
+// 30-day quota strip
+// ------------------------------------------------------------
+//
+// One box per day in monitoring.byDate (capped at last 30). Colored by
+// utilization vs the 50k cap. Renders even when today itself isn't in
+// the picked range — it's a history strip, not a today snapshot.
+
+function renderQuotaStrip(agg) {
+  if (!agg?.monitoring?.available) return null;
+  const byDate = agg.monitoring.byDate || {};
+  const dates = Object.keys(byDate).sort();
+  if (!dates.length) return null;
+  const window = dates.slice(-30);
+
+  let daysHigh = 0;
+  let lastCrossIso = null;
+  const boxes = window.map((iso) => {
+    const reads = Number(byDate[iso]?.reads) || 0;
+    const frac = reads / DAILY_READ_QUOTA;
+    const tone = quotaTone(frac);
+    if (frac >= 0.8) {
+      daysHigh += 1;
+      lastCrossIso = iso;
+    }
+    return el("span", {
+      className: "rd-quota-cell",
+      dataset: { tone },
+      attrs: {
+        title: `${iso}: ${fmtNum(reads)} reads · ${(frac * 100).toFixed(1)}% of 50k`,
+      },
+    });
+  });
+
+  const sub = daysHigh
+    ? `${daysHigh} day${daysHigh === 1 ? "" : "s"} above 80% · last cap-cross ${fmtDateShort(lastCrossIso)}`
+    : `${window.length} day${window.length === 1 ? "" : "s"} shown · all within safe range`;
+
+  return el("section", { className: "rd-panel rd-panel-full rd-quota-strip-panel" }, [
+    panelHead("Daily quota history", sub),
+    el("div", { className: "rd-quota-strip", attrs: { "aria-label": "Daily quota utilization" } }, boxes),
+    el("div", { className: "rd-quota-legend" }, [
+      quotaLegendItem("Under 60%", "ok"),
+      quotaLegendItem("60–80%", "warn"),
+      quotaLegendItem("Above 80%", "crit"),
+    ]),
+  ]);
+}
+
+function quotaLegendItem(label, tone) {
+  return el("span", { className: "rd-quota-legend-item" }, [
+    el("span", { className: "rd-quota-legend-swatch", dataset: { tone } }),
+    el("span", { text: label }),
+  ]);
+}
+
+// ------------------------------------------------------------
 // Big numbers
 // ------------------------------------------------------------
 
@@ -397,15 +575,16 @@ function renderBigNumbers(agg, data) {
     ? agg.bySiteSession.length
     : Array.isArray(data?.site) ? data.site.length : 0;
 
-  // Layout is different depending on whether Cloud Monitoring totals are
-  // available. When they are, the top row shows Firestore-project-wide
-  // totals + our attributed slice + the untracked remainder. When they
-  // aren't, we show just the attributed slice so the dashboard still
-  // works before the Monitoring pipeline is deployed.
+  // When Cloud Monitoring is wired and today's row is in the picked
+  // range, swap the leading "range totals" chip for a today-vs-50k
+  // gauge — it's the most operationally useful number on the page.
+  const quotaSnap = todayQuotaSnapshot(agg);
   const chips = monitoringAvailable
     ? [
-        chipTile("Firestore reads", monitoringReads, "gain",
-          "Total from Cloud Monitoring across every source hitting the project."),
+        quotaSnap
+          ? quotaGaugeTile(quotaSnap)
+          : chipTile("Firestore reads", monitoringReads, "gain",
+              "Total from Cloud Monitoring across every source hitting the project."),
         chipTile("Attributed", attributedReads, "grad",
           "Reads we can trace to a specific source via telemetry."),
         chipTile("Untracked", untrackedReads, "gold",
@@ -422,6 +601,34 @@ function renderBigNumbers(agg, data) {
       ];
 
   return el("section", { className: "rd-chips-row", attrs: { "aria-label": "Range totals" } }, chips);
+}
+
+// Progress-bar variant of chipTile — same footprint, richer signal.
+function quotaGaugeTile(snap) {
+  const tone = worstTone(quotaTone(snap.fraction), quotaTone(snap.projectedFraction));
+  const pct = (snap.fraction * 100).toFixed(1);
+  const projPct = (snap.projectedFraction * 100).toFixed(0);
+  const fill = Math.min(100, snap.fraction * 100);
+  return el("div", {
+    className: "rd-chip-tile rd-chip-gauge",
+    dataset: { tone },
+    attrs: { title: `Today: ${fmtNum(snap.reads)} of ${fmtNum(DAILY_READ_QUOTA)} reads · projected ${fmtNum(snap.projected)} (${projPct}%) by 24:00 PT` },
+  }, [
+    el("div", { className: "rd-chip-value", text: fmtNum(snap.reads) }),
+    el("div", { className: "rd-chip-label", text: `Today · ${pct}% of 50k` }),
+    el("div", { className: "rd-chip-gauge-track" }, [
+      el("div", {
+        className: "rd-chip-gauge-fill",
+        dataset: { tone },
+        style: { width: `${fill.toFixed(1)}%` },
+        attrs: { "aria-hidden": "true" },
+      }),
+    ]),
+    el("div", {
+      className: "rd-chip-gauge-sub",
+      text: `Projected ${fmtNum(snap.projected)} · reset in ${snap.resetIn}`,
+    }),
+  ]);
 }
 
 function chipTile(label, value, tone, hint) {
@@ -559,10 +766,34 @@ function renderTimeChart(agg) {
   ]);
 
   return el("section", { className: "rd-panel" }, [
-    panelHead("Reads over time", "Daily totals split by source"),
+    panelHead("Reads over time", burnRateSubtitle(agg)),
     el("div", { className: "rd-timechart-wrap" }, [chart]),
     legend,
   ]);
+}
+
+// Instantaneous burn (today so far, per hour) vs the trailing 7-day
+// daily-average burn. Falls back to the old copy when monitoring hasn't
+// caught up or the range doesn't include today.
+function burnRateSubtitle(agg) {
+  const fallback = "Daily totals split by source";
+  if (!agg?.monitoring?.available) return fallback;
+  const byDate = agg.monitoring.byDate || {};
+  const p = pacificParts();
+  const todayReads = Number(byDate[p.iso]?.reads);
+  const hoursElapsed = pacificHoursElapsed();
+  if (!Number.isFinite(todayReads) || hoursElapsed < 0.5) return fallback;
+  const nowRate = todayReads / hoursElapsed;
+
+  const priorDates = Object.keys(byDate).filter(d => d < p.iso).sort().slice(-7);
+  if (!priorDates.length) return fallback;
+  const priorSum = priorDates.reduce((acc, d) => acc + (Number(byDate[d]?.reads) || 0), 0);
+  const avgRate = priorSum / (priorDates.length * 24);
+  if (avgRate <= 0) return fallback;
+
+  const deltaPct = Math.round(((nowRate - avgRate) / avgRate) * 100);
+  const direction = deltaPct >= 0 ? "above" : "below";
+  return `Now · ${fmtCompact(Math.round(nowRate))}/hr · Daily avg · ${fmtCompact(Math.round(avgRate))}/hr · ${Math.abs(deltaPct)}% ${direction} trend`;
 }
 
 function pathFor(values, xForIdx, yForVal) {
@@ -1043,4 +1274,8 @@ export const __private = {
   shortUserAgent,
   niceCeil,
   normalizeTimestampMs,
+  DAILY_READ_QUOTA,
+  quotaTone,
+  worstTone,
+  todayQuotaSnapshot,
 };
