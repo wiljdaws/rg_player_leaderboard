@@ -117,7 +117,11 @@ const FALLBACK_REASON_LABEL = {
   index_not_ready: "index still building",
 };
 
-const DRIFT_THRESHOLD_MS = 10 * 60 * 1000;
+// Fire only when a playlist's cursor is meaningfully older than the
+// freshest playlist. If every playlist is equally stale it's a quiet
+// site-wide period, not drift — no banner. Prevents the "1v1 and 2v2
+// idle on a quiet Sunday" false positive.
+const RELATIVE_LAG_MS = 15 * 60 * 1000;
 
 function modeTone(mode) {
   if (mode === "delta") return "gain";
@@ -238,23 +242,38 @@ function tile(label, value, sub, tone) {
   ]);
 }
 
-// Any playlist "behind by" > 10 min gets called out at the top of the tab
-// so an operator sees drift before the tab looks green-but-stale.
+// Flags playlists whose cursor lags the freshest playlist's cursor by
+// more than RELATIVE_LAG_MS. Absolute staleness on its own doesn't fire
+// — that just means nobody's playing right now.
 function renderDriftBanner(status) {
   if (!status?.playlists || !status?.builtAt) return null;
-  const drifts = [];
+  const ages = [];
   for (const [pl, per] of Object.entries(status.playlists)) {
     const age = cursorAgeMs(per.since, status.builtAt);
-    if (age != null && age > DRIFT_THRESHOLD_MS) drifts.push({ pl, age });
+    if (age != null) ages.push({ pl, age });
   }
-  if (!drifts.length) return null;
-  drifts.sort((a, b) => b.age - a.age);
-  const summary = drifts.map(d => `${d.pl} · ${fmtCursorAge(new Date(Date.parse(status.builtAt) - d.age).toISOString(), status.builtAt)}`).join(" · ");
-  return el("div", { className: "pp-drift-banner", attrs: { role: "alert" } }, [
-    el("span", { className: "pp-drift-icon", text: "⚠" }),
+  if (ages.length < 2) return null;
+
+  const minAge = Math.min(...ages.map(a => a.age));
+  const laggards = ages
+    .filter(a => a.age - minAge > RELATIVE_LAG_MS)
+    .sort((a, b) => b.age - a.age);
+  if (!laggards.length) return null;
+
+  const summary = laggards.map(d => {
+    const ageStr = fmtCursorAge(new Date(Date.parse(status.builtAt) - d.age).toISOString(), status.builtAt);
+    return `${d.pl} idle ${ageStr}`;
+  }).join(" · ");
+
+  return el("div", {
+    className: "pp-drift-banner",
+    dataset: { tone: "info" },
+    attrs: { role: "status" },
+  }, [
+    el("span", { className: "pp-drift-icon", text: "•" }),
     el("span", { className: "pp-drift-body" }, [
-      el("b", { text: "Cursor drift · " }),
-      el("span", { text: `${drifts.length} playlist${drifts.length === 1 ? "" : "s"} more than ${DRIFT_THRESHOLD_MS / 60000}m behind newest write` }),
+      el("b", { text: "Low activity · " }),
+      el("span", { text: `${laggards.length} playlist${laggards.length === 1 ? "" : "s"} idle while others are active` }),
       el("div", { className: "pp-drift-detail", text: summary }),
     ]),
   ]);
