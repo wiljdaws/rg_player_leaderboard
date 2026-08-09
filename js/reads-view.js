@@ -67,7 +67,7 @@ export function createReadsView({ gateway }) {
     paintLoading();
     if (force) query.invalidateCache();
     try {
-      const data = await query.fetchRange(range);
+      const data = await query.fetchRange({ ...range, force });
       if (token !== activeFetchToken) return; // superseded by a newer call
       latestData = data;
       latestFetchAt = Date.now();

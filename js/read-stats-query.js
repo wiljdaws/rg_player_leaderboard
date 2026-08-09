@@ -293,61 +293,96 @@ export function createReadStatsQuery({
     ? cache.storageKey
     : DEFAULT_STORAGE_KEY;
 
-  async function fetchRange({ from, to } = {}) {
+  // Try the CDN snapshot first. Returns null when it doesn't cover the
+  // picked range or isn't available — callers then fall through to the
+  // charged Firestore queries. Costs zero Firestore reads on success.
+  async function tryFetchSnapshot(from, to) {
+    if (typeof gateway.fetchReadStatsSnapshot !== "function") return null;
+    let snapshot;
+    try {
+      snapshot = await gateway.fetchReadStatsSnapshot();
+    } catch (err) {
+      logger?.warn?.("[rgLB] read-stats snapshot fetch failed:", err?.message || err);
+      return null;
+    }
+    if (!snapshot || typeof snapshot !== "object") return null;
+    const start = snapshot.windowStart;
+    const end = snapshot.windowEnd;
+    if (typeof start !== "string" || typeof end !== "string") return null;
+    // Range must be fully contained by the snapshot window; if the user
+    // widens the picker before `windowStart` we need the live path.
+    if (from < start || to > end) return null;
+    const site = (Array.isArray(snapshot.site) ? snapshot.site : [])
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= to);
+    const hud = (Array.isArray(snapshot.hud) ? snapshot.hud : [])
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= to);
+    return { site, hud };
+  }
+
+  async function fetchRange({ from, to, force = false } = {}) {
     if (typeof from !== "string" || typeof to !== "string") {
       throw new Error("fetchRange requires from and to as YYYY-MM-DD strings.");
     }
     const cacheKey = `${from}:${to}`;
-    const cached = readCache(storage, storageKey, cacheKey, ttlMs, now);
-    if (cached) {
-      return cached.payload;
+    if (!force) {
+      const cached = readCache(storage, storageKey, cacheKey, ttlMs, now);
+      if (cached) return cached.payload;
     }
 
     const startedAt = now();
-    // Kick all three fetches in parallel. fetchReadStatsTotal is optional
-    // (feature is behind a Cloud Monitoring cron that may not be wired yet);
-    // when missing we gracefully degrade to attributed-only aggregates.
-    const totalsFetcher = typeof gateway.fetchReadStatsTotal === "function"
-      ? gateway.fetchReadStatsTotal(from, to)
-      : Promise.resolve([]);
-    const [siteDocs, hudDocs, totalDocs] = await Promise.all([
-      gateway.fetchAdminReadStats(from, to),
-      gateway.fetchHudReadStats(from, to),
-      totalsFetcher.catch((err) => {
-        logger?.warn?.("[rgLB] read_stats_total fetch failed:", err?.message || err);
-        return [];
-      }),
-    ]);
 
-    const site = Array.isArray(siteDocs) ? siteDocs : [];
-    const hud = Array.isArray(hudDocs) ? hudDocs : [];
-    const totals = Array.isArray(totalDocs) ? totalDocs : [];
-    const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: totals });
+    // 1) CDN snapshot (0 Firestore reads). Skipped when Refresh forced
+    //    a live pull, or when the range doesn't fit the snapshot window.
+    let site = [];
+    let hud = [];
+    let source = "firestore";
+    let docs = 0;
+    if (!force) {
+      const snap = await tryFetchSnapshot(from, to);
+      if (snap) {
+        site = snap.site;
+        hud = snap.hud;
+        source = "snapshot";
+      }
+    }
+
+    // 2) Firestore fallback — either the snapshot said no or Refresh
+    //    forced a live pull. Charges one read per returned doc.
+    if (source === "firestore") {
+      const totalsFetcher = typeof gateway.fetchReadStatsTotal === "function"
+        ? gateway.fetchReadStatsTotal(from, to)
+        : Promise.resolve([]);
+      const [siteDocs, hudDocs, totalDocs] = await Promise.all([
+        gateway.fetchAdminReadStats(from, to),
+        gateway.fetchHudReadStats(from, to),
+        totalsFetcher.catch((err) => {
+          logger?.warn?.("[rgLB] read_stats_total fetch failed:", err?.message || err);
+          return [];
+        }),
+      ]);
+      site = Array.isArray(siteDocs) ? siteDocs : [];
+      hud = Array.isArray(hudDocs) ? hudDocs : [];
+      const totals = Array.isArray(totalDocs) ? totalDocs : [];
+      const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: totals });
+      docs = site.length + hud.length + totals.length;
+      const fetchedAt = now();
+      const payload = { range: { from, to }, site, hud, totals, aggregate: aggregateResult, fetchedAt, source };
+      writeCache(storage, storageKey, cacheKey, { payload, fetchedAt });
+      try {
+        logger?.info?.("[rgLB] read-stats fetched", { source, docs, ms: fetchedAt - startedAt, cost: docs });
+      } catch {}
+      return payload;
+    }
+
+    // Snapshot path — no monitoring totals in the CDN blob today, so pass
+    // an empty totals array. If we ever publish them, plumb them through.
+    const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: [] });
     const fetchedAt = now();
-    const docs = site.length + hud.length + totals.length;
-
-    const payload = {
-      range: { from, to },
-      site,
-      hud,
-      totals,
-      aggregate: aggregateResult,
-      fetchedAt,
-    };
-
+    const payload = { range: { from, to }, site, hud, totals: [], aggregate: aggregateResult, fetchedAt, source };
     writeCache(storage, storageKey, cacheKey, { payload, fetchedAt });
-
-    // Cost breadcrumb — the actual bill is one Firestore read per returned
-    // doc plus one indexed-query overhead. Rounded up to `docs` for a safe
-    // upper bound so the log matches what shows up in the console.
     try {
-      logger?.info?.("[rgLB] read-stats fetched", {
-        docs,
-        ms: fetchedAt - startedAt,
-        cost: docs,
-      });
+      logger?.info?.("[rgLB] read-stats fetched", { source, docs: site.length + hud.length, ms: fetchedAt - startedAt, cost: 0 });
     } catch {}
-
     return payload;
   }
 

@@ -510,6 +510,106 @@ test("bySource: unknown source string lands in unknown bucket", async () => {
   assert.equal(result.aggregate.bySource.clanSite, 0);
 });
 
+// ------ snapshot fallback tests ------
+
+function makeSnapshotGateway({ snapshot, siteDocs = [], hudDocs = [], failSnapshot = false } = {}) {
+  const calls = { snapshot: 0, site: 0, hud: 0 };
+  return {
+    calls,
+    fetchReadStatsSnapshot: async () => {
+      calls.snapshot += 1;
+      if (failSnapshot) throw new Error("cdn down");
+      return snapshot;
+    },
+    fetchAdminReadStats: async () => { calls.site += 1; return siteDocs; },
+    fetchHudReadStats: async () => { calls.hud += 1; return hudDocs; },
+  };
+}
+
+test("snapshot path: uses CDN blob and skips Firestore when range fits window", async () => {
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-09",
+    site: [
+      { id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" },
+      { id: "s2", date: "2026-08-15", sessionId: "s2", total: 99, perLabel: {}, source: "player" },
+    ],
+    hud: [
+      { id: "h1", date: "2026-08-05", sourceUserId: "u1", readTotal: 5, perLabel: {} },
+    ],
+  };
+  const gateway = makeSnapshotGateway({ snapshot });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-09" });
+  assert.equal(gateway.calls.snapshot, 1, "snapshot fetched once");
+  assert.equal(gateway.calls.site, 0, "no Firestore admin_read_stats call");
+  assert.equal(gateway.calls.hud, 0, "no Firestore hud_read_stats call");
+  assert.equal(result.source, "snapshot");
+  // Out-of-range doc should be filtered out.
+  assert.equal(result.site.length, 1);
+  assert.equal(result.site[0].id, "s1");
+  assert.equal(result.aggregate.totalReads, 10 + 5);
+});
+
+test("snapshot path: falls back to Firestore when range extends before window", async () => {
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-09",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({
+    snapshot,
+    siteDocs: [{ id: "old", date: "2026-06-01", sessionId: "old", total: 42, perLabel: {}, source: "player" }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-06-01", to: "2026-08-09" });
+  assert.equal(gateway.calls.snapshot, 1);
+  assert.equal(gateway.calls.site, 1, "Firestore fallback fired");
+  assert.equal(gateway.calls.hud, 1);
+  assert.equal(result.source, "firestore");
+  assert.equal(result.aggregate.totalReads, 42);
+});
+
+test("snapshot path: falls back to Firestore when CDN fetch throws", async () => {
+  const gateway = makeSnapshotGateway({
+    failSnapshot: true,
+    siteDocs: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 7, perLabel: {}, source: "player" }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-09" });
+  assert.equal(gateway.calls.snapshot, 1);
+  assert.equal(gateway.calls.site, 1);
+  assert.equal(result.source, "firestore");
+  assert.equal(result.aggregate.totalReads, 7);
+});
+
+test("snapshot path: force=true bypasses CDN and goes straight to Firestore", async () => {
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-09",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({
+    snapshot,
+    siteDocs: [{ id: "live", date: "2026-08-08", sessionId: "live", total: 99, perLabel: {}, source: "player" }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-09", force: true });
+  assert.equal(gateway.calls.snapshot, 0, "snapshot skipped on force");
+  assert.equal(gateway.calls.site, 1);
+  assert.equal(result.source, "firestore");
+  assert.equal(result.aggregate.totalReads, 99);
+});
+
 test("bySource: mixed docs aggregate correctly across all buckets", async () => {
   const gateway = makeGateway({
     siteDocs: [
