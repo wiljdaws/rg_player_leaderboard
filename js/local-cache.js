@@ -7,9 +7,9 @@ const ADMIN_ROSTER = "rgPlayerLb:adminRoster:v1";
 // the live/CDN paths are both unreachable — the "last-known" data is
 // still recognizable and better than a blank leaderboard.
 export const LOCAL_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-// Admin roster is only used for the "who's on which version" diagnostic;
-// short TTL is fine and saves 100 reads per admin sign-in / reload.
-export const ROSTER_CACHE_TTL_MS = 5 * 60 * 1000;
+// Only used for the "who's on which version" diagnostic. Writes clear
+// it when the data actually changes.
+export const ROSTER_CACHE_TTL_MS = 60 * 60 * 1000;
 
 function storage() {
   try {

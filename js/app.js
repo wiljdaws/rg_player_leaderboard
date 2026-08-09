@@ -319,7 +319,10 @@ function render() {
       emptyMessage: emptyMessage(),
       onInspect: openPlayerDetails,
       onEdit: openEdit,
-      onDelete: (player) => writes?.deletePlayer(player.id),
+      onDelete: (player) => {
+        clearAdminRosterCache();
+        return writes?.deletePlayer(player.id);
+      },
     });
     renderIconKey({
       rows: state.icons,
@@ -522,6 +525,7 @@ function wireEvents() {
       if (payload.flag) flagDirectory.add(payload.flag);
       const saved = await writes?.addPlayer(payload);
       if (saved) {
+        clearAdminRosterCache();
         $("adminForm").reset();
         flagPickers.add?.setValue("");
         const glowValue = $("adminForm").querySelector("[data-glow-value]");
@@ -559,6 +563,7 @@ function wireEvents() {
       const player = state.editingPlayer;
       const saved = await writes?.updatePlayer(player.id, payload);
       if (saved) {
+        clearAdminRosterCache();
         // For HUD-synced players (deterministic ID = sourceUserId_playlist),
         // propagate the cosmetic fields to the other playlist docs so a flag
         // or glow edit made in 1v1 is reflected in 2v2/3v3/wins too. Score
