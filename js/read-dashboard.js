@@ -14,7 +14,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // Version tag we consider "current release" — highlighted in green in the
 // HUD version breakdown. If this ever changes, only this constant needs to
 // move.
-const CURRENT_HUD_VERSION = "17.9";
+const CURRENT_HUD_VERSION = "18.0";
 
 // ------------------------------------------------------------
 // DOM helpers
