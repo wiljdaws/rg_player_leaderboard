@@ -1178,6 +1178,23 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   display:flex;gap:10px;font-size:12px;font-variant-numeric:tabular-nums;
 }
 
+.pp-drift-banner{
+  display:flex;align-items:flex-start;gap:12px;
+  margin-top:16px;padding:12px 16px;border-radius:12px;
+  background:linear-gradient(90deg,rgba(251,113,133,.12),rgba(251,113,133,.04));
+  border:1px solid rgba(251,113,133,.4);
+}
+.pp-drift-icon{font-size:18px;color:var(--loss);line-height:1}
+.pp-drift-body{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--ink)}
+.pp-drift-body b{color:var(--loss);letter-spacing:.02em}
+.pp-drift-detail{color:var(--ink-dim);font-size:11.5px;font-variant-numeric:tabular-nums}
+
+.pp-mode-cell{display:flex;flex-direction:column;gap:2px}
+.pp-fallback-reason{
+  font:600 9px var(--display);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--loss);
+}
+
 .pp-loading .rd-panel{
   animation:pp-pulse 1.4s ease-in-out infinite;
 }

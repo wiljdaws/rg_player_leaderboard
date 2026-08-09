@@ -91,6 +91,34 @@ function fmtCursorAge(sinceIso, builtIso) {
   return `${Math.round(min / 60)}h`;
 }
 
+function cursorAgeMs(sinceIso, builtIso) {
+  if (!sinceIso || !builtIso) return null;
+  return Math.max(0, Date.parse(builtIso) - Date.parse(sinceIso));
+}
+
+// Daily full-sync cron is "13 10 * * *" (10:13 UTC). Next occurrence in ms.
+function nextFullSyncMs(now = Date.now()) {
+  const d = new Date(now);
+  d.setUTCHours(10, 13, 0, 0);
+  if (d.getTime() <= now) d.setUTCDate(d.getUTCDate() + 1);
+  return d.getTime();
+}
+
+function fmtCountdown(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "any moment";
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h >= 1) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+const FALLBACK_REASON_LABEL = {
+  index_not_ready: "index still building",
+};
+
+const DRIFT_THRESHOLD_MS = 10 * 60 * 1000;
+
 function modeTone(mode) {
   if (mode === "delta") return "gain";
   if (mode === "full") return "gold";
@@ -190,11 +218,15 @@ function renderTiles(status, history, lifetime) {
   const deltaLabel = status?.overallMode === "delta"
     ? `${readsThisRun} of ${readsProjectedFullScan} · full-scan equivalent`
     : `${readsThisRun} (full re-sync)`;
+  const nextFull = nextFullSyncMs();
+  const modeSub = status?.forceFull
+    ? `This run was the daily re-sync`
+    : `Next daily re-sync in ${fmtCountdown(nextFull - Date.now())}`;
   return el("div", { className: "rd-chips-row pp-chips" }, [
     tile("Reads this sync", fmtNum(readsThisRun), deltaLabel, "gain"),
     tile(`Reads saved · ${savedPct.toFixed(1)}%`, fmtNum(savedValue), savedSub, "gold"),
     tile("Snapshot rows", fmtNum(snapshotTotal), "Persistent working set", "grad"),
-    tile("Overall mode", modeLabel(status?.overallMode), status?.forceFull ? "Daily re-sync" : "Automatic cadence", "silver"),
+    tile("Overall mode", modeLabel(status?.overallMode), modeSub, "silver"),
   ]);
 }
 
@@ -203,6 +235,28 @@ function tile(label, value, sub, tone) {
     el("div", { className: "rd-chip-label", text: label }),
     el("div", { className: "rd-chip-value", text: value }),
     el("div", { className: "pp-tile-sub", text: sub }),
+  ]);
+}
+
+// Any playlist "behind by" > 10 min gets called out at the top of the tab
+// so an operator sees drift before the tab looks green-but-stale.
+function renderDriftBanner(status) {
+  if (!status?.playlists || !status?.builtAt) return null;
+  const drifts = [];
+  for (const [pl, per] of Object.entries(status.playlists)) {
+    const age = cursorAgeMs(per.since, status.builtAt);
+    if (age != null && age > DRIFT_THRESHOLD_MS) drifts.push({ pl, age });
+  }
+  if (!drifts.length) return null;
+  drifts.sort((a, b) => b.age - a.age);
+  const summary = drifts.map(d => `${d.pl} · ${fmtCursorAge(new Date(Date.parse(status.builtAt) - d.age).toISOString(), status.builtAt)}`).join(" · ");
+  return el("div", { className: "pp-drift-banner", attrs: { role: "alert" } }, [
+    el("span", { className: "pp-drift-icon", text: "⚠" }),
+    el("span", { className: "pp-drift-body" }, [
+      el("b", { text: "Cursor drift · " }),
+      el("span", { text: `${drifts.length} playlist${drifts.length === 1 ? "" : "s"} more than ${DRIFT_THRESHOLD_MS / 60000}m behind newest write` }),
+      el("div", { className: "pp-drift-detail", text: summary }),
+    ]),
   ]);
 }
 
@@ -217,6 +271,7 @@ function renderPlaylistTable({ status, stateFiles }) {
       snapshot: per.snapshotRows ?? state?.snapshot?.length,
       since: per.since ?? state?.since,
       built: status?.builtAt,
+      fallbackReason: per.fallbackReason ?? null,
     };
   });
   const head = el("div", { className: "pp-table-head" }, [
@@ -227,14 +282,22 @@ function renderPlaylistTable({ status, stateFiles }) {
     el("span", { className: "num", text: "Behind by" }),
     el("span", { text: "Newest write" }),
   ]);
-  const body = rows.map(row => el("div", { className: "pp-table-row" }, [
-    el("span", { className: "pp-cell-name", text: row.playlist }),
-    el("span", { className: `pp-mode pp-mode-${modeTone(row.mode)}`, text: modeLabel(row.mode) }),
-    el("span", { className: "num pp-num", text: row.delta == null ? "—" : fmtNum(row.delta) }),
-    el("span", { className: "num pp-num", text: fmtNum(row.snapshot) }),
-    el("span", { className: "num pp-num pp-dim", text: fmtCursorAge(row.since, row.built) }),
-    el("span", { className: "pp-mono pp-dim", text: row.since ? row.since.slice(11, 19) + "Z" : "—" }),
-  ]));
+  const body = rows.map(row => {
+    const modeCell = row.fallbackReason
+      ? el("span", { className: "pp-mode-cell" }, [
+          el("span", { className: `pp-mode pp-mode-${modeTone(row.mode)}`, text: modeLabel(row.mode) }),
+          el("span", { className: "pp-fallback-reason", text: FALLBACK_REASON_LABEL[row.fallbackReason] || row.fallbackReason }),
+        ])
+      : el("span", { className: `pp-mode pp-mode-${modeTone(row.mode)}`, text: modeLabel(row.mode) });
+    return el("div", { className: "pp-table-row" }, [
+      el("span", { className: "pp-cell-name", text: row.playlist }),
+      modeCell,
+      el("span", { className: "num pp-num", text: row.delta == null ? "—" : fmtNum(row.delta) }),
+      el("span", { className: "num pp-num", text: fmtNum(row.snapshot) }),
+      el("span", { className: "num pp-num pp-dim", text: fmtCursorAge(row.since, row.built) }),
+      el("span", { className: "pp-mono pp-dim", text: row.since ? row.since.slice(11, 19) + "Z" : "—" }),
+    ]);
+  });
   return el("div", { className: "rd-panel pp-panel" }, [
     el("div", { className: "rd-panel-head" }, [
       el("div", { className: "rd-panel-title", text: "Per-playlist state" }),
@@ -246,10 +309,25 @@ function renderPlaylistTable({ status, stateFiles }) {
 
 function renderHistory({ history }) {
   const runs = history?.runs?.slice(-48) || [];
+  // Mode distribution across the window — quick "is fallback climbing?" signal.
+  let modeSub = `Last ${runs.length} syncs · reads consumed, mode per run`;
+  if (runs.length) {
+    const counts = { delta: 0, full: 0, "full-fallback": 0 };
+    for (const r of runs) {
+      const m = r.overallMode || "delta";
+      counts[m] = (counts[m] || 0) + 1;
+    }
+    const pct = k => Math.round((counts[k] / runs.length) * 100);
+    const parts = [];
+    if (counts.delta) parts.push(`Delta ${pct("delta")}%`);
+    if (counts.full) parts.push(`Full ${pct("full")}%`);
+    if (counts["full-fallback"]) parts.push(`Fallback ${pct("full-fallback")}%`);
+    modeSub = `Last ${runs.length} syncs · ${parts.join(" · ")}`;
+  }
   const panel = el("div", { className: "rd-panel pp-panel" }, [
     el("div", { className: "rd-panel-head" }, [
       el("div", { className: "rd-panel-title", text: "Recent syncs" }),
-      el("div", { className: "rd-panel-sub", text: `Last ${runs.length} syncs · reads consumed, mode per run` }),
+      el("div", { className: "rd-panel-sub", text: modeSub }),
     ]),
   ]);
   if (!runs.length) {
@@ -366,8 +444,10 @@ function renderError(container, error) {
 
 function paint(container, data, { onRefresh }) {
   container.innerHTML = "";
+  const drift = renderDriftBanner(data.status);
   const shell = el("div", { className: "read-dashboard pp-view" }, [
     renderHeader({ status: data.status, onRefresh }),
+    drift,
     renderTiles(data.status, data.history, data.lifetime),
     renderPlaylistTable(data),
     renderHistory(data),
