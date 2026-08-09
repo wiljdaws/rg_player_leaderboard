@@ -147,20 +147,35 @@ function renderHeader({ status, onRefresh }) {
   ]);
 }
 
-function renderTiles(status) {
+function renderTiles(status, history) {
   const readsThisRun = status?.readsThisRun ?? 0;
   const readsProjectedFullScan = status?.readsProjectedFullScan ?? 0;
-  const readsSaved = status?.readsSaved ?? 0;
-  const readsSavedPct = status?.readsSavedPct ?? 0;
   const snapshotTotal = status?.playlists
     ? Object.values(status.playlists).reduce((sum, p) => sum + (p.snapshotRows || 0), 0)
     : 0;
+
+  // Cumulative comparison over the last N syncs — the honest apples-to-
+  // apples "what did CDC actually save vs. full-scans on the same cadence"
+  // number. Each history entry has actual reads + readsSaved; baseline
+  // for that run is reads + readsSaved.
+  const runs = history?.runs || [];
+  const cumActual = runs.reduce((sum, r) => sum + (r.reads || 0), 0);
+  const cumSaved = runs.reduce((sum, r) => sum + (r.readsSaved || 0), 0);
+  const cumBaseline = cumActual + cumSaved;
+  const cumPct = cumBaseline > 0 ? Math.round((cumSaved / cumBaseline) * 1000) / 10 : 0;
+
+  const savedSub = runs.length
+    ? `${fmtNum(cumBaseline)} full-scan equivalent · last ${runs.length} syncs`
+    : `${readsProjectedFullScan} full-scan equivalent · this sync`;
+  const savedValue = runs.length ? cumSaved : (status?.readsSaved ?? 0);
+  const savedPct = runs.length ? cumPct : (status?.readsSavedPct ?? 0);
+
   const deltaLabel = status?.overallMode === "delta"
     ? `${readsThisRun} of ${readsProjectedFullScan} · full-scan equivalent`
     : `${readsThisRun} (full re-sync)`;
   return el("div", { className: "rd-chips-row pp-chips" }, [
     tile("Reads this sync", fmtNum(readsThisRun), deltaLabel, "gain"),
-    tile("Reads saved", `${fmtNum(readsSaved)}`, `${readsSavedPct.toFixed(1)}% vs full-scan`, "gold"),
+    tile(`Reads saved · ${savedPct.toFixed(1)}%`, fmtNum(savedValue), savedSub, "gold"),
     tile("Snapshot rows", fmtNum(snapshotTotal), "Persistent working set", "grad"),
     tile("Overall mode", modeLabel(status?.overallMode), status?.forceFull ? "Daily re-sync" : "Automatic cadence", "silver"),
   ]);
@@ -336,7 +351,7 @@ function paint(container, data, { onRefresh }) {
   container.innerHTML = "";
   const shell = el("div", { className: "read-dashboard pp-view" }, [
     renderHeader({ status: data.status, onRefresh }),
-    renderTiles(data.status),
+    renderTiles(data.status, data.history),
     renderPlaylistTable(data),
     renderHistory(data),
   ]);
