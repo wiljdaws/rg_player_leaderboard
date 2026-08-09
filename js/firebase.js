@@ -576,16 +576,6 @@ export async function createFirebaseGateway() {
     loadIconKey,
     addPlayer: (payload) => addDoc(leaderboard, { ...payload, lastWriteAt: serverTimestamp() }),
     updatePlayer: (id, payload) => updateDoc(doc(db, "leaderboard", id), { ...payload, lastWriteAt: serverTimestamp() }),
-    // One-shot: read every player from the wins collection so admins can see
-    // who's running which HUD version. Wins is the canonical "seen once ever"
-    // collection since every HUD-synced player gets a wins doc.
-    loadPlayerRoster: async () => {
-      const snapshot = await chargedGetDocs(
-        query(leaderboard, where("playlist", "==", "wins"), limit(MAX_PLAYLIST_ROWS)),
-        "adminRoster",
-      );
-      return rawDocuments(snapshot);
-    },
     deletePlayer: (id) => deleteDoc(doc(db, "leaderboard", id)),
     addIcon: (payload) => addDoc(iconKey, payload),
     deleteIcon: (id) => deleteDoc(doc(db, "iconKey", id)),
