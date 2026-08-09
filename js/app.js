@@ -201,8 +201,22 @@ document.addEventListener("rgLB:read-budget-tripped", (event) => {
   paintReadBudgetWidget(event.detail || {});
 });
 
-// 5-minute cache on the admin roster so re-signins and page reloads don't
-// each burn 100 Firestore reads. Refresh button clears the cache first.
+const ROSTER_STATE_URL = "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/state/wins.json";
+
+// Unwrap the CDC snapshot format so it looks like a plain Firestore doc
+// to normalizePlayerDocument.
+function hydrateStateRow(row) {
+  const out = { ...row };
+  for (const key of Object.keys(out)) {
+    const v = out[key];
+    if (v && typeof v === "object" && v.__firestoreType === "timestamp") {
+      out[key] = v.value;
+    }
+  }
+  if (!out.id && out._docId) out.id = out._docId;
+  return out;
+}
+
 async function loadVersionBreakdown({ force = false } = {}) {
   const host = $("versionBreakdown");
   if (!host) return;
@@ -216,7 +230,10 @@ async function loadVersionBreakdown({ force = false } = {}) {
   }
   host.replaceChildren(document.createTextNode("Loading roster…"));
   try {
-    const raw = await gateway.loadPlayerRoster();
+    const response = await fetch(ROSTER_STATE_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error(`state fetch ${response.status}`);
+    const state = await response.json();
+    const raw = (state?.snapshot || []).map(hydrateStateRow);
     writeAdminRosterCache(raw);
     const normalized = normalizePlaylistRows(raw, "wins");
     renderVersionBreakdown(host, normalized.rows);
