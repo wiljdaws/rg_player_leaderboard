@@ -20,7 +20,11 @@
 // the actual cost can be audited in DevTools. Turn off with the browser
 // devtools log filter if it gets noisy.
 
-const DEFAULT_TTL_MS = 5 * 60 * 1000;
+// 30 min TTL: the dashboard is a backward-looking view of admin/HUD
+// telemetry, not a real-time monitor. Sessions written in the last 30
+// min will still show up on the next natural refresh; the Refresh
+// button bypasses the cache. Reduces per-visit re-fetch churn.
+const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_STORAGE_KEY = "rgLB:readStatsCache:v1";
 
 // Source attribution for admin_read_stats docs. Every writer now stamps an
