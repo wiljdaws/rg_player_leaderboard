@@ -114,14 +114,15 @@ async function fetchJson(url) {
 }
 
 async function fetchState() {
-  const [status, history, ...perPlaylist] = await Promise.all([
+  const [status, history, lifetime, ...perPlaylist] = await Promise.all([
     fetchJson(`${CDN_BASE}/status.json`).catch(() => null),
     fetchJson(`${CDN_BASE}/history.json`).catch(() => null),
+    fetchJson(`${CDN_BASE}/lifetime.json`).catch(() => null),
     ...PLAYLISTS.map(pl => fetchJson(`${CDN_BASE}/${pl}.json`).catch(() => null)),
   ]);
   const stateFiles = {};
   PLAYLISTS.forEach((pl, i) => { stateFiles[pl] = perPlaylist[i]; });
-  return { status, history, stateFiles };
+  return { status, history, lifetime, stateFiles };
 }
 
 function renderHeader({ status, onRefresh }) {
@@ -147,28 +148,44 @@ function renderHeader({ status, onRefresh }) {
   ]);
 }
 
-function renderTiles(status, history) {
+function renderTiles(status, history, lifetime) {
   const readsThisRun = status?.readsThisRun ?? 0;
   const readsProjectedFullScan = status?.readsProjectedFullScan ?? 0;
   const snapshotTotal = status?.playlists
     ? Object.values(status.playlists).reduce((sum, p) => sum + (p.snapshotRows || 0), 0)
     : 0;
 
-  // Cumulative comparison over the last N syncs — the honest apples-to-
-  // apples "what did CDC actually save vs. full-scans on the same cadence"
-  // number. Each history entry has actual reads + readsSaved; baseline
-  // for that run is reads + readsSaved.
+  // Lifetime counter climbs continuously from the day CDC shipped —
+  // survives the 96-entry rolling history window. Falls back to the
+  // cumulative-over-history-window number until lifetime.json exists
+  // (first run after this deploy).
   const runs = history?.runs || [];
-  const cumActual = runs.reduce((sum, r) => sum + (r.reads || 0), 0);
-  const cumSaved = runs.reduce((sum, r) => sum + (r.readsSaved || 0), 0);
-  const cumBaseline = cumActual + cumSaved;
-  const cumPct = cumBaseline > 0 ? Math.round((cumSaved / cumBaseline) * 1000) / 10 : 0;
+  const historicalActual = runs.reduce((sum, r) => sum + (r.reads || 0), 0);
+  const historicalSaved = runs.reduce((sum, r) => sum + (r.readsSaved || 0), 0);
+  const lifeSaved = lifetime?.readsSaved;
+  const lifeBaseline = lifetime?.readsBaseline;
+  const lifeSyncs = lifetime?.syncs;
+  const lifeSince = lifetime?.since;
 
-  const savedSub = runs.length
-    ? `${fmtNum(cumBaseline)} full-scan equivalent · last ${runs.length} syncs`
-    : `${readsProjectedFullScan} full-scan equivalent · this sync`;
-  const savedValue = runs.length ? cumSaved : (status?.readsSaved ?? 0);
-  const savedPct = runs.length ? cumPct : (status?.readsSavedPct ?? 0);
+  let savedValue;
+  let savedSub;
+  let savedPct;
+  if (Number.isFinite(lifeSaved) && Number.isFinite(lifeBaseline) && lifeBaseline > 0) {
+    savedValue = lifeSaved;
+    savedPct = Math.round((lifeSaved / lifeBaseline) * 1000) / 10;
+    savedSub = lifeSince
+      ? `Since ${lifeSince.slice(0, 10)} · ${fmtNum(lifeSyncs || 0)} syncs · ${fmtNum(lifeBaseline)} full-scan equivalent`
+      : `${fmtNum(lifeSyncs || 0)} syncs · ${fmtNum(lifeBaseline)} full-scan equivalent`;
+  } else if (runs.length) {
+    const cumBaseline = historicalActual + historicalSaved;
+    savedValue = historicalSaved;
+    savedPct = cumBaseline > 0 ? Math.round((historicalSaved / cumBaseline) * 1000) / 10 : 0;
+    savedSub = `${fmtNum(cumBaseline)} full-scan equivalent · last ${runs.length} syncs`;
+  } else {
+    savedValue = status?.readsSaved ?? 0;
+    savedPct = status?.readsSavedPct ?? 0;
+    savedSub = `${readsProjectedFullScan} full-scan equivalent · this sync`;
+  }
 
   const deltaLabel = status?.overallMode === "delta"
     ? `${readsThisRun} of ${readsProjectedFullScan} · full-scan equivalent`
@@ -351,7 +368,7 @@ function paint(container, data, { onRefresh }) {
   container.innerHTML = "";
   const shell = el("div", { className: "read-dashboard pp-view" }, [
     renderHeader({ status: data.status, onRefresh }),
-    renderTiles(data.status, data.history),
+    renderTiles(data.status, data.history, data.lifetime),
     renderPlaylistTable(data),
     renderHistory(data),
   ]);
