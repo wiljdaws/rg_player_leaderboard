@@ -193,9 +193,9 @@ h1{
   background-size:100% 250%,100% 100%;
   animation:rg-foil-vertical 4s linear infinite;
 }
-.player-row[data-rank="1"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--gold),#FFEDA0,var(--gold));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-rank="1"] .p-name{background:linear-gradient(180deg,transparent 28%,rgba(255,255,255,.75) 50%,transparent 72%),linear-gradient(180deg,#7A5100,var(--gold),#FFF7C4,var(--gold),#7A5100);background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
 .player-row[data-rank="2"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--grad-a),var(--grad-b),var(--grad-a));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
-.player-row[data-rank="3"] .p-name{background:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--bronze),#F6C09A,var(--bronze));background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
+.player-row[data-rank="3"] .p-name{background:linear-gradient(180deg,transparent 28%,rgba(255,240,220,.7) 50%,transparent 72%),linear-gradient(180deg,#5B3418,var(--bronze),#FFE0C4,var(--bronze),#5B3418);background-clip:text;-webkit-background-clip:text;color:transparent;background-size:100% 250%,100% 100%}
 .player-row.top10 .p-name{background:linear-gradient(90deg,var(--top10-a),var(--top10-b));background-clip:text;-webkit-background-clip:text;color:transparent;filter:drop-shadow(0 0 6px rgba(56,189,248,.28))}
 
 /* Keep interactive/text cells above the tinted background layer. */
@@ -789,9 +789,9 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 .player-row.top10 .p-name.marquee .marquee-inner{
   background-clip:text;-webkit-background-clip:text;color:transparent;
 }
-.player-row[data-rank="1"] .p-name.marquee .marquee-inner{background-image:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--gold),#FFEDA0,var(--gold));background-size:100% 250%,100% 100%;animation:rg-foil-vertical 4s linear infinite,marquee-scroll var(--marquee-duration,8s) ease-in-out infinite}
+.player-row[data-rank="1"] .p-name.marquee .marquee-inner{background-image:linear-gradient(180deg,transparent 28%,rgba(255,255,255,.75) 50%,transparent 72%),linear-gradient(180deg,#7A5100,var(--gold),#FFF7C4,var(--gold),#7A5100);background-size:100% 250%,100% 100%;animation:rg-foil-vertical 4s linear infinite,marquee-scroll var(--marquee-duration,8s) ease-in-out infinite}
 .player-row[data-rank="2"] .p-name.marquee .marquee-inner{background-image:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--grad-a),var(--grad-b),var(--grad-a));background-size:100% 250%,100% 100%;animation:rg-foil-vertical 4s linear infinite,marquee-scroll var(--marquee-duration,8s) ease-in-out infinite}
-.player-row[data-rank="3"] .p-name.marquee .marquee-inner{background-image:linear-gradient(180deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%),linear-gradient(180deg,var(--bronze),#F6C09A,var(--bronze));background-size:100% 250%,100% 100%;animation:rg-foil-vertical 4s linear infinite,marquee-scroll var(--marquee-duration,8s) ease-in-out infinite}
+.player-row[data-rank="3"] .p-name.marquee .marquee-inner{background-image:linear-gradient(180deg,transparent 28%,rgba(255,240,220,.7) 50%,transparent 72%),linear-gradient(180deg,#5B3418,var(--bronze),#FFE0C4,var(--bronze),#5B3418);background-size:100% 250%,100% 100%;animation:rg-foil-vertical 4s linear infinite,marquee-scroll var(--marquee-duration,8s) ease-in-out infinite}
 .player-row.top10 .p-name.marquee .marquee-inner{background-image:linear-gradient(90deg,var(--top10-a),var(--top10-b));filter:drop-shadow(0 0 6px rgba(56,189,248,.28))}
 
 @media (prefers-reduced-motion:reduce){
