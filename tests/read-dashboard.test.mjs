@@ -245,7 +245,7 @@ function fullData() {
         "2026-08-04": { site: 90, hud: 260 },
       },
       bySource: { site: 500, clanSite: 200, hud: 800, other: 10 },
-      byHudVersion: { "17.6": 500, "17.4": 100, "17.3": 30 },
+      byHudVersion: { "17.8": 500, "17.6": 100, "17.4": 30 },
       byLabel: {
         site: [
           { label: "leaderboardSub:1v1", total: 100 },
@@ -318,7 +318,7 @@ test("renderReadDashboard: renders without throwing on valid data", async () => 
   }
 });
 
-test("renderReadDashboard: highlights current HUD release (17.6) in green", async () => {
+test("renderReadDashboard: highlights current HUD release (17.8) in green", async () => {
   installFakeDom();
   try {
     const { renderReadDashboard } = await import("../js/read-dashboard.js");
