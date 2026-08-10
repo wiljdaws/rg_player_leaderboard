@@ -12,13 +12,16 @@ export class AdminWriteService {
       setWriteStatus({ kind: "error", message: "Admin access is required for that change." });
       return false;
     }
+    clearTimeout(this._clearTimer);
     setWriteStatus({ kind: "writing", message: `${label}…` });
     try {
       await operation();
       setWriteStatus({ kind: "success", message: `${label} complete.` });
+      this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
       return true;
     } catch (error) {
       setWriteStatus({ kind: "error", message: error?.message || `${label} failed.`, error });
+      this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
       return false;
     }
   }
