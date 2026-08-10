@@ -33,11 +33,11 @@ export const SDK = "10.12.2";
 export const READ_SOURCE_MODES = Object.freeze(["firestore", "static"]);
 export const READ_SOURCE_DEFAULT = "static";
 
-// jsDelivr fronts the data branch of this repo. The publish-leaderboard-json
-// workflow in Tampermonkeys writes the JSON hourly and pokes jsDelivr's purge
-// endpoint so freshness is ~30s globally after each rebuild.
+// Served straight from GitHub raw. jsDelivr's branch-alias cache holds files
+// for ~12h and purges get rate-limited at 1-min publish cadence, so we skip
+// the CDN and let clients revalidate against the origin via ETag.
 export const STATIC_JSON_URL_TEMPLATE =
-  "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/leaderboard/{playlist}.json";
+  "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/leaderboard/{playlist}.json";
 // Every 60s — CDN is refreshed every ~1 min now so anything longer just
 // stalls the tooltip's "X ago" text.
 export const STATIC_JSON_POLL_MS = 60_000;
