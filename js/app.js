@@ -437,10 +437,23 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
 }
 
 // Show the quick-add strip only on the Tournament tab for admins.
+// Also hides the icon key + full admin panel while on Tournament since
+// those aren't relevant to the manual entry flow.
 function syncTournamentAdmin() {
   const host = document.getElementById("tournamentAdmin");
-  if (!host) return;
-  host.hidden = !(state.admin && state.playlist === "tournament");
+  const iconKey = document.getElementById("iconKey");
+  const adminBox = document.getElementById("adminBox");
+  const onTournament = state.playlist === "tournament";
+  if (host) host.hidden = !(state.admin && onTournament);
+  if (onTournament) {
+    if (iconKey) iconKey.hidden = true;
+    if (adminBox) adminBox.hidden = true;
+  } else {
+    // Restore admin panel visibility per the same rule the auth observer uses.
+    if (adminBox) adminBox.hidden = !state.admin && !READ_BUDGET_DEBUG;
+    // Icon key visibility is driven by renderIconKey() on the next render,
+    // so leaving hidden=true here is safe — the next render restores it.
+  }
 }
 
 function setTqStatus(message, kind = "") {
