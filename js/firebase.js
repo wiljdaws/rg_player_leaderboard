@@ -23,7 +23,7 @@ const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firest
 const AUTH_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`;
 
 // Published by the Tampermonkeys publish workflow every 15 min.
-const READ_STATS_SNAPSHOT_URL = "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/state/read-stats.json";
+const READ_STATS_SNAPSHOT_URL = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/state/read-stats.json";
 
 function playlistQuerySpec(playlist) {
   if (!isPlaylist(playlist)) throw new Error("Unknown playlist.");

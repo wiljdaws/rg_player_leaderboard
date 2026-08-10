@@ -8,11 +8,12 @@
 //   - How many reads the CDC path saved compared to a naive full-scan
 //   - A sparkline of the last 96 runs so drift / fallback events show up
 //
-// Data comes exclusively from jsDelivr — no Firestore reads. The workflow
+// Data comes exclusively from GitHub raw — no Firestore reads. The workflow
 // commits state/status.json, state/history.json, and state/{playlist}.json
-// alongside the published leaderboard JSON.
+// alongside the published leaderboard JSON. Raw revalidates via ETag every
+// 5 min; jsDelivr's branch-alias cache held these files for hours.
 
-const CDN_BASE = "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/state";
+const CDN_BASE = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/state";
 const PLAYLISTS = ["1v1", "2v2", "3v3", "wins"];
 const REFRESH_MS = 30_000;
 

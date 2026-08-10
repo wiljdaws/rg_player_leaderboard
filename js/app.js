@@ -188,7 +188,7 @@ document.addEventListener("rgLB:read-budget-tripped", (event) => {
   paintReadBudgetWidget(event.detail || {});
 });
 
-const ROSTER_STATE_URL = "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/state/wins.json";
+const ROSTER_STATE_URL = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/state/wins.json";
 
 // Unwrap the CDC snapshot format so it looks like a plain Firestore doc
 // to normalizePlayerDocument.
