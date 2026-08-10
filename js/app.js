@@ -513,9 +513,9 @@ const tournamentPending = new Map();
 const PENDING_TTL_MS = 90_000;
 let pendingCounter = 0;
 
-function stashPendingTournament(kind, payload) {
+function stashPendingTournament(kind, payload, realId = null) {
   const tempId = `pending:${++pendingCounter}`;
-  tournamentPending.set(tempId, { kind, payload, ts: Date.now() });
+  tournamentPending.set(tempId, { kind, payload, ts: Date.now(), realId });
   return tempId;
 }
 
@@ -606,13 +606,22 @@ function applyTournamentPending(rows) {
 
 // Look up an existing tournament row by name (case-insensitive). Used by
 // the quick-add flow to upsert instead of creating a duplicate document.
-// Skips pending optimistic rows since they don't have real Firestore ids.
+// Also checks the optimistic-overlay pending map so a rapid double-add
+// upserts against the first write instead of creating a second doc.
 function findTournamentRowByName(name) {
   const needle = String(name || "").trim().toLowerCase();
   if (!needle) return null;
   for (const row of state.rows) {
     if (row._pending) continue;
     if (String(row.name || "").trim().toLowerCase() === needle) return row;
+  }
+  // Fall back to the pending overlay. Only "added" entries with a captured
+  // realId are useful here (we can't upsert against something without an id).
+  for (const entry of tournamentPending.values()) {
+    if (entry.kind !== "added" || !entry.realId) continue;
+    if (String(entry.payload?.name || "").trim().toLowerCase() === needle) {
+      return { id: entry.realId, name: entry.payload.name, _pending: true };
+    }
   }
   return null;
 }
@@ -848,7 +857,11 @@ function wireTournamentQuickAdd() {
         : await writes.addPlayer(payload);
       if (saved) {
         clearAdminRosterCache();
-        stashPendingTournament("added", payload);
+        // For new adds, capture the real Firestore doc id off the returned
+        // DocumentReference so a rapid follow-up submit with the same name
+        // can upsert against it before the CDN JSON catches up.
+        const realId = existing?.id || saved?.id || null;
+        stashPendingTournament("added", payload, realId);
         if (state.playlist === "tournament") {
           state.rows = applyTournamentPending(state.rows);
           render();
@@ -938,12 +951,13 @@ function wireTournamentQuickAdd() {
         });
         // Same upsert rule as the quick-add: don't create a duplicate.
         const existing = findTournamentRowByName(payload.name);
-        const ok = existing
+        const result = existing
           ? await writes?.updatePlayer(existing.id, payload)
           : await writes?.addPlayer(payload);
-        if (ok) {
+        if (result) {
           added += 1;
-          stashPendingTournament("added", payload);
+          const realId = existing?.id || result?.id || null;
+          stashPendingTournament("added", payload, realId);
         }
       } catch (err) {
         errors.push(`${row.name}: ${err?.message || "add failed"}`);

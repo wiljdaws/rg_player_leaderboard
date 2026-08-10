@@ -15,10 +15,13 @@ export class AdminWriteService {
     clearTimeout(this._clearTimer);
     setWriteStatus({ kind: "writing", message: `${label}…` });
     try {
-      await operation();
+      const result = await operation();
       setWriteStatus({ kind: "success", message: `${label} complete.` });
       this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
-      return true;
+      // Return the operation's own result when it produces one (e.g. a
+      // DocumentReference from addDoc), otherwise a truthy sentinel so the
+      // existing `if (saved)` callers still work.
+      return result === undefined ? true : result;
     } catch (error) {
       setWriteStatus({ kind: "error", message: error?.message || `${label} failed.`, error });
       this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
@@ -27,6 +30,10 @@ export class AdminWriteService {
   }
 
   addPlayer(payload) {
+    // Returns the DocumentReference from addDoc on success so callers can
+    // grab the real doc id (needed for the tournament optimistic overlay
+    // to upsert instead of duplicating when the same name is added twice
+    // in quick succession).
     return this.run("Adding player", () => this.gateway.addPlayer(payload));
   }
 
