@@ -128,7 +128,10 @@ h1{
   overflow:hidden;
 }
 .board-head{
-  display:grid;grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr;gap:12px;align-items:center;
+  /* Recent is a fixed 120px so its header sits directly over the chip.
+     Was 1fr — worked for non-admin because it ran to the right edge, but
+     in admin mode it wedged 'RECENT' against the actions column. */
+  display:grid;grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px;gap:12px;align-items:center;
   padding:15px 22px;border-bottom:1px solid var(--line);
   font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.26em;
   text-transform:uppercase;color:var(--ink-dim);
@@ -148,19 +151,19 @@ h1{
 .board-head[data-playlist="wins"] > :last-child{text-align:right}
 /* Header grid mirrors .player-row.admin so the ACTIONS column lines up
    with the Edit/Remove buttons instead of wrapping to a new line. */
-.board-head.admin{grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr auto}
-.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px auto}
+.board-head.admin{grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px auto}
+.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,1fr) 90px 90px 80px 84px auto}
 
 .player-row{
-  display:grid;grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr;gap:12px;align-items:center;
+  display:grid;grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px;gap:12px;align-items:center;
   padding:14px 22px;border-bottom:1px solid var(--line);
   transition:background .16s ease;position:relative;overflow:hidden;
 }
-.player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px}
+.player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,1fr) 90px 90px 80px 84px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
-.player-row.admin{grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr auto}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px auto}
+.player-row.admin{grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px auto}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,1fr) 90px 90px 80px 84px auto}
 
 /* =========================================================
    Top-3 / top-10 podium treatment — applied to every playlist.
@@ -713,9 +716,9 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .tabs{display:flex;width:100%;overflow-x:auto}
   .tab{flex:1;min-height:44px;white-space:nowrap}
   .share-btn{align-self:end}
-  .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 96px 74px 1fr;padding:12px 14px;gap:8px}
+  .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 96px 74px 100px;padding:12px 14px;gap:8px}
   .board-head.admin,
-  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 96px 74px 1fr auto}
+  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 96px 74px 100px auto}
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px}
   .board-head.admin[data-playlist="wins"],
