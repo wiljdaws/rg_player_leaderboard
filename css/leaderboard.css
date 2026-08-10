@@ -141,6 +141,10 @@ h1{
 .board-head[data-playlist="wins"] > :nth-child(4),
 .board-head[data-playlist="wins"] > :nth-child(5){text-align:right}
 .board-head[data-playlist="wins"] > :nth-child(6){text-align:center}
+/* Header grid mirrors .player-row.admin so the ACTIONS column lines up
+   with the Edit/Remove buttons instead of wrapping to a new line. */
+.board-head.admin{grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr auto}
+.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px auto}
 
 .player-row{
   display:grid;grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr;gap:12px;align-items:center;
@@ -705,9 +709,11 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .tab{flex:1;min-height:44px;white-space:nowrap}
   .share-btn{align-self:end}
   .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 96px 74px 1fr;padding:12px 14px;gap:8px}
+  .board-head.admin,
   .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 96px 74px 1fr auto}
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px}
+  .board-head.admin[data-playlist="wins"],
   .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px auto}
   .rank{font-size:18px}
   .p-name{font-size:14.5px}
@@ -731,6 +737,7 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .player-row:not([data-playlist="wins"]){
     grid-template-columns:40px minmax(0,1fr) 82px 64px;
   }
+  .board-head.admin:not([data-playlist="wins"]),
   .player-row.admin:not([data-playlist="wins"]){
     grid-template-columns:40px minmax(0,1fr) 82px 64px auto;
   }
@@ -739,6 +746,7 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 58px 56px 68px}
+  .board-head.admin[data-playlist="wins"],
   .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 58px 56px 68px auto}
   /* Matches column hidden on phones — wins + win% + streak are the stats
      people scan; matches is derivable from wins/win%. */

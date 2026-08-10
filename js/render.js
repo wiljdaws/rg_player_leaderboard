@@ -380,6 +380,7 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
   if (!body || !head) return;
 
   head.dataset.playlist = playlist;
+  head.classList.toggle("admin", !!admin);
   head.replaceChildren();
   if (playlist === "wins") {
     head.append(
