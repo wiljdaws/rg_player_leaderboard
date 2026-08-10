@@ -67,10 +67,11 @@ export function createReadTelemetryUploader({
 
   async function upload({ final = false } = {}) {
     if (!running || typeof isAdmin !== "function" || !isAdmin()) return;
-    const snap = budget?.snapshot?.() || { total: 0, perLabel: {}, tripped: false };
+    const snap = budget?.snapshot?.() || { total: 0, perLabel: {}, perLabelDenies: {}, tripped: false };
+    const denies = snap.perLabelDenies && typeof snap.perLabelDenies === "object" ? snap.perLabelDenies : {};
     // Skip identical payloads to avoid burning writes on quiet sessions.
     // A "final" flush always writes so we capture the ending state.
-    const payloadKey = `${snap.total}:${JSON.stringify(snap.perLabel || {})}:${snap.tripped ? 1 : 0}`;
+    const payloadKey = `${snap.total}:${JSON.stringify(snap.perLabel || {})}:${JSON.stringify(denies)}:${snap.tripped ? 1 : 0}`;
     if (!final && payloadKey === lastPayloadKey) return;
     lastPayloadKey = payloadKey;
 
@@ -81,6 +82,7 @@ export function createReadTelemetryUploader({
       updatedAt: new Date().toISOString(),
       total: Number(snap.total) || 0,
       perLabel: snap.perLabel && typeof snap.perLabel === "object" ? { ...snap.perLabel } : {},
+      perLabelDenies: { ...denies },
       tripped: Boolean(snap.tripped),
       userAgent: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 200) : "",
       source: normalizedSource,

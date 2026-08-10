@@ -89,6 +89,7 @@ export function createReadsView({ gateway }) {
           bySource: { site: 0, clanSite: 0, hud: 0, other: 0 },
           byHudVersion: {},
           byLabel: { site: [], hud: [] },
+          byDenyLabel: { site: [], hud: [], totalSite: 0, totalHud: 0 },
           byHudUser: [],
           bySiteSession: [],
         },

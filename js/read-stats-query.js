@@ -93,6 +93,8 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
   const byHudVersion = {};
   const siteLabels = {};
   const hudLabels = {};
+  const siteDenies = {};
+  const hudDenies = {};
   const hudUsersById = new Map();
   const sessionRows = [];
 
@@ -112,6 +114,7 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
     dayBucket.site += reads;
 
     accumulateLabels(siteLabels, doc.perLabel);
+    accumulateLabels(siteDenies, doc.perLabelDenies);
 
     sessionRows.push({
       sessionId: typeof doc.sessionId === "string" ? doc.sessionId : (doc.id || ""),
@@ -137,6 +140,7 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
     dayBucket.hud += reads;
 
     accumulateLabels(hudLabels, doc.perLabelReads);
+    accumulateLabels(hudDenies, doc.perLabelDenies);
 
     const versionKey = doc.scriptVersion != null
       ? String(doc.scriptVersion)
@@ -209,6 +213,12 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
     byLabel: {
       site: sortedLabelList(siteLabels),
       hud: sortedLabelList(hudLabels),
+    },
+    byDenyLabel: {
+      site: sortedLabelList(siteDenies),
+      hud: sortedLabelList(hudDenies),
+      totalSite: Object.values(siteDenies).reduce((s, v) => s + v, 0),
+      totalHud: Object.values(hudDenies).reduce((s, v) => s + v, 0),
     },
     byHudUser: Array.from(hudUsersById.values()).sort((a, b) => b.reads - a.reads),
     bySiteSession: sessionRows.sort((a, b) => b.total - a.total),

@@ -241,6 +241,7 @@ export function renderReadDashboard(container, data, options = {}) {
     renderVersionBreakdown(aggregate),
   ));
   container.appendChild(renderTopLabels(aggregate));
+  container.appendChild(renderTopDenies(aggregate));
   container.appendChild(renderHudUsersTable(aggregate));
   container.appendChild(renderSiteSessionsTable(aggregate));
 }
@@ -778,6 +779,26 @@ function renderTopLabels(agg) {
     el("div", { className: "rd-toplabels-grid" }, [
       labelColumn("Site", site.slice(0, 10), "var(--grad-a)"),
       labelColumn("HUD", hud.slice(0, 10), "var(--gain)"),
+    ]),
+  ]);
+}
+
+// Permission-denied breakdown by call-site, so we can see which rule is
+// tripping instead of just the total from Firebase's Rules metrics chart.
+function renderTopDenies(agg) {
+  const site = Array.isArray(agg?.byDenyLabel?.site) ? agg.byDenyLabel.site : [];
+  const hud = Array.isArray(agg?.byDenyLabel?.hud) ? agg.byDenyLabel.hud : [];
+  const totalSite = Number(agg?.byDenyLabel?.totalSite) || 0;
+  const totalHud = Number(agg?.byDenyLabel?.totalHud) || 0;
+  const total = totalSite + totalHud;
+  const subtitle = total === 0
+    ? "No permission-denied errors in range · rules are clean"
+    : `${fmtNum(total)} permission-denied across site + HUD in range`;
+  return el("section", { className: "rd-panel rd-panel-full" }, [
+    panelHead("Denies by call-site", subtitle),
+    el("div", { className: "rd-toplabels-grid" }, [
+      labelColumn("Site", site.slice(0, 10), "var(--warn, #f5a742)"),
+      labelColumn("HUD", hud.slice(0, 10), "var(--warn, #f5a742)"),
     ]),
   ]);
 }

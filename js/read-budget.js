@@ -68,6 +68,9 @@ export function createReadBudget(options = {}) {
   let windowStartMs = Number.isFinite(seed.windowStartMs) ? seed.windowStartMs : nowMs;
   let total = Number.isFinite(seed.total) ? seed.total : 0;
   let perLabel = seed.perLabel && typeof seed.perLabel === "object" ? { ...seed.perLabel } : {};
+  let perLabelDenies = seed.perLabelDenies && typeof seed.perLabelDenies === "object"
+    ? { ...seed.perLabelDenies }
+    : {};
   let trippedUntil = Number.isFinite(seed.trippedUntil) ? seed.trippedUntil : 0;
   let softWarnedForWindow = Boolean(seed.softWarnedForWindow);
   const tripListeners = new Set();
@@ -95,6 +98,7 @@ export function createReadBudget(options = {}) {
         JSON.stringify({
           total,
           perLabel,
+          perLabelDenies,
           windowStartMs,
           windowMs,
           trippedUntil,
@@ -126,6 +130,7 @@ export function createReadBudget(options = {}) {
     windowStartMs = atMs;
     total = 0;
     perLabel = {};
+    perLabelDenies = {};
     softWarnedForWindow = false;
     // Do NOT clear trippedUntil — the cool-off is independent of the window.
     // We only clear firedTripForActiveWindow once the cool-off itself expires
@@ -177,10 +182,19 @@ export function createReadBudget(options = {}) {
     }
   }
 
+  // Denies don't count against the budget, they just get tallied so the
+  // Reads dashboard can show which call-sites are tripping rules.
+  function chargeDeny(label) {
+    const safeLabel = typeof label === "string" && label ? label : "unlabeled";
+    perLabelDenies[safeLabel] = (perLabelDenies[safeLabel] || 0) + 1;
+    scheduleFlush();
+  }
+
   function snapshot() {
     return {
       total,
       perLabel: { ...perLabel },
+      perLabelDenies: { ...perLabelDenies },
       tripped: isTripped(),
       softTripped: total > soft,
       windowStartMs,
@@ -194,6 +208,7 @@ export function createReadBudget(options = {}) {
   function reset(opts = {}) {
     total = 0;
     perLabel = {};
+    perLabelDenies = {};
     windowStartMs = now();
     softWarnedForWindow = false;
     if (opts.resetTrip) {
@@ -216,6 +231,7 @@ export function createReadBudget(options = {}) {
 
   return {
     charge,
+    chargeDeny,
     snapshot,
     reset,
     onTrip,

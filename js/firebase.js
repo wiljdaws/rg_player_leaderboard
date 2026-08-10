@@ -405,9 +405,28 @@ export async function createFirebaseGateway() {
   if (blocked) announceTrip(budget.snapshot());
 
   async function chargedGetDocs(target, label) {
-    const snapshot = await getDocs(target);
-    budget.charge(label, Math.max(1, snapshot.size || 1));
-    return snapshot;
+    try {
+      const snapshot = await getDocs(target);
+      budget.charge(label, Math.max(1, snapshot.size || 1));
+      return snapshot;
+    } catch (err) {
+      if (String(err?.code ?? "").includes("permission-denied")) {
+        budget.chargeDeny(label);
+      }
+      throw err;
+    }
+  }
+
+  // Wraps a write so a permission-denied bumps the deny counter.
+  async function chargedWrite(label, fn) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (String(err?.code ?? "").includes("permission-denied")) {
+        budget.chargeDeny(label);
+      }
+      throw err;
+    }
   }
 
   // Wraps onSnapshot with the read budget.
@@ -446,7 +465,12 @@ export async function createFirebaseGateway() {
         if (cost > 0) budget.charge(label, cost);
         try { next?.(snap); } catch (err) { console.error("[rgLB] onSnapshot handler threw", err); }
       },
-      (err) => { try { error?.(err); } catch {} },
+      (err) => {
+        if (String(err?.code ?? "").includes("permission-denied")) {
+          budget.chargeDeny(label);
+        }
+        try { error?.(err); } catch {}
+      },
     );
 
     const wrapped = () => {
@@ -583,11 +607,14 @@ export async function createFirebaseGateway() {
     signIn: () => signInWithPopup(auth, provider),
     signOut: () => signOut(auth),
     loadIconKey,
-    addPlayer: (payload) => addDoc(leaderboard, { ...payload, lastWriteAt: serverTimestamp() }),
-    updatePlayer: (id, payload) => updateDoc(doc(db, "leaderboard", id), { ...payload, lastWriteAt: serverTimestamp() }),
-    deletePlayer: (id) => deleteDoc(doc(db, "leaderboard", id)),
-    addIcon: (payload) => addDoc(iconKey, payload),
-    deleteIcon: (id) => deleteDoc(doc(db, "iconKey", id)),
+    addPlayer: (payload) => chargedWrite("addPlayer", () =>
+      addDoc(leaderboard, { ...payload, lastWriteAt: serverTimestamp() })),
+    updatePlayer: (id, payload) => chargedWrite("updatePlayer", () =>
+      updateDoc(doc(db, "leaderboard", id), { ...payload, lastWriteAt: serverTimestamp() })),
+    deletePlayer: (id) => chargedWrite("deletePlayer", () =>
+      deleteDoc(doc(db, "leaderboard", id))),
+    addIcon: (payload) => chargedWrite("addIcon", () => addDoc(iconKey, payload)),
+    deleteIcon: (id) => chargedWrite("deleteIcon", () => deleteDoc(doc(db, "iconKey", id))),
     // Read budget handle — admin widget reads snapshots off this on a poll.
     readBudget: budget,
     // Cross-session telemetry: uploads the current read-budget snapshot to
@@ -595,8 +622,8 @@ export async function createFirebaseGateway() {
     // specific features. Merge-write so periodic polls keep updating the
     // same doc without re-creating it. Rules restrict this collection to
     // admin writers.
-    setReadStat: (docKey, payload) =>
-      setDoc(doc(db, "admin_read_stats", docKey), payload, { merge: true }),
+    setReadStat: (docKey, payload) => chargedWrite("setReadStat", () =>
+      setDoc(doc(db, "admin_read_stats", docKey), payload, { merge: true })),
     // Query the admin_read_stats collection for a date range. Both `from`
     // and `to` are inclusive `YYYY-MM-DD` strings; the field they compare
     // against is a string, and `YYYY-MM-DD` sorts lexicographically the

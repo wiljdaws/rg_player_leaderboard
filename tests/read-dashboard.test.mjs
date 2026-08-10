@@ -308,8 +308,8 @@ test("renderReadDashboard: renders without throwing on valid data", async () => 
     assert.ok(findByClass(container, "rd-donut").length >= 1, "donut svg");
     // Version breakdown present.
     assert.ok(findByClass(container, "rd-verbar-row").length >= 1, "version rows");
-    // Top labels list has both site + hud columns.
-    assert.equal(findByClass(container, "rd-toplabels-col").length, 2, "two label columns");
+    // Top labels + top denies each render site + hud columns (4 total).
+    assert.equal(findByClass(container, "rd-toplabels-col").length, 4, "four label columns");
     // Tables rendered.
     assert.equal(findByAttr(container, "data-table", "hud-users").length, 1, "hud users table");
     assert.equal(findByAttr(container, "data-table", "site-sessions").length, 1, "site sessions table");
