@@ -167,10 +167,15 @@ function staticJsonUrl(playlist, template = STATIC_JSON_URL_TEMPLATE) {
   return template.replace("{playlist}", encodeURIComponent(playlist));
 }
 
-// JSON rows drop id/playlist/sourceUserId to save bytes; put them back so
-// the validator accepts the row. Rows that already have `id` pass through.
+// JSON rows drop the playlist and (for HUD-sourced rows) sourceUserId to save
+// bytes; put them back so the validator accepts the row. Tournament JSON keeps
+// the doc id directly and has no uid — treat it separately.
 function expandCompactRow(row, playlist) {
-  if (!row || typeof row !== "object" || row.id) return row;
+  if (!row || typeof row !== "object") return row;
+  if (playlist === "tournament") {
+    return { ...row, playlist };
+  }
+  if (row.id) return row;
   const uid = typeof row.uid === "string" ? row.uid : "";
   return {
     ...row,
@@ -256,6 +261,13 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
         return;
       }
 
+      if (response.status === 404) {
+        // Blob doesn't exist yet (new playlist, first deploy, etc). Trip
+        // the fallback right away instead of pretending it's a flaky
+        // network and making the user wait 3 poll cycles.
+        consecutiveFailures = maxFailures;
+        throw new Error(`Static JSON not found (404) for playlist "${playlist}".`);
+      }
       if (!response.ok) {
         throw new Error(`Static JSON fetch failed with HTTP ${response.status}.`);
       }
@@ -603,10 +615,6 @@ export async function createFirebaseGateway() {
   // Anything unrecognized is treated as "firestore" so a corrupt config can't
   // strand the site on a broken path.
   function subscribePlaylistDispatch(playlist, handlers) {
-    // Tournament is manually curated and low-volume — no CDN pipeline yet, so
-    // always use Firestore directly rather than trying the (missing) static
-    // JSON and falling back three failures later.
-    if (playlist === "tournament") return subscribePlaylist(playlist, handlers);
     const source = resolveReadSource();
     if (source === "static") {
       return subscribePlaylistJson(playlist, handlers, {

@@ -9,7 +9,7 @@ import { createFirebaseGateway } from "./firebase.js";
 import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
-import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache } from "./local-cache.js";
+import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache, clearPlaylistCache } from "./local-cache.js";
 import { createReadTelemetryUploader } from "./read-telemetry.js";
 import { createReadsView } from "./reads-view.js";
 import { createPublishView } from "./publish-pipeline.js";
@@ -337,6 +337,16 @@ function render() {
           if (!ok) return;
         }
         clearAdminRosterCache();
+        if (player.playlist === "tournament") {
+          // Optimistic: drop the row locally so admin sees it disappear
+          // right away; the CDN JSON catches up within ~1 min. Also purge
+          // the playlist cache so a page refresh doesn't paint the row
+          // back from stale localStorage.
+          stashTournamentTombstone(player.id);
+          clearPlaylistCache("tournament");
+          state.rows = applyTournamentPending(state.rows);
+          render();
+        }
         return writes?.deletePlayer(player.id, player.playlist);
       },
     });
@@ -488,6 +498,69 @@ function lookupRosterCosmetic(rawName) {
   const key = String(rawName || "").trim().toLowerCase();
   if (!key) return null;
   return tournamentRoster.get(key) || null;
+}
+
+// Optimistic overlay for the tournament tab. The CDN JSON lags admin writes
+// by up to ~90s, so we stash pending rows/tombstones locally and merge them
+// into every feed update. Once the CDN reflects a pending change, it's
+// dropped from here.
+const tournamentPending = new Map();
+const PENDING_TTL_MS = 90_000;
+let pendingCounter = 0;
+
+function stashPendingTournament(kind, payload) {
+  const tempId = `pending:${++pendingCounter}`;
+  tournamentPending.set(tempId, { kind, payload, ts: Date.now() });
+  return tempId;
+}
+
+function stashTournamentTombstone(id) {
+  if (!id) return;
+  tournamentPending.set(`tomb:${id}`, { kind: "removed", id, ts: Date.now() });
+}
+
+function matchesRow(pending, row) {
+  return pending?.payload
+      && String(row?.name || "").trim() === String(pending.payload.name || "").trim()
+      && Number(row?.score) === Number(pending.payload.score)
+      && Number(row?.matches) === Number(pending.payload.matches);
+}
+
+function applyTournamentPending(rows) {
+  if (!tournamentPending.size) return rows;
+  const now = Date.now();
+  const removedIds = new Set();
+  const adds = [];
+  for (const [key, entry] of tournamentPending) {
+    if (now - entry.ts > PENDING_TTL_MS) {
+      tournamentPending.delete(key);
+      continue;
+    }
+    if (entry.kind === "removed") {
+      if (!rows.some(r => r.id === entry.id)) {
+        tournamentPending.delete(key);
+        continue;
+      }
+      removedIds.add(entry.id);
+    } else if (entry.kind === "added") {
+      if (rows.some(r => matchesRow(entry, r))) {
+        tournamentPending.delete(key);
+        continue;
+      }
+      adds.push({
+        id: key,
+        playlist: "tournament",
+        name: entry.payload.name,
+        score: Number(entry.payload.score) || 0,
+        matches: Number(entry.payload.matches) || 0,
+        flag: entry.payload.flag || "",
+        icons: entry.payload.icons || "",
+        _pending: true,
+      });
+    }
+  }
+  const filtered = rows.filter(r => !removedIds.has(r.id));
+  return adds.length ? [...adds, ...filtered] : filtered;
 }
 
 // Styled confirm dialog. Native window.confirm() looks foreign on the
@@ -715,6 +788,11 @@ function wireTournamentQuickAdd() {
       const saved = await writes.addPlayer(payload);
       if (saved) {
         clearAdminRosterCache();
+        stashPendingTournament("added", payload);
+        if (state.playlist === "tournament") {
+          state.rows = applyTournamentPending(state.rows);
+          render();
+        }
         setTqStatus(`✓ Added ${payload.name}. Row appears in the board within a second.`, "success");
         form.reset();
         nameEl.focus();
@@ -749,6 +827,14 @@ function wireTournamentQuickAdd() {
     const ok = await writes.clearTournament();
     if (ok) {
       clearAdminRosterCache();
+      // Wipe the whole board locally + drop any pending overlays so admin
+      // sees the empty state right away.
+      tournamentPending.clear();
+      clearPlaylistCache("tournament");
+      if (state.playlist === "tournament") {
+        state.rows = [];
+        render();
+      }
       setTqStatus("Tournament cleared.", "success");
     } else {
       setTqStatus("Clear failed.", "error");
@@ -790,10 +876,17 @@ function wireTournamentQuickAdd() {
           flag: cosmetic.flag || "",
         });
         const ok = await writes?.addPlayer(payload);
-        if (ok) added += 1;
+        if (ok) {
+          added += 1;
+          stashPendingTournament("added", payload);
+        }
       } catch (err) {
         errors.push(`${row.name}: ${err?.message || "add failed"}`);
       }
+    }
+    if (state.playlist === "tournament" && added) {
+      state.rows = applyTournamentPending(state.rows);
+      render();
     }
     clearAdminRosterCache();
     if (errors.length) {
@@ -1085,7 +1178,9 @@ async function boot() {
     onRows(raw, metadata) {
       if (metadata.playlist !== state.playlist) return;
       const normalized = normalizePlaylistRows(raw, state.playlist);
-      state.rows = normalized.rows;
+      state.rows = state.playlist === "tournament"
+        ? applyTournamentPending(normalized.rows)
+        : normalized.rows;
       state.quarantined = normalized.quarantined;
       historyStore.record(state.playlist, state.rows);
       flagDirectory.registerRows(state.rows);

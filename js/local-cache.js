@@ -64,3 +64,6 @@ export function writeAdminRosterCache(rows) {
 export function clearAdminRosterCache() {
   try { storage()?.removeItem(ADMIN_ROSTER); } catch {}
 }
+export function clearPlaylistCache(playlist) {
+  try { storage()?.removeItem(`${PLAYLIST_PREFIX}${playlist}`); } catch {}
+}
