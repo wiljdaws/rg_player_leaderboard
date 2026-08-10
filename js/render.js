@@ -325,6 +325,12 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   ident.append(nameWrap);
   row.append(ident);
 
+  // Spacer cell occupies the 1fr slack column in .player-row's grid,
+  // keeping the numeric columns pinned near the right edge instead of
+  // drifting rightward on wide screens. Header row appends a matching
+  // .col-spacer span so column indexes line up.
+  row.append(node("div", { className: "col-spacer" }));
+
   if (playlist === "wins") {
     row.append(node("div", { className: "p-score", text: player.wins.toLocaleString() }));
     row.append(node("div", { className: "p-score small", text: player.matches.toLocaleString() }));
@@ -382,10 +388,15 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
   head.dataset.playlist = playlist;
   head.classList.toggle("admin", !!admin);
   head.replaceChildren();
+  // Empty span between Player and the numeric columns is a spacer that
+  // occupies the 1fr slack column in the grid — keeps MMR/Wins from
+  // drifting rightward away from the player name on wide screens. Must
+  // match the empty div appended in playerRow() below.
   if (playlist === "wins") {
     head.append(
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
+      node("span", { className: "col-spacer" }),
       node("span", { className: "num", text: "Wins" }),
       node("span", { className: "num", text: "Matches" }),
       node("span", { className: "num", text: "Win %" }),
@@ -396,6 +407,7 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
     head.append(
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
+      node("span", { className: "col-spacer" }),
       node("span", { className: "num", text: "MMR" }),
       node("span", { text: "Streak" }),
       node("span", { text: "Recent" }),

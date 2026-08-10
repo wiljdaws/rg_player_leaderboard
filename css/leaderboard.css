@@ -128,10 +128,12 @@ h1{
   overflow:hidden;
 }
 .board-head{
-  /* Recent is a fixed 120px so its header sits directly over the chip.
-     Was 1fr — worked for non-admin because it ran to the right edge, but
-     in admin mode it wedged 'RECENT' against the actions column. */
-  display:grid;grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px;gap:12px;align-items:center;
+  /* Player is capped at 320px and a 1fr spacer column sits between Player
+     and MMR to absorb slack. That keeps the numeric columns (MMR / Streak /
+     Recent / Actions) hugging the right edge instead of drifting away from
+     the player name on wide screens. Header + row grids must stay in sync,
+     so both add a matching empty span in JS to occupy the spacer slot. */
+  display:grid;grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
   padding:15px 22px;border-bottom:1px solid var(--line);
   font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.26em;
   text-transform:uppercase;color:var(--ink-dim);
@@ -139,31 +141,33 @@ h1{
 }
 /* Headers align with the data cell underneath: numeric columns and the
    momentum / streak / actions columns are all right-aligned in the row,
-   so their labels are too. Rank + Player stay left. */
+   so their labels are too. Rank + Player stay left. Columns 4-6 (MMR,
+   Streak, Recent) and the trailing Actions column all right-align. */
 .board-head .num{text-align:right}
 .board-head > :nth-child(4),
 .board-head > :nth-child(5),
+.board-head > :nth-child(6),
 .board-head > :last-child{text-align:right}
-.board-head[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px}
-.board-head[data-playlist="wins"] > :nth-child(4),
+.board-head[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
 .board-head[data-playlist="wins"] > :nth-child(5),
 .board-head[data-playlist="wins"] > :nth-child(6),
+.board-head[data-playlist="wins"] > :nth-child(7),
 .board-head[data-playlist="wins"] > :last-child{text-align:right}
 /* Header grid mirrors .player-row.admin so the ACTIONS column lines up
    with the Edit/Remove buttons instead of wrapping to a new line. */
-.board-head.admin{grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px auto}
-.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,1fr) 90px 90px 80px 84px auto}
+.board-head.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px auto}
+.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px auto}
 
 .player-row{
-  display:grid;grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px;gap:12px;align-items:center;
+  display:grid;grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
   padding:14px 22px;border-bottom:1px solid var(--line);
   transition:background .16s ease;position:relative;overflow:hidden;
 }
-.player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,1fr) 90px 90px 80px 84px}
+.player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
-.player-row.admin{grid-template-columns:64px minmax(200px,1fr) 140px 92px 120px auto}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,1fr) 90px 90px 80px 84px auto}
+.player-row.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px auto}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px auto}
 
 /* =========================================================
    Top-3 / top-10 podium treatment — applied to every playlist.
@@ -716,13 +720,17 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .tabs{display:flex;width:100%;overflow-x:auto}
   .tab{flex:1;min-height:44px;white-space:nowrap}
   .share-btn{align-self:end}
-  .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 96px 74px 100px;padding:12px 14px;gap:8px}
+  /* Same 6-col (7 admin) shape as desktop — the 0 spacer keeps the column
+     count matching the DOM (empty span between Player and MMR) so the
+     header labels sit directly above their data. Player takes remaining
+     slack via 1fr since screen width is tight on tablets. */
+  .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px;padding:12px 14px;gap:8px}
   .board-head.admin,
-  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 96px 74px 100px auto}
+  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px auto}
   .board-head[data-playlist="wins"],
-  .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px}
+  .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px}
   .board-head.admin[data-playlist="wins"],
-  .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 68px 68px 66px 70px auto}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px auto}
   .rank{font-size:18px}
   .p-name{font-size:14.5px}
   .p-score{font-size:16px}
@@ -739,27 +747,31 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 
   /* Names were getting truncated to 3-4 chars on phones. Drop the "Recent"
      column on ranked and the "Matches" column on wins to give names room.
-     Streak stays because a "🔥 x12" pill is scannable and small. */
+     Streak stays because a "🔥 x12" pill is scannable and small. The extra
+     0-width column matches the spacer span inserted between Player and MMR
+     so header + row column indexes stay aligned. */
   .board-head,.player-row{padding:11px 12px;gap:8px}
   .board-head:not([data-playlist="wins"]),
   .player-row:not([data-playlist="wins"]){
-    grid-template-columns:40px minmax(0,1fr) 82px 64px;
+    grid-template-columns:40px minmax(0,1fr) 0 82px 64px;
   }
   .board-head.admin:not([data-playlist="wins"]),
   .player-row.admin:not([data-playlist="wins"]){
-    grid-template-columns:40px minmax(0,1fr) 82px 64px auto;
+    grid-template-columns:40px minmax(0,1fr) 0 82px 64px auto;
   }
-  .board-head:not([data-playlist="wins"]) > :nth-child(5),
+  /* Hide the Recent column (was nth-child(5), now nth-child(6) with spacer). */
+  .board-head:not([data-playlist="wins"]) > :nth-child(6),
   .player-row:not([data-playlist="wins"]) .momentum-cell{display:none}
 
   .board-head[data-playlist="wins"],
-  .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 58px 56px 68px}
+  .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px}
   .board-head.admin[data-playlist="wins"],
-  .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 58px 56px 68px auto}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px auto}
   /* Matches column hidden on phones — wins + win% + streak are the stats
-     people scan; matches is derivable from wins/win%. */
-  .board-head[data-playlist="wins"] > :nth-child(4),
-  .player-row[data-playlist="wins"] > :nth-child(4){display:none}
+     people scan; matches is derivable from wins/win%. Position shifted
+     from nth-child(4) to nth-child(5) with the spacer inserted. */
+  .board-head[data-playlist="wins"] > :nth-child(5),
+  .player-row[data-playlist="wins"] > :nth-child(5){display:none}
 
   .p-flag{width:28px;height:28px}
   .p-name{font-size:14px}
