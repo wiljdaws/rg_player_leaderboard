@@ -523,12 +523,16 @@ function wireTournamentQuickAdd(writes) {
       const saved = await writes?.addPlayer(payload);
       if (saved) {
         clearAdminRosterCache();
-        setTqStatus(`✓ Added ${payload.name} — appears in the board within a second.`, "success");
+        setTqStatus(`✓ Added ${payload.name}. Row appears in the board within a second.`, "success");
         form.reset();
         nameEl.focus();
         setTimeout(() => setTqStatus(""), 4000);
       } else {
-        setTqStatus("Add failed — check the write-status pill for details.", "error");
+        // AdminWriteService.run catches the SDK error and paints it into
+        // #writeStatus. Mirror that here so the quick-add pill shows the
+        // actual reason instead of a generic "check the other pill".
+        const reason = document.getElementById("writeStatus")?.textContent?.trim();
+        setTqStatus(reason ? `Add failed: ${reason}` : "Add failed.", "error");
       }
     } catch (err) {
       setTqStatus(err?.message || "Add failed.", "error");
