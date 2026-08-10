@@ -344,6 +344,9 @@ function render() {
     });
   }
   syncPlayerDialog();
+  // renderIconKey unhides the icon-key section based on data; re-apply the
+  // tournament-only overrides so a late icons load doesn't reveal it.
+  syncTournamentAdmin();
 }
 
 function openPlayerDetails(player) {
