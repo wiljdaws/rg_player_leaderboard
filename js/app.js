@@ -439,6 +439,64 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   listenerManager?.activate(playlist);
 }
 
+// Map of lowercase name to the freshest cosmetic snapshot (flag + icons)
+// we've seen. Populated the first time the Tournament tab activates as
+// admin; used to auto-fill flag/icons when a known name is chosen from
+// the autocomplete list.
+const tournamentRoster = new Map();
+let tournamentRosterLoaded = false;
+
+function primeTournamentRoster() {
+  if (tournamentRosterLoaded) return;
+  const cached = readAdminRosterCache();
+  if (cached?.rows?.length) applyRoster(cached.rows);
+  fetch(ROSTER_STATE_URL, { cache: "no-store" })
+    .then(r => r.ok ? r.json() : null)
+    .then(json => {
+      if (!json?.snapshot) return;
+      const raw = json.snapshot.map(hydrateStateRow);
+      writeAdminRosterCache(raw);
+      applyRoster(raw);
+    })
+    .catch(() => {});
+  tournamentRosterLoaded = true;
+}
+
+function applyRoster(rows) {
+  for (const row of rows) {
+    const name = typeof row?.name === "string" ? row.name.trim() : "";
+    if (!name) continue;
+    const key = name.toLowerCase();
+    // Prefer entries that have a flag over ones that don't.
+    const existing = tournamentRoster.get(key);
+    if (existing?.flag && !row?.flag) continue;
+    tournamentRoster.set(key, {
+      name,
+      flag: typeof row?.flag === "string" ? row.flag : "",
+      icons: Array.isArray(row?.icons) ? row.icons.join(",")
+        : typeof row?.icons === "string" ? row.icons : "",
+    });
+  }
+  const list = document.getElementById("tqNameSuggestions");
+  if (list) {
+    list.replaceChildren();
+    const names = [...tournamentRoster.values()]
+      .map(v => v.name)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    for (const n of names) {
+      const opt = document.createElement("option");
+      opt.value = n;
+      list.append(opt);
+    }
+  }
+}
+
+function lookupRosterCosmetic(rawName) {
+  const key = String(rawName || "").trim().toLowerCase();
+  if (!key) return null;
+  return tournamentRoster.get(key) || null;
+}
+
 // Show the quick-add strip only on the Tournament tab for admins.
 // Also hides the icon key + full admin panel while on Tournament since
 // those aren't relevant to the manual entry flow.
@@ -451,6 +509,7 @@ function syncTournamentAdmin() {
   if (onTournament) {
     if (iconKey) iconKey.hidden = true;
     if (adminBox) adminBox.hidden = true;
+    if (state.admin) primeTournamentRoster();
   } else {
     // Restore admin panel visibility per the same rule the auth observer uses.
     if (adminBox) adminBox.hidden = !state.admin && !READ_BUDGET_DEBUG;
@@ -518,13 +577,14 @@ function wireTournamentQuickAdd() {
         setTqStatus("Not signed in yet. Wait for admin auth to finish.", "error");
         return;
       }
+      const cosmetic = lookupRosterCosmetic(nameEl.value) || {};
       const payload = buildPlayerPayload({
         playlist: "tournament",
         name: nameEl.value,
         score: scoreEl.value,
         matches: matchesEl.value,
-        icons: "",
-        flag: "",
+        icons: cosmetic.icons || "",
+        flag: cosmetic.flag || "",
       });
       const saved = await writes.addPlayer(payload);
       if (saved) {
@@ -588,13 +648,14 @@ function wireTournamentQuickAdd() {
     let added = 0;
     for (const row of rows) {
       try {
+        const cosmetic = lookupRosterCosmetic(row.name) || {};
         const payload = buildPlayerPayload({
           playlist: "tournament",
           name: row.name,
           score: row.score,
           matches: row.matches,
-          icons: "",
-          flag: "",
+          icons: cosmetic.icons || "",
+          flag: cosmetic.flag || "",
         });
         const ok = await writes?.addPlayer(payload);
         if (ok) added += 1;

@@ -253,6 +253,11 @@ h1{
   color:var(--ink-dim);font-family:var(--display);font-weight:700;font-size:12px;
   position:relative;cursor:help;
 }
+/* Tournament flags without a URL: skip the "?" glyph and the help cursor
+   so the manual-entry row looks intentional rather than incomplete. */
+.p-flag.flag-empty-slot{
+  background:transparent;border-color:transparent;cursor:default;
+}
 .p-flag img{width:100%;height:100%;object-fit:cover;border-radius:9px}
 /* Activity dot on the top-right corner of the flag. Colored buckets
    mirror the clan site's freshness signal:

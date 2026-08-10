@@ -129,9 +129,15 @@ export function initials(name) {
 // When a flag URL is missing or 404s the container shows a "?" so the space
 // stays the same size instead of collapsing. Reads cleaner than the
 // player's initial (which was easy to mistake for a real avatar letter).
-function flagCell(player, className = "p-flag") {
+function flagCell(player, className = "p-flag", { hideMissing = false } = {}) {
   const wrap = node("div", { className });
   const fallback = () => {
+    // Tournament rows opt out of the "?" placeholder since a lot of manual
+    // entries won't have a flag and the ? just adds visual noise.
+    if (hideMissing) {
+      wrap.classList.add("no-flag", "flag-empty-slot");
+      return;
+    }
     wrap.textContent = "?";
     wrap.classList.add("no-flag");
   };
@@ -292,10 +298,14 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   // Flag carries the activity dot and "Last played" hover tooltip, but only
   // for HUD-synced tabs. Tournament rows are hand-entered, no session data,
   // so the dot and tooltip would just be noise.
-  const flag = flagCell(player);
+  const flag = flagCell(player, "p-flag", { hideMissing: playlist === "tournament" });
   if (playlist !== "tournament") {
     flag.classList.add(activityStatus(player));
     attachTooltip(flag, formatLastPlayed(player));
+  } else {
+    // Hides the .p-flag::after grey dot (the default state before any
+    // status-* class kicks in).
+    flag.classList.add("status-none");
   }
   ident.append(flag);
   const nameWrap = node("div", { className: "p-name-wrap" });
