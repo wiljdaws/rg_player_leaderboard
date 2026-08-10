@@ -17,6 +17,7 @@ import {
   writePlaylistCache,
 } from "./local-cache.js";
 import { createReadBudget } from "./read-budget.js";
+import { log } from "./log.js";
 
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
 const APP_CHECK_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app-check.js`;
@@ -311,7 +312,7 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
         try { handlers.error?.(wrapped); } catch {}
 
         if (typeof firestoreFallback === "function") {
-          logger?.info?.("[rgLB] static JSON path failing; switching to Firestore fallback");
+          logger?.info?.("[RG SITE] static JSON path failing; switching to Firestore fallback");
           if (intervalHandle) {
             clearIntervalImpl(intervalHandle);
             intervalHandle = null;
@@ -319,7 +320,7 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
           try {
             fallbackUnsubscribe = firestoreFallback(playlist, handlers) || null;
           } catch (fallbackError) {
-            logger?.error?.("[rgLB] Firestore fallback failed to start", fallbackError);
+            logger?.error?.("[RG SITE] Firestore fallback failed to start", fallbackError);
           }
         }
       }
@@ -389,8 +390,9 @@ export async function createFirebaseGateway() {
       provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
       isTokenAutoRefreshEnabled: true,
     });
+    log.info("appcheck", "initialized with reCAPTCHA v3", { siteKey: RECAPTCHA_SITE_KEY.slice(0, 12) + "…" });
   } catch (error) {
-    console.warn("[firebase] App Check init failed", error);
+    log.error("appcheck", "init failed", error);
   }
 
   const db = getFirestore(app);
@@ -468,9 +470,13 @@ export async function createFirebaseGateway() {
   // pill, quick-add pill) see a friendly message like "your ad blocker is
   // blocking Firebase" instead of the SDK's raw code.
   async function chargedWrite(label, fn) {
+    const startedAt = Date.now();
     try {
-      return await fn();
+      const result = await fn();
+      log.info("write", `${label} ok`, { ms: Date.now() - startedAt });
+      return result;
     } catch (err) {
+      log.error("write", `${label} failed`, err);
       if (String(err?.code ?? "").includes("permission-denied")) {
         budget.chargeDeny(label);
       }
@@ -519,7 +525,7 @@ export async function createFirebaseGateway() {
           changeCount: snap.docChanges().length,
         });
         if (cost > 0) budget.charge(label, cost);
-        try { next?.(snap); } catch (err) { console.error("[rgLB] onSnapshot handler threw", err); }
+        try { next?.(snap); } catch (err) { console.error("[RG SITE] onSnapshot handler threw", err); }
       },
       (err) => {
         if (String(err?.code ?? "").includes("permission-denied")) {
@@ -646,7 +652,7 @@ export async function createFirebaseGateway() {
   // Announce the initial mode so it's obvious in DevTools which path a
   // client is running. Individual subscriptions re-resolve, but this is the
   // single "why is this tab acting weird" breadcrumb during rollout.
-  console.info("[rgLB] read source:", resolveReadSource());
+  log.info("boot", "read source resolved", { source: resolveReadSource() });
 
   async function loadIconKey(force = false) {
     if (!force && iconKeyCache) return iconKeyCache;

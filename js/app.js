@@ -10,6 +10,7 @@ import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
 import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache, clearPlaylistCache } from "./local-cache.js";
+import { log } from "./log.js";
 import { createReadTelemetryUploader } from "./read-telemetry.js";
 import { createReadsView } from "./reads-view.js";
 import { createPublishView } from "./publish-pipeline.js";
@@ -149,7 +150,7 @@ function paintReadBudgetWidget(snap) {
   const trippedUntil = Number(snap.trippedUntil) || 0;
   if (snap.tripped && trippedUntil !== readBudgetLastTripAt) {
     readBudgetLastTripAt = trippedUntil;
-    console.info("[rgLB] read budget hard cap tripped", snap);
+    console.info("[RG SITE] read budget hard cap tripped", snap);
   }
 }
 
@@ -342,12 +343,21 @@ function render() {
           // right away; the CDN JSON catches up within ~1 min. Also purge
           // the playlist cache so a page refresh doesn't paint the row
           // back from stale localStorage.
+          log.info("tournament", "delete requested", { id: player.id, name: player.name });
           stashTournamentTombstone(player.id);
           clearPlaylistCache("tournament");
           state.rows = applyTournamentPending(state.rows);
           render();
+        } else {
+          log.info("write", "delete requested", { id: player.id, playlist: player.playlist });
         }
-        return writes?.deletePlayer(player.id, player.playlist);
+        const result = await writes?.deletePlayer(player.id, player.playlist);
+        if (result === false) {
+          log.error("write", "delete failed", new Error(`deletePlayer returned falsy for ${player.id}`));
+        } else {
+          log.info("write", "delete completed", { id: player.id, playlist: player.playlist });
+        }
+        return result;
       },
     });
     renderIconKey({
@@ -407,6 +417,7 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
     // Swap between the two admin views if we're moving reads <-> publish.
     if (prev === "reads") readsView?.deactivate();
     if (prev === "publish") publishView?.deactivate();
+    log.info("playlist", "switching", { from: prev, to: playlist });
     state.playlist = playlist;
     state.rows = [];
     state.quarantined = [];
@@ -852,10 +863,19 @@ function wireTournamentQuickAdd() {
       // of creating a duplicate doc. Prevents the "two rows for the same
       // player" bug when admin types the same name twice.
       const existing = findTournamentRowByName(payload.name);
+      log.info("tournament", existing ? "quick-add upsert" : "quick-add insert", {
+        name: payload.name,
+        score: payload.score,
+        matches: payload.matches,
+        existingId: existing?.id || null,
+      });
       const saved = existing
         ? await writes.updatePlayer(existing.id, payload)
         : await writes.addPlayer(payload);
       if (saved) {
+        log.info("tournament", existing ? "quick-add upsert ok" : "quick-add insert ok", {
+          name: payload.name, id: existing?.id || saved?.id || null,
+        });
         clearAdminRosterCache();
         // For new adds, capture the real Firestore doc id off the returned
         // DocumentReference so a rapid follow-up submit with the same name
@@ -876,9 +896,11 @@ function wireTournamentQuickAdd() {
         // #writeStatus. Mirror that here so the quick-add pill shows the
         // actual reason instead of a generic "check the other pill".
         const reason = document.getElementById("writeStatus")?.textContent?.trim();
+        log.error("tournament", "quick-add failed", new Error(reason || "unknown"));
         setTqStatus(reason ? `Add failed: ${reason}` : "Add failed.", "error");
       }
     } catch (err) {
+      log.error("tournament", "quick-add threw", err);
       setTqStatus(err?.message || "Add failed.", "error");
     } finally {
       if (submitBtn) submitBtn.disabled = false;
@@ -1125,10 +1147,19 @@ function wireEvents() {
       // (leaderboard vs tournament_leaderboard). buildPlayerPayload strips it
       // for the ranked flow, so re-attach from the row we're editing. Also
       // required by the tournament rule's hasOnly() field allowlist.
+      log.info("write", "update requested", {
+        id: player.id,
+        playlist: player.playlist,
+        name: payload.name,
+        score: payload.score,
+        matches: payload.matches,
+      });
       const saved = await writes?.updatePlayer(player.id, {
         ...payload,
         playlist: player.playlist,
       });
+      if (!saved) log.error("write", "update failed", new Error(`updatePlayer returned falsy for ${player.id}`));
+      else log.info("write", "update completed", { id: player.id, playlist: player.playlist });
       if (saved) {
         clearAdminRosterCache();
         // Optimistic update: show the new values in the tournament tab
@@ -1199,12 +1230,18 @@ function wireEvents() {
 }
 
 async function boot() {
+  log.info("boot", "starting", {
+    href: globalThis.location?.href,
+    userAgent: globalThis.navigator?.userAgent?.slice(0, 60),
+  });
   wireEvents();
   render();
 
   try {
     gateway = await createFirebaseGateway();
+    log.info("boot", "firebase gateway ready");
   } catch (error) {
+    log.error("boot", "firebase gateway failed to load", error);
     state.status = {
       kind: "error",
       message: error?.message || "Firebase could not be loaded. Cached rankings will stay visible if available.",

@@ -56,7 +56,7 @@ export function createReadTelemetryUploader({
       if (typeof raw !== "string" || !raw.length) return null;
       return raw.slice(0, 200);
     } catch (err) {
-      logger?.warn?.("[rgLB] resolveAdminEmail failed:", err?.message || err);
+      logger?.warn?.("[RG SITE] resolveAdminEmail failed:", err?.message || err);
       return null;
     }
   }
@@ -97,7 +97,7 @@ export function createReadTelemetryUploader({
     try {
       await gateway.setReadStat(docKey(payload.date), payload);
     } catch (err) {
-      logger?.warn?.("[rgLB] telemetry upload failed:", err?.message || err);
+      logger?.warn?.("[RG SITE] telemetry upload failed:", err?.message || err);
     }
   }
 

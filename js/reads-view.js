@@ -101,7 +101,7 @@ export function createReadsView({ gateway }) {
       paintData(data);
     } catch (err) {
       if (token !== activeFetchToken) return;
-      console.error("[rgLB] read-stats fetch failed:", err);
+      console.error("[RG SITE] read-stats fetch failed:", err);
       // Still render the dashboard with whatever we last had so the
       // header + refresh + export buttons stay usable. If nothing has
       // ever loaded, render an empty shape.

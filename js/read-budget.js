@@ -161,7 +161,7 @@ export function createReadBudget(options = {}) {
     if (total > soft && !softWarnedForWindow) {
       softWarnedForWindow = true;
       logger?.warn?.(
-        `[rgLB] read budget soft cap crossed: ${total}/${soft} in current window`,
+        `[RG SITE] read budget soft cap crossed: ${total}/${soft} in current window`,
       );
     }
 
@@ -173,7 +173,7 @@ export function createReadBudget(options = {}) {
       persistNow(); // synchronous — the trip is load-bearing
       const snap = snapshot();
       for (const cb of tripListeners) {
-        try { cb(snap); } catch (err) { logger?.error?.("[rgLB] trip listener threw", err); }
+        try { cb(snap); } catch (err) { logger?.error?.("[RG SITE] trip listener threw", err); }
       }
     } else if (rolled) {
       scheduleFlush();

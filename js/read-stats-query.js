@@ -16,7 +16,7 @@
 //   - 3 admin sessions/day × 7 days = ~21 admin docs
 //   - Total: ~105 reads per fetch, cached for 5 min
 //
-// Every fetch logs an `[rgLB] read-stats fetched` line to console.info so
+// Every fetch logs an `[RG SITE] read-stats fetched` line to console.info so
 // the actual cost can be audited in DevTools. Turn off with the browser
 // devtools log filter if it gets noisy.
 
@@ -309,7 +309,7 @@ export function createReadStatsQuery({
     try {
       snapshot = await gateway.fetchReadStatsSnapshot();
     } catch (err) {
-      logger?.warn?.("[rgLB] read-stats snapshot fetch failed:", err?.message || err);
+      logger?.warn?.("[RG SITE] read-stats snapshot fetch failed:", err?.message || err);
       return null;
     }
     if (!snapshot || typeof snapshot !== "object") return null;
@@ -358,7 +358,7 @@ export function createReadStatsQuery({
         gateway.fetchAdminReadStats(from, to),
         gateway.fetchHudReadStats(from, to),
         totalsFetcher.catch((err) => {
-          logger?.warn?.("[rgLB] read_stats_total fetch failed:", err?.message || err);
+          logger?.warn?.("[RG SITE] read_stats_total fetch failed:", err?.message || err);
           return [];
         }),
       ]);
@@ -371,7 +371,7 @@ export function createReadStatsQuery({
       const payload = { range: { from, to }, site, hud, totals, aggregate: aggregateResult, fetchedAt, source };
       writeCache(storage, storageKey, cacheKey, { payload, fetchedAt });
       try {
-        logger?.info?.("[rgLB] read-stats fetched", { source, docs, ms: fetchedAt - startedAt, cost: docs });
+        logger?.info?.("[RG SITE] read-stats fetched", { source, docs, ms: fetchedAt - startedAt, cost: docs });
       } catch {}
       return payload;
     }
@@ -382,7 +382,7 @@ export function createReadStatsQuery({
     const payload = { range: { from, to }, site, hud, totals: [], aggregate: aggregateResult, fetchedAt, source };
     writeCache(storage, storageKey, cacheKey, { payload, fetchedAt });
     try {
-      logger?.info?.("[rgLB] read-stats fetched", { source, docs: site.length + hud.length, ms: fetchedAt - startedAt, cost: 0 });
+      logger?.info?.("[RG SITE] read-stats fetched", { source, docs: site.length + hud.length, ms: fetchedAt - startedAt, cost: 0 });
     } catch {}
     return payload;
   }
