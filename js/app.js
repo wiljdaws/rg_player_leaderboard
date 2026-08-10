@@ -558,6 +558,18 @@ function wireNameSuggest(input) {
     return `${name.slice(0, idx)}<mark>${name.slice(idx, idx + needle.length)}</mark>${name.slice(idx + needle.length)}`;
   };
 
+  // Cap the dropdown so it never extends past the top of the sticky
+  // board head below. Otherwise 8 items can drape over the RANK/PLAYER
+  // header sitting a few pixels below the input.
+  const capHeightToBoardHead = () => {
+    const head = document.getElementById("boardHead");
+    if (!head) return;
+    const listTop = list.getBoundingClientRect().top;
+    const headTop = head.getBoundingClientRect().top;
+    const room = headTop - listTop - 8;
+    list.style.maxHeight = room > 80 ? `${room}px` : "80px";
+  };
+
   const render = () => {
     if (!matches.length) return close();
     list.hidden = false;
@@ -578,6 +590,7 @@ function wireNameSuggest(input) {
       });
       list.append(li);
     });
+    capHeightToBoardHead();
   };
 
   input.addEventListener("input", () => {
