@@ -727,17 +727,6 @@ h1{
   box-shadow:0 18px 48px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.04);
   backdrop-filter:blur(6px);
 }
-/* Tiny "QUICK ADD" badge on the top-left so users know what this row is. */
-.tournament-quickadd::before{
-  content:"Quick add";
-  position:absolute;top:-8px;left:22px;
-  padding:2px 10px;border-radius:999px;
-  background:linear-gradient(93deg,var(--grad-a),var(--grad-b));
-  color:var(--ink);font:700 9.5px var(--display);
-  letter-spacing:.28em;text-transform:uppercase;
-  box-shadow:0 6px 16px rgba(168,85,247,.42);
-  pointer-events:none;
-}
 .tournament-quickadd .field{margin:0;min-width:0}
 .tournament-quickadd .field:nth-of-type(1){grid-area:name}
 .tournament-quickadd .field:nth-of-type(2){grid-area:score}
