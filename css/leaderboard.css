@@ -542,14 +542,35 @@ h1{
 .score-group[hidden]{display:none}
 
 .admin-form input:not([type=color]):not([type=range]),
-.admin-form select{
+.admin-form select,
+#editForm input[type=text],
+#editForm input[type=number],
+#editForm select{
   width:100%;padding:12px 14px;border-radius:10px;color:var(--ink);
   background:rgba(6,10,24,.7);border:1px solid var(--line);
   font:600 15px var(--body);outline:none;letter-spacing:.01em;min-height:44px;
   -webkit-appearance:none;appearance:none;transition:border-color .16s ease;
+  font-variant-numeric:tabular-nums;
 }
-.admin-form input:focus,.admin-form select:focus{border-color:var(--grad-a)}
-.admin-form input::placeholder{color:rgba(142,155,194,.5)}
+.admin-form input:focus,.admin-form select:focus,
+#editForm input:focus,#editForm select:focus{border-color:var(--grad-a)}
+.admin-form input::placeholder,
+#editForm input::placeholder{color:rgba(142,155,194,.5)}
+/* Kill the native number-input spinner arrows so score/matches don't
+   render with white spinner buttons that break the dark theme. */
+#editForm input[type=number]::-webkit-inner-spin-button,
+#editForm input[type=number]::-webkit-outer-spin-button,
+.admin-form input[type=number]::-webkit-inner-spin-button,
+.admin-form input[type=number]::-webkit-outer-spin-button,
+.tournament-quickadd input[type=number]::-webkit-inner-spin-button,
+.tournament-quickadd input[type=number]::-webkit-outer-spin-button{
+  -webkit-appearance:none;margin:0;
+}
+#editForm input[type=number],
+.admin-form input[type=number],
+.tournament-quickadd input[type=number]{
+  -moz-appearance:textfield;appearance:textfield;
+}
 .admin-form input[type=color]{
   width:56px;height:44px;padding:4px;border-radius:10px;
   border:1px solid var(--line);background:rgba(6,10,24,.7);cursor:pointer;

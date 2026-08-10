@@ -73,6 +73,16 @@ export function togglePlaylistFields(form, playlist) {
       input.disabled = hidden;
     }
   }
+  // Tournament rows don't own their flag or icon URLs — those come from the
+  // roster autocomplete when a player is added. Hide the whole Appearance
+  // section on tournament so the edit dialog only shows Score / Matches.
+  for (const section of form.querySelectorAll("[data-appearance-section]")) {
+    const hidden = playlist === "tournament";
+    section.hidden = hidden;
+    for (const input of section.querySelectorAll("input, select")) {
+      input.disabled = hidden;
+    }
+  }
 }
 
 export function setFormValue(form, name, value) {
