@@ -43,6 +43,15 @@ function playlistQuerySpec(playlist) {
 
 function describeError(error) {
   const code = String(error?.code ?? "");
+  const message = String(error?.message ?? "");
+  // Ad blockers and privacy extensions (uBlock, Privacy Badger, Brave)
+  // routinely block firestore.googleapis.com. Chrome surfaces it as
+  // ERR_BLOCKED_BY_CLIENT; Firestore SDK reports it as "unavailable" or a
+  // TypeError/fetch failure. Detect and tell admins to whitelist the site.
+  if (message.includes("ERR_BLOCKED_BY_CLIENT")
+      || /Failed to fetch|NetworkError|network request failed/i.test(message)) {
+    return "A browser extension (ad blocker / privacy tool) is blocking Firebase. Whitelist wiljdaws.github.io or try an incognito window.";
+  }
   if (code.includes("permission-denied")) {
     return "Firebase denied this request. Sign in with an approved admin account.";
   }
@@ -50,7 +59,7 @@ function describeError(error) {
     return "This leaderboard index is not ready yet. Showing a one-time fallback when available.";
   }
   if (code.includes("unavailable")) {
-    return "Firebase is temporarily unavailable. Cached rankings will stay visible.";
+    return "Firebase is unreachable. Often this means a browser extension is blocking firestore.googleapis.com. Try an incognito window.";
   }
   return error?.message || "Firebase request failed.";
 }
@@ -455,12 +464,22 @@ export async function createFirebaseGateway() {
   }
 
   // Wraps a write so a permission-denied bumps the deny counter.
+  // Also rewraps the error with describeError() so callers (the write-status
+  // pill, quick-add pill) see a friendly message like "your ad blocker is
+  // blocking Firebase" instead of the SDK's raw code.
   async function chargedWrite(label, fn) {
     try {
       return await fn();
     } catch (err) {
       if (String(err?.code ?? "").includes("permission-denied")) {
         budget.chargeDeny(label);
+      }
+      const friendly = describeError(err);
+      if (friendly && friendly !== err.message) {
+        const wrapped = new Error(friendly);
+        wrapped.cause = err;
+        wrapped.code = err?.code;
+        throw wrapped;
       }
       throw err;
     }
