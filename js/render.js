@@ -289,12 +289,14 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   row.append(node("div", { className: `rank ${rankClass(rank)}`, text: `#${rank}` }));
 
   const ident = node("div", { className: "p-ident" });
-  // Flag carries the activity dot (green/gold/orange/grey based on last
-  // HUD activity) and the "Last played" hover tooltip. Pal wanted the
-  // freshness indicator on the flag corner, matching the clan site.
+  // Flag carries the activity dot and "Last played" hover tooltip, but only
+  // for HUD-synced tabs. Tournament rows are hand-entered, no session data,
+  // so the dot and tooltip would just be noise.
   const flag = flagCell(player);
-  flag.classList.add(activityStatus(player));
-  attachTooltip(flag, formatLastPlayed(player));
+  if (playlist !== "tournament") {
+    flag.classList.add(activityStatus(player));
+    attachTooltip(flag, formatLastPlayed(player));
+  }
   ident.append(flag);
   const nameWrap = node("div", { className: "p-name-wrap" });
 
