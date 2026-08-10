@@ -565,7 +565,27 @@ function applyTournamentPending(rows) {
     }
   }
   const filtered = rows.filter(r => !removedIds.has(r.id));
-  return adds.length ? [...adds, ...filtered] : filtered;
+  if (!adds.length && !removedIds.size) return filtered;
+  // Re-sort so optimistic adds land in their real rank position instead
+  // of always sitting at the top. Same order the normalizer applies:
+  // score DESC, then name ASC for ties.
+  return [...adds, ...filtered].sort(
+    (a, b) => b.score - a.score
+      || String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" }),
+  );
+}
+
+// Look up an existing tournament row by name (case-insensitive). Used by
+// the quick-add flow to upsert instead of creating a duplicate document.
+// Skips pending optimistic rows since they don't have real Firestore ids.
+function findTournamentRowByName(name) {
+  const needle = String(name || "").trim().toLowerCase();
+  if (!needle) return null;
+  for (const row of state.rows) {
+    if (row._pending) continue;
+    if (String(row.name || "").trim().toLowerCase() === needle) return row;
+  }
+  return null;
 }
 
 // Styled confirm dialog. Native window.confirm() looks foreign on the
@@ -790,7 +810,13 @@ function wireTournamentQuickAdd() {
         icons: cosmetic.icons || "",
         flag: cosmetic.flag || "",
       });
-      const saved = await writes.addPlayer(payload);
+      // Upsert: if a row with this name already exists, update it instead
+      // of creating a duplicate doc. Prevents the "two rows for the same
+      // player" bug when admin types the same name twice.
+      const existing = findTournamentRowByName(payload.name);
+      const saved = existing
+        ? await writes.updatePlayer(existing.id, payload)
+        : await writes.addPlayer(payload);
       if (saved) {
         clearAdminRosterCache();
         stashPendingTournament("added", payload);
@@ -798,7 +824,8 @@ function wireTournamentQuickAdd() {
           state.rows = applyTournamentPending(state.rows);
           render();
         }
-        setTqStatus(`✓ Added ${payload.name}. Row appears in the board within a second.`, "success");
+        const verb = existing ? "Updated" : "Added";
+        setTqStatus(`✓ ${verb} ${payload.name}. Row appears in the board within a second.`, "success");
         form.reset();
         nameEl.focus();
         setTimeout(() => setTqStatus(""), 4000);
@@ -880,7 +907,11 @@ function wireTournamentQuickAdd() {
           icons: cosmetic.icons || "",
           flag: cosmetic.flag || "",
         });
-        const ok = await writes?.addPlayer(payload);
+        // Same upsert rule as the quick-add: don't create a duplicate.
+        const existing = findTournamentRowByName(payload.name);
+        const ok = existing
+          ? await writes?.updatePlayer(existing.id, payload)
+          : await writes?.addPlayer(payload);
         if (ok) {
           added += 1;
           stashPendingTournament("added", payload);
