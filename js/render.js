@@ -517,7 +517,7 @@ function formatLastPlayed(player) {
 // green pulsing = still playing, gold = last hour, orange = today, grey
 // = older/offline, none = never seen. Same idea as the clan site's .ava
 // freshness dot so the visual language stays consistent.
-const STATUS_HOT_MS = 5 * 60_000;
+const STATUS_HOT_MS = 10 * 60_000;
 const STATUS_WARM_MS = 60 * 60_000;
 const STATUS_RECENT_MS = 24 * 60 * 60_000;
 function activityStatus(player, now = Date.now()) {
