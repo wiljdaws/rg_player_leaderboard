@@ -314,7 +314,7 @@ h1{
 .streak-chip .streak-flame{filter:drop-shadow(0 0 4px rgba(255,140,40,.75));font-size:12px;line-height:1}
 .streak-chip .streak-count{color:#fff}
 .p-icon{
-  width:var(--icon-size,18px);height:var(--icon-size,18px);object-fit:contain;
+  width:var(--icon-size,25px);height:var(--icon-size,25px);object-fit:contain;
   border-radius:3px;
 }
 

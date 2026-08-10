@@ -1,6 +1,5 @@
 import { isPlaylist } from "./config.js";
 
-const HEX_COLOR = /^#(?:[\da-f]{3}|[\da-f]{6})$/i;
 const MAX_NAME_LENGTH = 80;
 const MAX_URL_LENGTH = 2_048;
 // Larger cap so a base64-encoded flag PNG (~5-30 KB) is accepted. Legacy
@@ -151,9 +150,6 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
       ...score,
       flag: sanitizeHttpUrl(raw.flag),
       icons: normalizeIcons(raw.icons),
-      iconSize: boundedNumber(raw.iconSize, 18, 12, 50),
-      glowColor: HEX_COLOR.test(raw.glowColor ?? "") ? raw.glowColor : "#ffffff",
-      glowStrength: boundedNumber(raw.glowStrength, 0, 0, 50),
       provenance: {
         kind: sourceUserId ? "ATLAS synced" : "Manual admin entry",
         version,
@@ -222,10 +218,16 @@ export function winRate(player) {
   return ((player.wins / player.matches) * 100).toFixed(1);
 }
 
-export function playerGlow(player) {
-  const strength = boundedNumber(player?.glowStrength, 0, 0, 50);
-  const color = HEX_COLOR.test(player?.glowColor ?? "") ? player.glowColor : "#ffffff";
-  return strength > 0 ? `0 0 ${strength}px ${color}` : "";
+// Podium tiers get a fixed glow keyed to their color band. Everyone
+// else stays flat — keeps the top 3 visually distinct without asking
+// admins to hand-tune per-player glow.
+const TIER_GLOWS = {
+  1: "0 0 14px rgba(255,210,74,.55)",   // gold
+  2: "0 0 14px rgba(168,85,247,.55)",   // grad-a purple
+  3: "0 0 14px rgba(224,154,92,.5)",    // bronze
+};
+export function playerGlow(rank) {
+  return TIER_GLOWS[rank] || "";
 }
 
 export function buildPlayerPayload(input, includePlaylist = true) {
@@ -243,9 +245,6 @@ export function buildPlayerPayload(input, includePlaylist = true) {
     name,
     flag,
     icons,
-    iconSize: boundedNumber(Number(input.iconSize), 18, 12, 50),
-    glowColor: HEX_COLOR.test(input.glowColor ?? "") ? input.glowColor : "#ffffff",
-    glowStrength: boundedNumber(Number(input.glowStrength), 0, 0, 50),
   };
   if (includePlaylist) payload.playlist = playlist;
 

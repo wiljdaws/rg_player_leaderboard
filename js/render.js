@@ -301,7 +301,7 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   // Non-admin viewers see the name as a plain label — clicks belong to
   // admins so they can open the full details modal (version, source,
   // last updated). Everyone else sees just the styled name.
-  const glow = playerGlow(player);
+  const glow = playerGlow(rank);
   let nameEl;
   if (admin) {
     nameEl = node("button", { className: "p-name", type: "button" });
@@ -317,9 +317,7 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   if (player.icons?.length) {
     const icons = node("div", { className: "p-icons" });
     for (const url of player.icons) {
-      const img = safeImage(url, "p-icon", "");
-      img.style.setProperty("--icon-size", `${player.iconSize}px`);
-      icons.append(img);
+      icons.append(safeImage(url, "p-icon", ""));
     }
     nameWrap.append(icons);
   }
