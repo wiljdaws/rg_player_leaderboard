@@ -19,8 +19,14 @@ import {
 import { createReadBudget } from "./read-budget.js";
 
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
+const APP_CHECK_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app-check.js`;
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
 const AUTH_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`;
+
+// Public reCAPTCHA v3 site key. Domain-restricted to wiljdaws.github.io
+// in the reCAPTCHA admin. Locks Firestore reads to our own sites once
+// App Check enforcement is turned on in the Firebase console.
+const RECAPTCHA_SITE_KEY = "6LetM38tAAAAADvHq4SYd05r_DGK2AWJo8M3ZmJK";
 
 // Published by the Tampermonkeys publish workflow every 15 min.
 const READ_STATS_SNAPSHOT_URL = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/state/read-stats.json";
@@ -318,8 +324,9 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
 }
 
 export async function createFirebaseGateway() {
-  const [{ initializeApp }, firestoreMod, authMod] = await Promise.all([
+  const [{ initializeApp }, appCheckMod, firestoreMod, authMod] = await Promise.all([
     import(APP_URL),
+    import(APP_CHECK_URL),
     import(FIRESTORE_URL),
     import(AUTH_URL),
   ]);
@@ -350,6 +357,21 @@ export async function createFirebaseGateway() {
   } = authMod;
 
   const app = initializeApp(FIREBASE_CONFIG);
+
+  // App Check attaches a reCAPTCHA v3 attestation to every Firestore
+  // request. Once enforcement is on in the Firebase console, only our
+  // whitelisted domains can read/write. Init errors are non-fatal so
+  // preview builds without console setup still boot.
+  try {
+    const { initializeAppCheck, ReCaptchaV3Provider } = appCheckMod;
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (error) {
+    console.warn("[firebase] App Check init failed", error);
+  }
+
   const db = getFirestore(app);
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
