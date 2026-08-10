@@ -22,9 +22,7 @@ const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
 const AUTH_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`;
 
-// CDN snapshot for the Reads admin dashboard — same @data-branch pattern
-// as the leaderboard JSON. Published by the Tampermonkeys firestore-
-// aggregates workflow every ~15 minutes.
+// Published by the Tampermonkeys publish workflow every 15 min.
 const READ_STATS_SNAPSHOT_URL = "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/state/read-stats.json";
 
 function playlistQuerySpec(playlist) {
@@ -607,11 +605,8 @@ export async function createFirebaseGateway() {
       );
       return rawDocuments(snapshot);
     },
-    // CDN-served rolling-30-day snapshot published by
-    // Tampermonkeys/firebase/scripts/build-read-stats-snapshot.mjs.
-    // Preferred by createReadStatsQuery over the two chargedGetDocs
-    // paths above; those stay as the fallback when the snapshot is
-    // stale, offline, or the picked range is older than 30 days.
+    // Preferred by createReadStatsQuery; the chargedGetDocs paths above
+    // stay as the fallback.
     fetchReadStatsSnapshot: async () => {
       const response = await fetch(READ_STATS_SNAPSHOT_URL, { cache: "no-store" });
       if (!response.ok) throw new Error(`read-stats snapshot fetch ${response.status}`);

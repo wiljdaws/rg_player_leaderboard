@@ -20,10 +20,8 @@
 // the actual cost can be audited in DevTools. Turn off with the browser
 // devtools log filter if it gets noisy.
 
-// 30 min TTL: the dashboard is a backward-looking view of admin/HUD
-// telemetry, not a real-time monitor. Sessions written in the last 30
-// min will still show up on the next natural refresh; the Refresh
-// button bypasses the cache. Reduces per-visit re-fetch churn.
+// 30 min — dashboard is backward-looking, doesn't need to be live.
+// Refresh button bypasses this.
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_STORAGE_KEY = "rgLB:readStatsCache:v1";
 
@@ -293,9 +291,8 @@ export function createReadStatsQuery({
     ? cache.storageKey
     : DEFAULT_STORAGE_KEY;
 
-  // Try the CDN snapshot first. Returns null when it doesn't cover the
-  // picked range or isn't available — callers then fall through to the
-  // charged Firestore queries. Costs zero Firestore reads on success.
+  // Returns null if the snapshot can't serve the range — caller falls
+  // through to Firestore.
   async function tryFetchSnapshot(from, to) {
     if (typeof gateway.fetchReadStatsSnapshot !== "function") return null;
     let snapshot;
@@ -309,8 +306,7 @@ export function createReadStatsQuery({
     const start = snapshot.windowStart;
     const end = snapshot.windowEnd;
     if (typeof start !== "string" || typeof end !== "string") return null;
-    // Range must be fully contained by the snapshot window; if the user
-    // widens the picker before `windowStart` we need the live path.
+    // Range must fit inside the snapshot window.
     if (from < start || to > end) return null;
     const site = (Array.isArray(snapshot.site) ? snapshot.site : [])
       .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= to);
@@ -331,8 +327,6 @@ export function createReadStatsQuery({
 
     const startedAt = now();
 
-    // 1) CDN snapshot (0 Firestore reads). Skipped when Refresh forced
-    //    a live pull, or when the range doesn't fit the snapshot window.
     let site = [];
     let hud = [];
     let source = "firestore";
@@ -346,8 +340,6 @@ export function createReadStatsQuery({
       }
     }
 
-    // 2) Firestore fallback — either the snapshot said no or Refresh
-    //    forced a live pull. Charges one read per returned doc.
     if (source === "firestore") {
       const totalsFetcher = typeof gateway.fetchReadStatsTotal === "function"
         ? gateway.fetchReadStatsTotal(from, to)
@@ -374,8 +366,7 @@ export function createReadStatsQuery({
       return payload;
     }
 
-    // Snapshot path — no monitoring totals in the CDN blob today, so pass
-    // an empty totals array. If we ever publish them, plumb them through.
+    // No monitoring totals in the snapshot yet — pass empty.
     const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: [] });
     const fetchedAt = now();
     const payload = { range: { from, to }, site, hud, totals: [], aggregate: aggregateResult, fetchedAt, source };

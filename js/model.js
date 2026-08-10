@@ -218,9 +218,7 @@ export function winRate(player) {
   return ((player.wins / player.matches) * 100).toFixed(1);
 }
 
-// Podium tiers get a fixed glow keyed to their color band. Everyone
-// else stays flat — keeps the top 3 visually distinct without asking
-// admins to hand-tune per-player glow.
+// Fixed glow on the podium tiers, nothing on the rest.
 const TIER_GLOWS = {
   1: "0 0 14px rgba(255,210,74,.55)",   // gold
   2: "0 0 14px rgba(168,85,247,.55)",   // grad-a purple
