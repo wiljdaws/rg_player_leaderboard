@@ -508,7 +508,9 @@ function wireTournamentQuickAdd(writes) {
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    setTqStatus("");
+    setTqStatus("Adding…");
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       const payload = buildPlayerPayload({
         playlist: "tournament",
@@ -521,12 +523,17 @@ function wireTournamentQuickAdd(writes) {
       const saved = await writes?.addPlayer(payload);
       if (saved) {
         clearAdminRosterCache();
-        setTqStatus(`Added ${payload.name}.`, "success");
+        setTqStatus(`✓ Added ${payload.name} — appears in the board within a second.`, "success");
         form.reset();
         nameEl.focus();
+        setTimeout(() => setTqStatus(""), 4000);
+      } else {
+        setTqStatus("Add failed — check the write-status pill for details.", "error");
       }
     } catch (err) {
       setTqStatus(err?.message || "Add failed.", "error");
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 

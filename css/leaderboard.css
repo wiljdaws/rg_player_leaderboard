@@ -800,11 +800,24 @@ h1{
   color:#fecdd3;
 }
 .tournament-quickadd-status{
-  min-height:16px;margin:8px 4px 0;font-size:12.5px;color:var(--ink-dim);
-  letter-spacing:.02em;
+  min-height:20px;margin:10px 4px 0;font-size:13px;font-weight:600;
+  color:var(--ink-dim);letter-spacing:.02em;
+  display:inline-block;padding:0;border-radius:8px;
+  transition:background .18s ease,padding .18s ease;
 }
-.tournament-quickadd-status[data-kind="error"]{color:var(--loss)}
-.tournament-quickadd-status[data-kind="success"]{color:var(--gain)}
+.tournament-quickadd-status[data-kind]{padding:5px 12px}
+.tournament-quickadd-status[data-kind="error"]{
+  color:var(--loss);background:rgba(251,113,133,.12);
+}
+.tournament-quickadd-status[data-kind="success"]{
+  color:var(--gain);background:rgba(74,222,128,.14);
+  animation:tqStatusPulse .55s ease-out;
+}
+@keyframes tqStatusPulse{
+  0%   { transform:scale(.96); opacity:.6; }
+  60%  { transform:scale(1.03); opacity:1; }
+  100% { transform:scale(1); }
+}
 /* Slight cohesion with the board below: pull the empty-state up a bit
    so the "No tournament rankings" line doesn't feel stranded. */
 .tournament-admin + .board .empty-state{padding:44px 24px 48px}
