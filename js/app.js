@@ -324,6 +324,13 @@ function render() {
       onInspect: openPlayerDetails,
       onEdit: openEdit,
       onDelete: (player) => {
+        // Tournament rows are hand-typed and short-lived — a stray click can
+        // erase real work. Everything else is HUD-synced and reappears on
+        // next write, so no prompt needed.
+        if (player.playlist === "tournament"
+            && !confirm(`Remove ${player.name} from the tournament?`)) {
+          return;
+        }
         clearAdminRosterCache();
         return writes?.deletePlayer(player.id, player.playlist);
       },
@@ -425,7 +432,148 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   }
   if (updateUrl) urlState(push);
   render();
+  syncTournamentAdmin();
   listenerManager?.activate(playlist);
+}
+
+// Show the quick-add strip only on the Tournament tab for admins.
+function syncTournamentAdmin() {
+  const host = document.getElementById("tournamentAdmin");
+  if (!host) return;
+  host.hidden = !(state.admin && state.playlist === "tournament");
+}
+
+function setTqStatus(message, kind = "") {
+  const el = document.getElementById("tqStatus");
+  if (!el) return;
+  el.textContent = message || "";
+  if (kind) el.dataset.kind = kind;
+  else delete el.dataset.kind;
+}
+
+function setTqBulkStatus(message, kind = "") {
+  const el = document.getElementById("tqBulkStatus");
+  if (!el) return;
+  el.textContent = message || "";
+  if (kind) el.dataset.kind = kind;
+  else delete el.dataset.kind;
+}
+
+function parseBulkTournamentText(text) {
+  const results = [];
+  const errors = [];
+  const lines = String(text || "").split(/\r?\n/);
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    // Split on tabs first (paste-from-spreadsheet), otherwise commas.
+    const parts = (line.includes("\t") ? line.split("\t") : line.split(",")).map(p => p.trim());
+    if (parts.length < 3) {
+      errors.push(`Line ${i + 1}: expected Name, Score, Matches`);
+      return;
+    }
+    const [name, scoreStr, matchesStr] = parts;
+    const score = Number(scoreStr);
+    const matches = Number(matchesStr);
+    if (!name) return errors.push(`Line ${i + 1}: missing name`);
+    if (!Number.isFinite(score) || score < 0) return errors.push(`Line ${i + 1}: bad score "${scoreStr}"`);
+    if (!Number.isFinite(matches) || matches < 0) return errors.push(`Line ${i + 1}: bad matches "${matchesStr}"`);
+    results.push({ name, score, matches });
+  });
+  return { rows: results, errors };
+}
+
+function wireTournamentQuickAdd(writes) {
+  const form = document.getElementById("tournamentQuickAdd");
+  if (!form) return;
+  const nameEl = document.getElementById("tqName");
+  const scoreEl = document.getElementById("tqScore");
+  const matchesEl = document.getElementById("tqMatches");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setTqStatus("");
+    try {
+      const payload = buildPlayerPayload({
+        playlist: "tournament",
+        name: nameEl.value,
+        score: scoreEl.value,
+        matches: matchesEl.value,
+        icons: "",
+        flag: "",
+      });
+      const saved = await writes?.addPlayer(payload);
+      if (saved) {
+        clearAdminRosterCache();
+        setTqStatus(`Added ${payload.name}.`, "success");
+        form.reset();
+        nameEl.focus();
+      }
+    } catch (err) {
+      setTqStatus(err?.message || "Add failed.", "error");
+    }
+  });
+
+  document.getElementById("tqClearBtn")?.addEventListener("click", async () => {
+    if (!confirm("Wipe every player from the Tournament leaderboard? This can't be undone.")) return;
+    setTqStatus("Clearing…");
+    const ok = await writes?.clearTournament();
+    if (ok) {
+      clearAdminRosterCache();
+      setTqStatus("Tournament cleared.", "success");
+    } else {
+      setTqStatus("Clear failed.", "error");
+    }
+  });
+
+  const bulkDialog = document.getElementById("tqBulkDialog");
+  const bulkText = document.getElementById("tqBulkText");
+  const bulkForm = document.getElementById("tqBulkForm");
+  document.getElementById("tqBulkBtn")?.addEventListener("click", () => {
+    setTqBulkStatus("");
+    bulkText.value = "";
+    if (typeof bulkDialog.showModal === "function") bulkDialog.showModal();
+    else bulkDialog.setAttribute("open", "");
+  });
+  bulkDialog?.querySelector("[data-tq-bulk-cancel]")?.addEventListener("click", () => bulkDialog.close());
+  bulkForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const { rows, errors } = parseBulkTournamentText(bulkText.value);
+    if (errors.length) {
+      setTqBulkStatus(errors.slice(0, 3).join(" · "), "error");
+      return;
+    }
+    if (!rows.length) {
+      setTqBulkStatus("No rows to add.", "error");
+      return;
+    }
+    setTqBulkStatus(`Adding ${rows.length}…`);
+    let added = 0;
+    for (const row of rows) {
+      try {
+        const payload = buildPlayerPayload({
+          playlist: "tournament",
+          name: row.name,
+          score: row.score,
+          matches: row.matches,
+          icons: "",
+          flag: "",
+        });
+        const ok = await writes?.addPlayer(payload);
+        if (ok) added += 1;
+      } catch (err) {
+        errors.push(`${row.name}: ${err?.message || "add failed"}`);
+      }
+    }
+    clearAdminRosterCache();
+    if (errors.length) {
+      setTqBulkStatus(`Added ${added} of ${rows.length}. Errors: ${errors.slice(0, 2).join(" · ")}`, "error");
+    } else {
+      setTqBulkStatus(`Added ${added}.`, "success");
+      bulkText.value = "";
+      setTimeout(() => bulkDialog.close(), 600);
+    }
+  });
 }
 
 let readsView = null;
@@ -512,22 +660,9 @@ function wireEvents() {
   });
 
   const adminPlaylist = $("playlist");
-  const clearTournamentBtn = $("clearTournamentBtn");
-  const syncClearTournamentBtn = () => {
-    if (!clearTournamentBtn) return;
-    clearTournamentBtn.hidden = adminPlaylist.value !== "tournament";
-  };
-  adminPlaylist.addEventListener("change", () => {
-    togglePlaylistFields($("adminForm"), adminPlaylist.value);
-    syncClearTournamentBtn();
-  });
-  syncClearTournamentBtn();
-
-  clearTournamentBtn?.addEventListener("click", async () => {
-    if (!confirm("Wipe every player from the Tournament leaderboard? This can't be undone.")) return;
-    await writes?.clearTournament();
-    clearAdminRosterCache();
-  });
+  adminPlaylist.addEventListener("change", () =>
+    togglePlaylistFields($("adminForm"), adminPlaylist.value),
+  );
 
   $("adminForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -545,6 +680,8 @@ function wireEvents() {
       handleValidationError(error);
     }
   });
+
+  wireTournamentQuickAdd(writes);
 
   $("iconForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -685,6 +822,7 @@ async function boot() {
     // In debug mode we force the admin panel visible so the widget renders
     // for any user. Otherwise the panel follows real admin state.
     $("adminBox").hidden = !state.admin && !READ_BUDGET_DEBUG;
+    syncTournamentAdmin();
     $("loginButton").hidden = Boolean(user);
     $("logoutButton").hidden = !user;
     $("authStatus").textContent = state.admin

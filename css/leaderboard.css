@@ -706,7 +706,42 @@ h1{
 }
 .dialog-title{font:700 22px/1.15 var(--display);letter-spacing:.02em;margin-bottom:20px}
 .dialog-summary{color:var(--ink-dim);font-size:13px;font-weight:600;margin-bottom:16px}
+.dialog-hint{color:var(--ink-dim);font-size:13px;margin:-8px 0 12px}
+.dialog-hint code{background:rgba(255,255,255,.06);border-radius:4px;padding:1px 6px;font-family:var(--body);font-size:12.5px}
 .dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+
+/* Tournament quick-add strip. Sits above the board when admin is on the
+   Tournament tab so a whole event can be typed in without opening the
+   full admin panel. */
+.tournament-admin{margin:0 0 18px}
+.tournament-quickadd{
+  display:grid;grid-template-columns:minmax(200px,1fr) 120px 120px auto auto auto;gap:10px;align-items:end;
+  padding:14px 16px;border:1px solid var(--line);border-radius:14px;
+  background:linear-gradient(180deg,rgba(19,27,68,.55),rgba(12,18,48,.55));
+}
+.tournament-quickadd .field{margin:0}
+.tournament-quickadd input{width:100%}
+.tournament-quickadd-status{
+  min-height:18px;margin:8px 4px 0;font-size:13px;color:var(--ink-dim);
+}
+.tournament-quickadd-status[data-kind="error"]{color:var(--loss)}
+.tournament-quickadd-status[data-kind="success"]{color:var(--gain)}
+.admin-danger{
+  background:rgba(251,113,133,.12);border:1px solid rgba(251,113,133,.4);
+  color:#fca5a5;font:600 13px var(--display);letter-spacing:.14em;
+  text-transform:uppercase;padding:10px 14px;border-radius:10px;cursor:pointer;
+}
+.admin-danger:hover{background:rgba(251,113,133,.2)}
+#tqBulkText{
+  width:100%;min-height:180px;padding:10px 12px;font-family:var(--body);font-size:14px;
+  background:rgba(12,18,48,.6);color:var(--ink);
+  border:1px solid var(--line);border-radius:10px;resize:vertical;
+}
+@media (max-width:820px){
+  .tournament-quickadd{grid-template-columns:1fr 1fr;gap:8px}
+  .tournament-quickadd > .field:first-child{grid-column:1/-1}
+  .tournament-quickadd > button{grid-column:span 1}
+}
 .detail-list{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin-bottom:8px}
 .detail-list dt{
   color:var(--ink-dim);font:700 11px var(--display);
