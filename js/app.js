@@ -499,7 +499,9 @@ function parseBulkTournamentText(text) {
   return { rows: results, errors };
 }
 
-function wireTournamentQuickAdd(writes) {
+// Reads `writes` off the module scope each call, not off the closure at
+// wire-time, because wireEvents() runs before AdminWriteService is built.
+function wireTournamentQuickAdd() {
   const form = document.getElementById("tournamentQuickAdd");
   if (!form) return;
   const nameEl = document.getElementById("tqName");
@@ -512,6 +514,10 @@ function wireTournamentQuickAdd(writes) {
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
     try {
+      if (!writes) {
+        setTqStatus("Not signed in yet. Wait for admin auth to finish.", "error");
+        return;
+      }
       const payload = buildPlayerPayload({
         playlist: "tournament",
         name: nameEl.value,
@@ -520,7 +526,7 @@ function wireTournamentQuickAdd(writes) {
         icons: "",
         flag: "",
       });
-      const saved = await writes?.addPlayer(payload);
+      const saved = await writes.addPlayer(payload);
       if (saved) {
         clearAdminRosterCache();
         setTqStatus(`✓ Added ${payload.name}. Row appears in the board within a second.`, "success");
@@ -542,9 +548,13 @@ function wireTournamentQuickAdd(writes) {
   });
 
   document.getElementById("tqClearBtn")?.addEventListener("click", async () => {
+    if (!writes) {
+      setTqStatus("Not signed in yet.", "error");
+      return;
+    }
     if (!confirm("Wipe every player from the Tournament leaderboard? This can't be undone.")) return;
     setTqStatus("Clearing…");
-    const ok = await writes?.clearTournament();
+    const ok = await writes.clearTournament();
     if (ok) {
       clearAdminRosterCache();
       setTqStatus("Tournament cleared.", "success");
@@ -708,7 +718,7 @@ function wireEvents() {
     }
   });
 
-  wireTournamentQuickAdd(writes);
+  wireTournamentQuickAdd();
 
   $("iconForm").addEventListener("submit", async (event) => {
     event.preventDefault();
