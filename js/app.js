@@ -323,13 +323,18 @@ function render() {
       emptyMessage: emptyMessage(),
       onInspect: openPlayerDetails,
       onEdit: openEdit,
-      onDelete: (player) => {
-        // Tournament rows are hand-typed and short-lived — a stray click can
-        // erase real work. Everything else is HUD-synced and reappears on
-        // next write, so no prompt needed.
-        if (player.playlist === "tournament"
-            && !confirm(`Remove ${player.name} from the tournament?`)) {
-          return;
+      onDelete: async (player) => {
+        // Tournament rows are hand-typed. Guard against a stray click by
+        // asking to confirm; everything else is HUD-synced and reappears
+        // on the next write so no prompt needed.
+        if (player.playlist === "tournament") {
+          const ok = await showConfirm({
+            title: "Remove player?",
+            message: `Remove ${player.name} from the tournament? This can't be undone.`,
+            confirmLabel: "Remove",
+            variant: "danger",
+          });
+          if (!ok) return;
         }
         clearAdminRosterCache();
         return writes?.deletePlayer(player.id, player.playlist);
@@ -477,24 +482,144 @@ function applyRoster(rows) {
         : typeof row?.icons === "string" ? row.icons : "",
     });
   }
-  const list = document.getElementById("tqNameSuggestions");
-  if (list) {
-    list.replaceChildren();
-    const names = [...tournamentRoster.values()]
-      .map(v => v.name)
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-    for (const n of names) {
-      const opt = document.createElement("option");
-      opt.value = n;
-      list.append(opt);
-    }
-  }
 }
 
 function lookupRosterCosmetic(rawName) {
   const key = String(rawName || "").trim().toLowerCase();
   if (!key) return null;
   return tournamentRoster.get(key) || null;
+}
+
+// Styled confirm dialog. Native window.confirm() looks foreign on the
+// dark-themed site, this one uses the same modal chrome as the edit and
+// bulk-add dialogs.
+function showConfirm({ title = "Are you sure?", message = "", confirmLabel = "Confirm", variant = "primary" } = {}) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("confirmDialog");
+    if (!dialog) return resolve(window.confirm(message));
+    const titleEl = document.getElementById("confirmDialogTitle");
+    const msgEl = document.getElementById("confirmDialogMessage");
+    const okBtn = dialog.querySelector("[data-confirm-ok]");
+    const cancelBtn = dialog.querySelector("[data-confirm-cancel]");
+    const form = dialog.querySelector("[data-confirm-form]");
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (okBtn) {
+      okBtn.textContent = confirmLabel;
+      okBtn.className = variant === "danger" ? "admin-danger" : "admin-primary";
+    }
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (dialog.open) dialog.close();
+      resolve(result);
+    };
+    const onSubmit = (e) => { e.preventDefault(); finish(true); };
+    const onCancel = () => finish(false);
+    const onDialogClose = () => finish(false);
+    const cleanup = () => {
+      form?.removeEventListener("submit", onSubmit);
+      cancelBtn?.removeEventListener("click", onCancel);
+      dialog.removeEventListener("close", onDialogClose);
+    };
+    form?.addEventListener("submit", onSubmit);
+    cancelBtn?.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onDialogClose);
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    // Focus the primary action so Enter confirms and Escape cancels.
+    okBtn?.focus();
+  });
+}
+
+// Custom autocomplete for the tournament Name input. Native <datalist>
+// dumped every roster name on focus which looked bad, so this one only
+// opens after 1+ characters and filters as you type.
+const SUGGEST_MAX = 8;
+function wireNameSuggest(input) {
+  if (!input) return;
+  const list = document.getElementById("tqNameSuggest");
+  if (!list) return;
+  let activeIndex = -1;
+  let matches = [];
+
+  const close = () => {
+    list.hidden = true;
+    list.replaceChildren();
+    activeIndex = -1;
+    input.setAttribute("aria-expanded", "false");
+  };
+
+  const highlight = (name, needle) => {
+    const idx = name.toLowerCase().indexOf(needle);
+    if (idx < 0) return name;
+    return `${name.slice(0, idx)}<mark>${name.slice(idx, idx + needle.length)}</mark>${name.slice(idx + needle.length)}`;
+  };
+
+  const render = () => {
+    if (!matches.length) return close();
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    const needle = input.value.trim().toLowerCase();
+    list.replaceChildren();
+    matches.forEach((entry, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.dataset.name = entry.name;
+      li.innerHTML = highlight(entry.name, needle);
+      if (i === activeIndex) li.setAttribute("aria-selected", "true");
+      // mousedown fires before input's blur so the click lands.
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.value = entry.name;
+        close();
+      });
+      list.append(li);
+    });
+  };
+
+  input.addEventListener("input", () => {
+    const needle = input.value.trim().toLowerCase();
+    if (!needle) return close();
+    matches = [...tournamentRoster.values()]
+      .filter(entry => entry.name.toLowerCase().includes(needle))
+      .sort((a, b) => {
+        // Prefer entries where the needle is at the start of the name.
+        const aStarts = a.name.toLowerCase().startsWith(needle) ? 0 : 1;
+        const bStarts = b.name.toLowerCase().startsWith(needle) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      })
+      .slice(0, SUGGEST_MAX);
+    activeIndex = matches.length ? 0 : -1;
+    render();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (list.hidden || !matches.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeIndex = (activeIndex + 1) % matches.length;
+      render();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      activeIndex = (activeIndex - 1 + matches.length) % matches.length;
+      render();
+    } else if (e.key === "Enter" && activeIndex >= 0) {
+      e.preventDefault();
+      input.value = matches[activeIndex].name;
+      close();
+    } else if (e.key === "Escape") {
+      close();
+    }
+  });
+
+  input.addEventListener("blur", () => {
+    // Small delay so a mousedown on a suggestion still commits.
+    setTimeout(close, 120);
+  });
 }
 
 // Show the quick-add strip only on the Tournament tab for admins.
@@ -566,6 +691,7 @@ function wireTournamentQuickAdd() {
   const nameEl = document.getElementById("tqName");
   const scoreEl = document.getElementById("tqScore");
   const matchesEl = document.getElementById("tqMatches");
+  wireNameSuggest(nameEl);
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -612,7 +738,13 @@ function wireTournamentQuickAdd() {
       setTqStatus("Not signed in yet.", "error");
       return;
     }
-    if (!confirm("Wipe every player from the Tournament leaderboard? This can't be undone.")) return;
+    const confirmed = await showConfirm({
+      title: "Clear the tournament?",
+      message: "This removes every player from the Tournament leaderboard and can't be undone.",
+      confirmLabel: "Clear all",
+      variant: "danger",
+    });
+    if (!confirmed) return;
     setTqStatus("Clearing…");
     const ok = await writes.clearTournament();
     if (ok) {

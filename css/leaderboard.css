@@ -804,6 +804,27 @@ h1{
   border-color:rgba(251,113,133,.55);
   color:#fecdd3;
 }
+/* Custom name-suggest dropdown for the Tournament quick-add. Native
+   <datalist> spilled the whole roster on focus and looked terrible;
+   this one only opens once the user has typed something and stays
+   pinned to the input width. */
+.tq-name-field{position:relative}
+.tq-suggest{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:40;
+  margin:0;padding:4px 0;list-style:none;
+  max-height:260px;overflow-y:auto;
+  background:linear-gradient(180deg,rgba(19,27,68,.98),rgba(12,18,48,.98));
+  border:1px solid var(--line-strong);border-radius:10px;
+  box-shadow:0 18px 40px rgba(0,0,0,.5);
+}
+.tq-suggest[hidden]{display:none}
+.tq-suggest li{
+  padding:8px 12px;font:600 13.5px var(--body);color:var(--ink);
+  cursor:pointer;line-height:1.2;
+}
+.tq-suggest li[aria-selected="true"],
+.tq-suggest li:hover{background:rgba(168,85,247,.16)}
+.tq-suggest li mark{background:transparent;color:var(--grad-a);font-weight:700}
 .tournament-quickadd-status{
   min-height:20px;margin:10px 4px 0;font-size:13px;font-weight:600;
   color:var(--ink-dim);letter-spacing:.02em;
