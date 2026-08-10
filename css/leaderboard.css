@@ -154,9 +154,17 @@ h1{
 .board-head[data-playlist="wins"] > :nth-child(7),
 .board-head[data-playlist="wins"] > :last-child{text-align:right}
 /* Header grid mirrors .player-row.admin so the ACTIONS column lines up
-   with the Edit/Remove buttons instead of wrapping to a new line. */
-.board-head.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px auto}
-.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px auto}
+   with the Edit/Remove buttons instead of wrapping to a new line.
+   Actions column is a FIXED 150px (not auto) so the header grid and the row
+   grid compute the same column widths — with `auto`, the header's Actions
+   column sized to the "ACTIONS" text (~70px) while the row's sized to the
+   Edit+Remove button pair (~130px), which shifted every fixed-width column
+   between the two grids by ~60px and made labels drift off their data. The
+   150px width also gives ~20px of left-side slack (buttons `justify-self:end`
+   inside the column), which is what creates the visible gap between the
+   last-data column (Recent / Streak) and the Edit button. */
+.board-head.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
+.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
 
 .player-row{
   display:grid;grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
@@ -166,8 +174,8 @@ h1{
 .player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
-.player-row.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px auto}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px auto}
+.player-row.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
 
 /* =========================================================
    Top-3 / top-10 podium treatment — applied to every playlist.
@@ -725,12 +733,14 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
      header labels sit directly above their data. Player takes remaining
      slack via 1fr since screen width is tight on tablets. */
   .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px;padding:12px 14px;gap:8px}
+  /* Fixed 150px actions column so header + row grids compute identical
+     column widths (see desktop admin block above for the full rationale). */
   .board-head.admin,
-  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px auto}
+  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px 150px}
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px}
   .board-head.admin[data-playlist="wins"],
-  .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px auto}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px 150px}
   .rank{font-size:18px}
   .p-name{font-size:14.5px}
   .p-score{font-size:16px}
@@ -757,7 +767,7 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   }
   .board-head.admin:not([data-playlist="wins"]),
   .player-row.admin:not([data-playlist="wins"]){
-    grid-template-columns:40px minmax(0,1fr) 0 82px 64px auto;
+    grid-template-columns:40px minmax(0,1fr) 0 82px 64px 150px;
   }
   /* Hide the Recent column (was nth-child(5), now nth-child(6) with spacer). */
   .board-head:not([data-playlist="wins"]) > :nth-child(6),
@@ -766,7 +776,7 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px}
   .board-head.admin[data-playlist="wins"],
-  .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px auto}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px 150px}
   /* Matches column hidden on phones — wins + win% + streak are the stats
      people scan; matches is derivable from wins/win%. Position shifted
      from nth-child(4) to nth-child(5) with the spacer inserted. */
