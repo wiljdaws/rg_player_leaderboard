@@ -331,7 +331,11 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   // .col-spacer span so column indexes line up.
   row.append(node("div", { className: "col-spacer" }));
 
-  if (playlist === "wins") {
+  if (playlist === "tournament") {
+    row.append(node("div", { className: "p-score", text: player.score.toLocaleString() }));
+    row.append(node("div", { className: "p-score small", text: player.matches.toLocaleString() }));
+    if (admin) row.append(adminActions(player, onEdit, onDelete));
+  } else if (playlist === "wins") {
     row.append(node("div", { className: "p-score", text: player.wins.toLocaleString() }));
     row.append(node("div", { className: "p-score small", text: player.matches.toLocaleString() }));
     row.append(node("div", { className: "p-winrate", text: `${winRate(player)}%` }));
@@ -392,7 +396,16 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
   // occupies the 1fr slack column in the grid — keeps MMR/Wins from
   // drifting rightward away from the player name on wide screens. Must
   // match the empty div appended in playerRow() below.
-  if (playlist === "wins") {
+  if (playlist === "tournament") {
+    head.append(
+      node("span", { text: "Rank" }),
+      node("span", { text: "Player" }),
+      node("span", { className: "col-spacer" }),
+      node("span", { className: "num", text: "Score" }),
+      node("span", { className: "num", text: "Matches" }),
+    );
+    if (admin) head.append(node("span", { text: "Actions" }));
+  } else if (playlist === "wins") {
     head.append(
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
@@ -656,13 +669,16 @@ export function renderPlayerDialog(dialog, player, rank) {
   });
 
   const details = node("dl", { className: "detail-list" });
+  const scoreLabel = player.playlist === "wins" ? "Record"
+    : player.playlist === "tournament" ? "Score"
+    : "MMR";
+  const scoreValue = player.playlist === "wins"
+    ? `${player.wins} wins in ${player.matches} matches`
+    : player.playlist === "tournament"
+      ? `${player.score} in ${player.matches} matches`
+      : String(player.mmr);
   details.append(
-    detailRow(
-      player.playlist === "wins" ? "Record" : "MMR",
-      player.playlist === "wins"
-        ? `${player.wins} wins in ${player.matches} matches`
-        : String(player.mmr),
-    ),
+    detailRow(scoreLabel, scoreValue),
     detailRow("Source", player.provenance.kind),
     detailRow("ATLAS version", player.provenance.version || "Not recorded"),
     detailRow("Last updated", formatUpdatedAt(player.provenance.updatedAt)),

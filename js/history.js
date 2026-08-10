@@ -24,6 +24,11 @@ function entryFrom(playlist, row, ts) {
     if (typeof row?.matches !== "number" || !Number.isFinite(row.matches)) return null;
     return { value: row.wins, matches: row.matches, ts };
   }
+  if (playlist === "tournament") {
+    if (typeof row?.score !== "number" || !Number.isFinite(row.score)) return null;
+    if (typeof row?.matches !== "number" || !Number.isFinite(row.matches)) return null;
+    return { value: row.score, matches: row.matches, ts };
+  }
   if (typeof row?.mmr !== "number" || !Number.isFinite(row.mmr)) return null;
   return { value: row.mmr, ts };
 }
@@ -31,7 +36,7 @@ function entryFrom(playlist, row, ts) {
 function entriesEqual(a, b, playlist) {
   if (!a || !b) return false;
   if (a.value !== b.value) return false;
-  if (playlist === "wins" && a.matches !== b.matches) return false;
+  if ((playlist === "wins" || playlist === "tournament") && a.matches !== b.matches) return false;
   return true;
 }
 

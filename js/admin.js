@@ -31,8 +31,12 @@ export class AdminWriteService {
     return this.run("Saving player", () => this.gateway.updatePlayer(id, payload));
   }
 
-  deletePlayer(id) {
-    return this.run("Removing player", () => this.gateway.deletePlayer(id));
+  deletePlayer(id, playlist) {
+    return this.run("Removing player", () => this.gateway.deletePlayer(id, playlist));
+  }
+
+  clearTournament() {
+    return this.run("Clearing tournament", () => this.gateway.clearTournament());
   }
 
   addIcon(payload) {
@@ -53,8 +57,18 @@ export class AdminWriteService {
 export function togglePlaylistFields(form, playlist) {
   if (!form) return;
   for (const group of form.querySelectorAll("[data-score-fields]")) {
-    if (group.dataset.scoreFields === "wins") group.hidden = playlist !== "wins";
-    else if (group.dataset.scoreFields === "ranked") group.hidden = playlist === "wins";
+    let hidden;
+    if (group.dataset.scoreFields === "wins") hidden = playlist !== "wins";
+    else if (group.dataset.scoreFields === "tournament") hidden = playlist !== "tournament";
+    else if (group.dataset.scoreFields === "ranked") hidden = playlist === "wins" || playlist === "tournament";
+    else continue;
+    group.hidden = hidden;
+    // Disable inputs in hidden groups so FormData doesn't pick up stale values
+    // from a shape that doesn't apply — the wins and tournament score-groups
+    // both use name="matches" so leaving them enabled would collide.
+    for (const input of group.querySelectorAll("input, select")) {
+      input.disabled = hidden;
+    }
   }
 }
 

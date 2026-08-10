@@ -325,7 +325,7 @@ function render() {
       onEdit: openEdit,
       onDelete: (player) => {
         clearAdminRosterCache();
-        return writes?.deletePlayer(player.id);
+        return writes?.deletePlayer(player.id, player.playlist);
       },
     });
     renderIconKey({
@@ -355,6 +355,7 @@ function openEdit(player) {
   setFormValue(form, "mmr", player.mmr ?? 0);
   setFormValue(form, "wins", player.wins ?? 0);
   setFormValue(form, "matches", player.matches ?? 0);
+  setFormValue(form, "score", player.score ?? 0);
   setFormValue(form, "icons", player.icons.join(","));
   if (player.flag) flagDirectory.add(player.flag);
   flagPickers.edit?.setValue(player.flag || "");
@@ -511,9 +512,22 @@ function wireEvents() {
   });
 
   const adminPlaylist = $("playlist");
-  adminPlaylist.addEventListener("change", () =>
-    togglePlaylistFields($("adminForm"), adminPlaylist.value),
-  );
+  const clearTournamentBtn = $("clearTournamentBtn");
+  const syncClearTournamentBtn = () => {
+    if (!clearTournamentBtn) return;
+    clearTournamentBtn.hidden = adminPlaylist.value !== "tournament";
+  };
+  adminPlaylist.addEventListener("change", () => {
+    togglePlaylistFields($("adminForm"), adminPlaylist.value);
+    syncClearTournamentBtn();
+  });
+  syncClearTournamentBtn();
+
+  clearTournamentBtn?.addEventListener("click", async () => {
+    if (!confirm("Wipe every player from the Tournament leaderboard? This can't be undone.")) return;
+    await writes?.clearTournament();
+    clearAdminRosterCache();
+  });
 
   $("adminForm").addEventListener("submit", async (event) => {
     event.preventDefault();

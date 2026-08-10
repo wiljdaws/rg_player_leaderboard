@@ -8,13 +8,14 @@ export const FIREBASE_CONFIG = Object.freeze({
   measurementId: "G-JW3Q972P9T",
 });
 
-export const PLAYLISTS = Object.freeze(["1v1", "2v2", "3v3", "wins"]);
+export const PLAYLISTS = Object.freeze(["1v1", "2v2", "3v3", "wins", "tournament"]);
 
 export const PLAYLIST_LABELS = Object.freeze({
   "1v1": "1v1 Ranked",
   "2v2": "2v2 Ranked",
   "3v3": "3v3 Ranked",
   wins: "Wins",
+  tournament: "Tournament",
 });
 
 export const MAX_PLAYLIST_ROWS = 100;

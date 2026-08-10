@@ -89,7 +89,14 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
   }
 
   let score = null;
-  if (expectedPlaylist === "wins") {
+  if (expectedPlaylist === "tournament") {
+    const tScore = finiteNumber(raw?.score);
+    const matches = finiteNumber(raw?.matches);
+    if (tScore === null || tScore < 0) reasons.push("invalid score");
+    if (matches === null || matches < 0) reasons.push("invalid matches");
+    if (matches !== null && matches > 100_000) reasons.push("matches exceed limit");
+    score = { score: tScore, matches };
+  } else if (expectedPlaylist === "wins") {
     const wins = finiteNumber(raw?.wins);
     const matches = finiteNumber(raw?.matches);
     if (wins === null || wins < 0) reasons.push("invalid wins");
@@ -181,10 +188,12 @@ export function normalizePlaylistRows(rawRows, playlist) {
     rows.push(result.player);
   }
 
-  const score = playlist === "wins" ? "wins" : "mmr";
+  const scoreField = playlist === "wins" ? "wins"
+    : playlist === "tournament" ? "score"
+    : "mmr";
   rows.sort(
     (left, right) =>
-      right[score] - left[score] ||
+      right[scoreField] - left[scoreField] ||
       left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
   );
 
@@ -246,7 +255,14 @@ export function buildPlayerPayload(input, includePlaylist = true) {
   };
   if (includePlaylist) payload.playlist = playlist;
 
-  if (playlist === "wins") {
+  if (playlist === "tournament") {
+    const score = Number(input.score);
+    const matches = Number(input.matches);
+    if (!Number.isFinite(score) || score < 0) throw new Error("Score must be zero or higher.");
+    if (!Number.isFinite(matches) || matches < 0) throw new Error("Matches must be zero or higher.");
+    payload.score = score;
+    payload.matches = matches;
+  } else if (playlist === "wins") {
     const wins = Number(input.wins);
     const matches = Number(input.matches);
     if (!Number.isFinite(wins) || wins < 0) throw new Error("Wins must be zero or higher.");

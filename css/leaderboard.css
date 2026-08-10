@@ -153,6 +153,11 @@ h1{
 .board-head[data-playlist="wins"] > :nth-child(6),
 .board-head[data-playlist="wins"] > :nth-child(7),
 .board-head[data-playlist="wins"] > :last-child{text-align:right}
+/* Tournament: rank | player | spacer | score | matches (+ actions in admin). */
+.board-head[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px}
+.board-head[data-playlist="tournament"] > :nth-child(4),
+.board-head[data-playlist="tournament"] > :nth-child(5){text-align:right}
+.board-head.admin[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px 150px}
 /* Header grid mirrors .player-row.admin so the ACTIONS column lines up
    with the Edit/Remove buttons instead of wrapping to a new line.
    Actions column is a FIXED 150px (not auto) so the header grid and the row
@@ -172,10 +177,12 @@ h1{
   transition:background .16s ease;position:relative;overflow:hidden;
 }
 .player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
+.player-row[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
 .player-row.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
 .player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
+.player-row.admin[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px 150px}
 
 /* =========================================================
    Top-3 / top-10 podium treatment — applied to every playlist.
@@ -741,6 +748,10 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px}
   .board-head.admin[data-playlist="wins"],
   .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px 150px}
+  .board-head[data-playlist="tournament"],
+  .player-row[data-playlist="tournament"]{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px}
+  .board-head.admin[data-playlist="tournament"],
+  .player-row.admin[data-playlist="tournament"]{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 150px}
   .rank{font-size:18px}
   .p-name{font-size:14.5px}
   .p-score{font-size:16px}
@@ -769,14 +780,20 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .player-row.admin:not([data-playlist="wins"]){
     grid-template-columns:40px minmax(0,1fr) 0 82px 64px 150px;
   }
-  /* Hide the Recent column (was nth-child(5), now nth-child(6) with spacer). */
-  .board-head:not([data-playlist="wins"]) > :nth-child(6),
-  .player-row:not([data-playlist="wins"]) .momentum-cell{display:none}
+  /* Hide the Recent column (was nth-child(5), now nth-child(6) with spacer).
+     Tournament has no Recent column, and its 6th cell is the Actions column
+     in admin mode — must not be hidden. */
+  .board-head:not([data-playlist="wins"]):not([data-playlist="tournament"]) > :nth-child(6),
+  .player-row:not([data-playlist="wins"]):not([data-playlist="tournament"]) .momentum-cell{display:none}
 
   .board-head[data-playlist="wins"],
   .player-row[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px}
   .board-head.admin[data-playlist="wins"],
   .player-row.admin[data-playlist="wins"]{grid-template-columns:40px minmax(0,1fr) 0 58px 56px 68px 150px}
+  .board-head[data-playlist="tournament"],
+  .player-row[data-playlist="tournament"]{grid-template-columns:40px minmax(0,1fr) 0 78px 64px}
+  .board-head.admin[data-playlist="tournament"],
+  .player-row.admin[data-playlist="tournament"]{grid-template-columns:40px minmax(0,1fr) 0 78px 64px 150px}
   /* Matches column hidden on phones — wins + win% + streak are the stats
      people scan; matches is derivable from wins/win%. Position shifted
      from nth-child(4) to nth-child(5) with the spacer inserted. */

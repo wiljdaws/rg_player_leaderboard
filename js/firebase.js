@@ -29,7 +29,7 @@ function playlistQuerySpec(playlist) {
   if (!isPlaylist(playlist)) throw new Error("Unknown playlist.");
   return {
     playlist,
-    orderField: playlist === "wins" ? "wins" : "mmr",
+    orderField: playlist === "wins" ? "wins" : playlist === "tournament" ? "score" : "mmr",
     direction: "desc",
     limit: MAX_PLAYLIST_ROWS,
   };
@@ -354,7 +354,10 @@ export async function createFirebaseGateway() {
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
   const leaderboard = collection(db, "leaderboard");
+  const tournamentBoard = collection(db, "tournament_leaderboard");
   const iconKey = collection(db, "iconKey");
+  const boardFor = (pl) => (pl === "tournament" ? tournamentBoard : leaderboard);
+  const collectionNameFor = (pl) => (pl === "tournament" ? "tournament_leaderboard" : "leaderboard");
   const adminReadStats = collection(db, "admin_read_stats");
   const hudReadStats = collection(db, "hud_read_stats");
   const readStatsTotal = collection(db, "read_stats_total");
@@ -492,8 +495,9 @@ export async function createFirebaseGateway() {
     }
 
     const spec = playlistQuerySpec(playlist);
+    const boardCollection = boardFor(spec.playlist);
     const liveQuery = query(
-      leaderboard,
+      boardCollection,
       where("playlist", "==", spec.playlist),
       orderBy(spec.orderField, spec.direction),
       limit(spec.limit),
@@ -530,7 +534,7 @@ export async function createFirebaseGateway() {
         if (String(error?.code).includes("failed-precondition")) {
           try {
             const fallbackQuery = query(
-              leaderboard,
+              boardCollection,
               where("playlist", "==", spec.playlist),
               limit(spec.limit),
             );
@@ -570,6 +574,10 @@ export async function createFirebaseGateway() {
   // Anything unrecognized is treated as "firestore" so a corrupt config can't
   // strand the site on a broken path.
   function subscribePlaylistDispatch(playlist, handlers) {
+    // Tournament is manually curated and low-volume — no CDN pipeline yet, so
+    // always use Firestore directly rather than trying the (missing) static
+    // JSON and falling back three failures later.
+    if (playlist === "tournament") return subscribePlaylist(playlist, handlers);
     const source = resolveReadSource();
     if (source === "static") {
       return subscribePlaylistJson(playlist, handlers, {
@@ -608,11 +616,19 @@ export async function createFirebaseGateway() {
     signOut: () => signOut(auth),
     loadIconKey,
     addPlayer: (payload) => chargedWrite("addPlayer", () =>
-      addDoc(leaderboard, { ...payload, lastWriteAt: serverTimestamp() })),
+      addDoc(boardFor(payload?.playlist), { ...payload, lastWriteAt: serverTimestamp() })),
     updatePlayer: (id, payload) => chargedWrite("updatePlayer", () =>
-      updateDoc(doc(db, "leaderboard", id), { ...payload, lastWriteAt: serverTimestamp() })),
-    deletePlayer: (id) => chargedWrite("deletePlayer", () =>
-      deleteDoc(doc(db, "leaderboard", id))),
+      updateDoc(doc(db, collectionNameFor(payload?.playlist), id), { ...payload, lastWriteAt: serverTimestamp() })),
+    deletePlayer: (id, playlist) => chargedWrite("deletePlayer", () =>
+      deleteDoc(doc(db, collectionNameFor(playlist), id))),
+    // Wipes every row from the tournament collection — used by the admin
+    // "Clear all" button between tournaments.
+    clearTournament: async () => {
+      const snap = await chargedGetDocs(tournamentBoard, "tournamentClear");
+      await Promise.all(snap.docs.map((d) =>
+        chargedWrite("deleteTournamentPlayer", () => deleteDoc(d.ref))));
+      return snap.size;
+    },
     addIcon: (payload) => chargedWrite("addIcon", () => addDoc(iconKey, payload)),
     deleteIcon: (id) => chargedWrite("deleteIcon", () => deleteDoc(doc(db, "iconKey", id))),
     // Read budget handle — admin widget reads snapshots off this on a poll.
