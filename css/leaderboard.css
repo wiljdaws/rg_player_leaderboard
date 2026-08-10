@@ -134,13 +134,18 @@ h1{
   text-transform:uppercase;color:var(--ink-dim);
   position:sticky;top:0;background:rgba(12,18,48,.92);backdrop-filter:blur(8px);z-index:5;
 }
+/* Headers align with the data cell underneath: numeric columns and the
+   momentum / streak / actions columns are all right-aligned in the row,
+   so their labels are too. Rank + Player stay left. */
 .board-head .num{text-align:right}
 .board-head > :nth-child(4),
-.board-head > :last-child{text-align:center}
+.board-head > :nth-child(5),
+.board-head > :last-child{text-align:right}
 .board-head[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 90px 90px 80px 84px}
 .board-head[data-playlist="wins"] > :nth-child(4),
-.board-head[data-playlist="wins"] > :nth-child(5){text-align:right}
-.board-head[data-playlist="wins"] > :nth-child(6){text-align:center}
+.board-head[data-playlist="wins"] > :nth-child(5),
+.board-head[data-playlist="wins"] > :nth-child(6),
+.board-head[data-playlist="wins"] > :last-child{text-align:right}
 /* Header grid mirrors .player-row.admin so the ACTIONS column lines up
    with the Edit/Remove buttons instead of wrapping to a new line. */
 .board-head.admin{grid-template-columns:64px minmax(200px,320px) 140px 92px 1fr auto}
