@@ -6,6 +6,10 @@
 # ~50-60K Firestore reads charged to us. This hook makes that impossible
 # to repeat by hand.
 #
+# Also regenerates the <script type="importmap"> block so every js/*.js
+# file gets its version query. New files show up in the map automatically
+# instead of quietly missing out on cache-busting.
+#
 # Enable: git config core.hooksPath .githooks
 # (or run `bash .githooks/install.sh` to do it for you)
 
@@ -23,50 +27,91 @@ index_file="index.html"
 hash=$(cat js/*.js css/*.css 2>/dev/null | shasum -a 1 | cut -c1-8)
 [[ -n "$hash" ]] || exit 0  # no assets tracked, nothing to do
 
+# Build the importmap block from the actual filesystem so nothing is
+# forgotten. Written to a temp file; we splice it into index.html below.
+build_importmap() {
+  local h="$1"
+  local out="$2"
+  local files=()
+  for f in js/*.js; do
+    [[ -f "$f" ]] || continue
+    # app.js is loaded via <script src="..."> and already carries ?v= there.
+    [[ "$(basename "$f")" == "app.js" ]] && continue
+    files+=("$f")
+  done
+  # Longest filename decides the column width so the JSON stays aligned.
+  local maxlen=0
+  for f in "${files[@]}"; do
+    local key="./$f"
+    (( ${#key} > maxlen )) && maxlen=${#key}
+  done
+  {
+    echo '<script type="importmap">'
+    echo '{'
+    echo '  "imports": {'
+    local n=${#files[@]}
+    local i=0
+    for f in "${files[@]}"; do
+      i=$((i + 1))
+      local key="./$f"
+      local pad=$((maxlen - ${#key}))
+      local spaces
+      spaces=$(printf '%*s' "$pad" '')
+      if (( i < n )); then
+        printf '    "%s":%s "%s?v=%s",\n' "$key" "$spaces" "$key" "$h"
+      else
+        printf '    "%s":%s "%s?v=%s"\n' "$key" "$spaces" "$key" "$h"
+      fi
+    done
+    echo '  }'
+    echo '}'
+    echo '</script>'
+  } > "$out"
+}
+
+# Splice a freshly-built importmap into index.html between the existing
+# <script type="importmap"> ... </script> tags. Requires that the tags
+# already exist — a one-time seed is fine since they're checked in.
+rewrite_importmap_in_file() {
+  local target="$1"
+  local h="$2"
+  local mapfile
+  mapfile=$(mktemp)
+  build_importmap "$h" "$mapfile"
+  local out
+  out=$(mktemp)
+  awk -v mapfile="$mapfile" '
+    BEGIN { skipping = 0 }
+    /<script type="importmap">/ {
+      while ((getline line < mapfile) > 0) print line
+      close(mapfile)
+      skipping = 1
+      next
+    }
+    skipping && /<\/script>/ { skipping = 0; next }
+    skipping { next }
+    { print }
+  ' "$target" > "$out"
+  mv "$out" "$target"
+  rm -f "$mapfile"
+}
+
 current=$(grep -oE '\?v=[a-z0-9]+' "$index_file" | head -1 | sed 's/^?v=//')
 
-if [[ "$current" == "$hash" ]]; then
-  # Assets haven't changed. If someone hand-edited a ?v= line anyway,
-  # revert index.html to keep the hash consistent with the tree.
-  if git diff --cached --name-only | grep -qx "$index_file"; then
-    staged_current=$(git show ":${index_file}" | grep -oE '\?v=[a-z0-9]+' | head -1 | sed 's/^?v=//')
-    if [[ "$staged_current" != "$hash" ]]; then
-      echo "pre-commit: assets unchanged (hash=$hash) — undoing ?v= bump in $index_file"
-      # Rewrite the staged copy to keep the hash pinned.
-      tmp=$(mktemp)
-      git show ":${index_file}" | sed -E "s/\\?v=[a-z0-9]+/?v=${hash}/g" > "$tmp"
-      # Also rewrite data-asset-version="X" strings.
-      sed -i.bak -E "s/data-asset-version=\"[a-z0-9]+\"/data-asset-version=\"${hash}\"/g" "$tmp" && rm -f "${tmp}.bak"
-      git update-index --cacheinfo 100644 "$(git hash-object -w "$tmp")" "$index_file"
-      rm -f "$tmp"
-    fi
-  fi
-  exit 0
-fi
-
-echo "pre-commit: assets changed — bumping ?v= from '${current}' to '${hash}'"
-
-# Rewrite index.html in-place so the working tree matches what gets committed.
+# Always regenerate the importmap so a newly-added js/foo.js can't slip
+# through without cache-busting even when the top-level hash hasn't moved
+# (the hash is stable across renames, and file-set drift matters here).
 sed -i.bak -E "s/\\?v=[a-z0-9]+/?v=${hash}/g" "$index_file"
 sed -i.bak -E "s/data-asset-version=\"[a-z0-9]+\"/data-asset-version=\"${hash}\"/g" "$index_file"
 rm -f "${index_file}.bak"
+rewrite_importmap_in_file "$index_file" "$hash"
 
-git add "$index_file"
-
-# Belt & suspenders: reject commits whose only diff is the ?v= line —
-# usually means someone tried to hand-bump for a redeploy nudge, which
-# is the anti-pattern this hook exists to prevent.
-staged_files=$(git diff --cached --name-only)
-if [[ "$staged_files" == "$index_file" ]]; then
-  # Only index.html is staged. Check whether the only real change is the version.
-  # A `?v=` bump touches ~15 lines matching that pattern plus the data-asset-version.
-  non_version_diff=$(git diff --cached "$index_file" | \
-    grep -E '^[+-]' | \
-    grep -vE '^[+-]{2}' | \
-    grep -vE '(\?v=|data-asset-version=")' || true)
-  if [[ -z "$non_version_diff" ]]; then
-    echo "pre-commit: refusing a commit that only bumps the ?v= string."
-    echo "            (nothing else changed in $index_file — nothing to redeploy for.)"
-    exit 1
-  fi
+if [[ "$current" != "$hash" ]]; then
+  echo "pre-commit: assets changed — bumping ?v= from '${current}' to '${hash}'"
 fi
+
+# Only stage index.html if it actually differs from what's committed.
+if ! git diff --quiet -- "$index_file"; then
+  git add "$index_file"
+fi
+
