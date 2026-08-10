@@ -524,6 +524,14 @@ function stashTournamentTombstone(id) {
   tournamentPending.set(`tomb:${id}`, { kind: "removed", id, ts: Date.now() });
 }
 
+// Stash an in-place update so the admin sees the new score/matches
+// immediately while the CDN JSON catches up. Keyed by row id so a second
+// edit to the same row supersedes the first.
+function stashTournamentUpdate(id, payload) {
+  if (!id) return;
+  tournamentPending.set(`upd:${id}`, { kind: "updated", id, payload, ts: Date.now() });
+}
+
 function matchesRow(pending, row) {
   return pending?.payload
       && String(row?.name || "").trim() === String(pending.payload.name || "").trim()
@@ -535,6 +543,7 @@ function applyTournamentPending(rows) {
   if (!tournamentPending.size) return rows;
   const now = Date.now();
   const removedIds = new Set();
+  const updates = new Map();
   const adds = [];
   for (const [key, entry] of tournamentPending) {
     if (now - entry.ts > PENDING_TTL_MS) {
@@ -547,6 +556,14 @@ function applyTournamentPending(rows) {
         continue;
       }
       removedIds.add(entry.id);
+    } else if (entry.kind === "updated") {
+      const target = rows.find(r => r.id === entry.id);
+      // Drop the overlay once the feed reflects the values we asked for.
+      if (target && matchesRow(entry, target)) {
+        tournamentPending.delete(key);
+        continue;
+      }
+      if (target) updates.set(entry.id, entry.payload);
     } else if (entry.kind === "added") {
       if (rows.some(r => matchesRow(entry, r))) {
         tournamentPending.delete(key);
@@ -564,11 +581,23 @@ function applyTournamentPending(rows) {
       });
     }
   }
-  const filtered = rows.filter(r => !removedIds.has(r.id));
-  if (!adds.length && !removedIds.size) return filtered;
-  // Re-sort so optimistic adds land in their real rank position instead
-  // of always sitting at the top. Same order the normalizer applies:
-  // score DESC, then name ASC for ties.
+  const filtered = rows
+    .filter(r => !removedIds.has(r.id))
+    .map(r => {
+      const pending = updates.get(r.id);
+      if (!pending) return r;
+      return {
+        ...r,
+        name: pending.name ?? r.name,
+        score: Number(pending.score) || 0,
+        matches: Number(pending.matches) || 0,
+        _pending: true,
+      };
+    });
+  if (!adds.length && !removedIds.size && !updates.size) return filtered;
+  // Re-sort so optimistic adds/updates land in their real rank position
+  // instead of stranding at the wrong rank. Same order the normalizer
+  // applies: score DESC, then name ASC for ties.
   return [...adds, ...filtered].sort(
     (a, b) => b.score - a.score
       || String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" }),
@@ -1076,6 +1105,15 @@ function wireEvents() {
       });
       if (saved) {
         clearAdminRosterCache();
+        // Optimistic update: show the new values in the tournament tab
+        // right away instead of waiting for the CDN publish (~1 min).
+        if (player.playlist === "tournament") {
+          stashTournamentUpdate(player.id, payload);
+          if (state.playlist === "tournament") {
+            state.rows = applyTournamentPending(state.rows);
+            render();
+          }
+        }
         // For HUD-synced players (deterministic ID = sourceUserId_playlist),
         // propagate the cosmetic fields to the other playlist docs so a flag
         // or glow edit made in 1v1 is reflected in 2v2/3v3/wins too. Score
