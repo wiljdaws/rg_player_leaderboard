@@ -496,12 +496,17 @@ export async function createFirebaseGateway() {
 
     const spec = playlistQuerySpec(playlist);
     const boardCollection = boardFor(spec.playlist);
-    const liveQuery = query(
-      boardCollection,
-      where("playlist", "==", spec.playlist),
-      orderBy(spec.orderField, spec.direction),
-      limit(spec.limit),
-    );
+    // Tournament lives in its own collection so the playlist filter is
+    // redundant — dropping it means we don't need a composite index just to
+    // sort by score.
+    const liveQuery = spec.playlist === "tournament"
+      ? query(boardCollection, orderBy(spec.orderField, spec.direction), limit(spec.limit))
+      : query(
+          boardCollection,
+          where("playlist", "==", spec.playlist),
+          orderBy(spec.orderField, spec.direction),
+          limit(spec.limit),
+        );
     let active = true;
     // Same "no baseline until first live payload" rule as the JSON path so
     // both read sources produce identical event shapes for the render layer.
@@ -533,11 +538,13 @@ export async function createFirebaseGateway() {
         if (!active) return;
         if (String(error?.code).includes("failed-precondition")) {
           try {
-            const fallbackQuery = query(
-              boardCollection,
-              where("playlist", "==", spec.playlist),
-              limit(spec.limit),
-            );
+            const fallbackQuery = spec.playlist === "tournament"
+              ? query(boardCollection, limit(spec.limit))
+              : query(
+                  boardCollection,
+                  where("playlist", "==", spec.playlist),
+                  limit(spec.limit),
+                );
             const snapshot = await chargedGetDocs(fallbackQuery, "leaderboardFallback");
             if (!active) return;
             const rows = rawDocuments(snapshot);
