@@ -87,7 +87,16 @@ export function togglePlaylistFields(form, playlist) {
 
 export function setFormValue(form, name, value) {
   const field = form.elements.namedItem(name);
-  if (field) field.value = value ?? "";
+  if (!field) return;
+  // The edit form has two inputs named "matches" on purpose (wins group +
+  // tournament group). namedItem returns a RadioNodeList in that case and
+  // setting .value on it is a no-op for non-radio inputs, so the target
+  // field never gets populated. Iterate through all matches instead.
+  if (field instanceof Element) {
+    field.value = value ?? "";
+  } else {
+    for (const el of field) el.value = value ?? "";
+  }
 }
 
 export function readFormValues(form) {
