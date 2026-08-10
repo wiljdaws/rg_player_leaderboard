@@ -381,7 +381,12 @@ function openEdit(player) {
   setFormValue(form, "wins", player.wins ?? 0);
   setFormValue(form, "matches", player.matches ?? 0);
   setFormValue(form, "score", player.score ?? 0);
-  setFormValue(form, "icons", player.icons.join(","));
+  // Icons can be array (normalized rows) or string (optimistic pending
+   // rows before the CDN catches up). Handle both.
+  const iconsStr = Array.isArray(player.icons)
+    ? player.icons.join(",")
+    : String(player.icons || "");
+  setFormValue(form, "icons", iconsStr);
   if (player.flag) flagDirectory.add(player.flag);
   flagPickers.edit?.setValue(player.flag || "");
   togglePlaylistFields(form, player.playlist);
@@ -1030,14 +1035,22 @@ function wireEvents() {
       const payload = buildPlayerPayload(readFormValues($("editForm")), false);
       if (payload.flag) flagDirectory.add(payload.flag);
       const player = state.editingPlayer;
-      const saved = await writes?.updatePlayer(player.id, payload);
+      // The gateway routes updates to the right collection via payload.playlist
+      // (leaderboard vs tournament_leaderboard). buildPlayerPayload strips it
+      // for the ranked flow, so re-attach from the row we're editing. Also
+      // required by the tournament rule's hasOnly() field allowlist.
+      const saved = await writes?.updatePlayer(player.id, {
+        ...payload,
+        playlist: player.playlist,
+      });
       if (saved) {
         clearAdminRosterCache();
         // For HUD-synced players (deterministic ID = sourceUserId_playlist),
         // propagate the cosmetic fields to the other playlist docs so a flag
         // or glow edit made in 1v1 is reflected in 2v2/3v3/wins too. Score
-        // fields (mmr / wins / matches) stay per-playlist.
-        if (player.sourceUserId) {
+        // fields (mmr / wins / matches) stay per-playlist. Tournament rows
+        // are standalone: no sibling docs to fan out to.
+        if (player.sourceUserId && player.playlist !== "tournament") {
           const cosmetic = {
             name: payload.name,
             flag: payload.flag,
