@@ -207,6 +207,7 @@ export function renderReadDashboard(container, data, options = {}) {
     onRangeChange,
     onExport,
     loading = false,
+    nameByUid = null,
   } = options;
 
   container.classList.add("read-dashboard");
@@ -242,7 +243,7 @@ export function renderReadDashboard(container, data, options = {}) {
   ));
   container.appendChild(renderTopLabels(aggregate));
   container.appendChild(renderTopDenies(aggregate));
-  container.appendChild(renderHudUsersTable(aggregate));
+  container.appendChild(renderHudUsersTable(aggregate, nameByUid));
   container.appendChild(renderSiteSessionsTable(aggregate));
 }
 
@@ -839,8 +840,14 @@ const HUD_USER_COLUMNS = [
   { key: "lastUpdatedAt", label: "Last active", sortable: true, kind: "time" },
 ];
 
-function renderHudUsersTable(agg) {
+function renderHudUsersTable(agg, nameByUid) {
   const rows = Array.isArray(agg?.byHudUser) ? agg.byHudUser.slice(0) : [];
+  const lookupName = (uid) => {
+    if (!uid) return null;
+    if (nameByUid?.get) return nameByUid.get(uid) || null;
+    if (nameByUid && typeof nameByUid === "object") return nameByUid[uid] || null;
+    return null;
+  };
   return sortableTable({
     id: "hud-users",
     title: "HUD users",
@@ -851,7 +858,13 @@ function renderHudUsersTable(agg) {
     max: 20,
     renderCell: (col, row) => {
       const v = row?.[col.key];
-      if (col.key === "sourceUserId") return truncateId(v, 8);
+      if (col.key === "sourceUserId") {
+        // Prefer the roster display name over the opaque uid. Fall back to
+        // the truncated uid so we still show something for users who aren't
+        // on the wins leaderboard yet.
+        const name = lookupName(v);
+        return name || truncateId(v, 8);
+      }
       if (col.key === "versionNum") return v ? String(v) : "—";
       if (col.key === "reads" || col.key === "writes") return fmtNum(Number(v) || 0);
       if (col.key === "lastUpdatedAt") return fmtAgo(v);

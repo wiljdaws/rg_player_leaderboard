@@ -42,6 +42,28 @@ export function createReadsView({ gateway }) {
   let latestData = null;
   let latestFetchAt = 0;
   let activeFetchToken = 0;
+  // uid -> displayName lookup so the HUD users table can show real names
+  // instead of opaque Firebase Auth uids. Built lazily from the published
+  // wins roster since it's the widest source of uid+name pairs we have.
+  let nameByUid = new Map();
+  let nameMapLoaded = false;
+
+  async function loadNameMap() {
+    if (nameMapLoaded) return nameByUid;
+    nameMapLoaded = true;
+    try {
+      const url = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/leaderboard/wins.json";
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) return nameByUid;
+      const json = await response.json();
+      for (const row of Array.isArray(json?.rows) ? json.rows : []) {
+        if (row?.uid && row?.name) nameByUid.set(row.uid, row.name);
+      }
+    } catch {
+      // Non-fatal. Table falls back to truncated uids.
+    }
+    return nameByUid;
+  }
 
   function paintLoading() {
     renderReadDashboard(container, null, { loading: true });
@@ -49,6 +71,7 @@ export function createReadsView({ gateway }) {
 
   function paintData(data) {
     renderReadDashboard(container, data, {
+      nameByUid,
       onRefresh,
       onRangeChange: (from, to) => {
         // Basic range sanity — the picker enforces ISO date strings but
@@ -66,6 +89,10 @@ export function createReadsView({ gateway }) {
     const token = ++activeFetchToken;
     paintLoading();
     if (force) query.invalidateCache();
+    // Kick off the name-map fetch in parallel with the stats query.
+    // If it beats the stats query, great; if not, paint updates on next
+    // refresh.
+    loadNameMap();
     try {
       const data = await query.fetchRange({ ...range, force });
       if (token !== activeFetchToken) return; // superseded by a newer call
