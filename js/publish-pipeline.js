@@ -114,6 +114,23 @@ function fmtCountdown(ms) {
   return `${m}m`;
 }
 
+// "Xd Yh Zm Ws" — leading zero segments dropped so short-lived counters
+// don't render "0d 0h 3m 4s".
+function fmtTrackedFor(sinceMs, now = Date.now()) {
+  if (!Number.isFinite(sinceMs)) return null;
+  const total = Math.max(0, Math.floor((now - sinceMs) / 1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (d || h) parts.push(`${h}h`);
+  if (d || h || m) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(" ");
+}
+
 const FALLBACK_REASON_LABEL = {
   index_not_ready: "index still building",
 };
@@ -206,8 +223,9 @@ function renderTiles(status, history, lifetime) {
   if (Number.isFinite(lifeSaved) && Number.isFinite(lifeBaseline) && lifeBaseline > 0) {
     savedValue = lifeSaved;
     savedPct = Math.round((lifeSaved / lifeBaseline) * 1000) / 10;
-    savedSub = lifeSince
-      ? `Since ${lifeSince.slice(0, 10)} · ${fmtNum(lifeSyncs || 0)} syncs · ${fmtNum(lifeBaseline)} full-scan equivalent`
+    const trackedFor = lifeSince ? fmtTrackedFor(Date.parse(lifeSince)) : null;
+    savedSub = trackedFor
+      ? `Tracking for ${trackedFor} · ${fmtNum(lifeSyncs || 0)} syncs · ${fmtNum(lifeBaseline)} full-scan equivalent`
       : `${fmtNum(lifeSyncs || 0)} syncs · ${fmtNum(lifeBaseline)} full-scan equivalent`;
   } else if (runs.length) {
     const cumBaseline = historicalActual + historicalSaved;
