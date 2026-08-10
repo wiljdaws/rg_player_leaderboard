@@ -3,10 +3,9 @@
 const PLAYLIST_PREFIX = "rgPlayerLb:playlist:v1:";
 const ICON_KEY = "rgPlayerLb:iconKey:v1";
 const ADMIN_ROSTER = "rgPlayerLb:adminRoster:v1";
-// 7 days. Keeps returning visitors from seeing an empty screen if
-// the live/CDN paths are both unreachable — the "last-known" data is
-// still recognizable and better than a blank leaderboard.
-export const LOCAL_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// 1 hour. Long enough to survive a bad CDN deploy, short enough that
+// nobody sees hours-stale timestamps painted from localStorage.
+export const LOCAL_CACHE_TTL_MS = 60 * 60 * 1000;
 // Only used for the "who's on which version" diagnostic. Writes clear
 // it when the data actually changes.
 export const ROSTER_CACHE_TTL_MS = 60 * 60 * 1000;

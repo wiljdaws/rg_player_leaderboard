@@ -38,7 +38,9 @@ export const READ_SOURCE_DEFAULT = "static";
 // endpoint so freshness is ~30s globally after each rebuild.
 export const STATIC_JSON_URL_TEMPLATE =
   "https://cdn.jsdelivr.net/gh/wiljdaws/rg_player_leaderboard@data/leaderboard/{playlist}.json";
-export const STATIC_JSON_POLL_MS = 300_000;
+// Every 60s — CDN is refreshed every ~1 min now so anything longer just
+// stalls the tooltip's "X ago" text.
+export const STATIC_JSON_POLL_MS = 60_000;
 // Falls back to firestore on repeated fetch errors so a bad CDN deploy can't
 // take the site down.
 export const STATIC_JSON_MAX_CONSECUTIVE_FAILURES = 3;

@@ -125,8 +125,12 @@ test("subscribePlaylistJson sends If-None-Match after first successful fetch", a
   assert.equal(seenHeaders.length, 2);
   assert.equal(seenHeaders[0]["If-None-Match"], undefined);
   assert.equal(seenHeaders[1]["If-None-Match"], '"v1"');
-  // 304 must not re-emit next.
-  assert.equal(nexts.length, 1);
+  // 304 re-emits the previous rows with empty changes so the row
+  // re-renders and "X ago" tooltips tick forward.
+  assert.equal(nexts.length, 2);
+  assert.equal(nexts[1].fromCache, false);
+  assert.deepEqual(nexts[1].changes, []);
+  assert.deepEqual(nexts[1].rows.map(r => r.id), ["x"]);
   assert.equal(errors.length, 0);
 
   unsubscribe();

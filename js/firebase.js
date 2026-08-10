@@ -241,6 +241,12 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
 
       if (response.status === 304) {
         consecutiveFailures = 0;
+        // Re-emit so the row re-renders and "X ago" tooltips tick forward.
+        // Also refresh localStorage's fetchedAt so its TTL doesn't lie.
+        if (previousRows?.length) {
+          writePlaylistCache(playlist, previousRows);
+          handlers.next({ rows: previousRows, fromCache: false, changes: [] });
+        }
         return;
       }
 
