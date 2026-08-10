@@ -712,35 +712,141 @@ h1{
 
 /* Tournament quick-add strip. Sits above the board when admin is on the
    Tournament tab so a whole event can be typed in without opening the
-   full admin panel. */
-.tournament-admin{margin:0 0 18px}
+   full admin panel. Card treatment mirrors .board so the two feel like
+   one component: same gradient, border, radius, inset highlight. The
+   negative bottom margin (-1px) lets the strip visually kiss the board. */
+.tournament-admin{margin:0 0 14px;position:relative}
 .tournament-quickadd{
-  display:grid;grid-template-columns:minmax(200px,1fr) 120px 120px auto auto auto;gap:10px;align-items:end;
-  padding:14px 16px;border:1px solid var(--line);border-radius:14px;
-  background:linear-gradient(180deg,rgba(19,27,68,.55),rgba(12,18,48,.55));
+  display:grid;
+  grid-template-columns:minmax(220px,1.4fr) 110px 110px auto;
+  grid-template-areas:"name score matches actions";
+  gap:12px;align-items:end;
+  padding:14px 18px 14px 20px;
+  border:1px solid var(--line);border-radius:18px;
+  background:linear-gradient(180deg,rgba(19,27,68,.72),rgba(12,18,48,.86));
+  box-shadow:0 18px 48px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.04);
+  backdrop-filter:blur(6px);
 }
-.tournament-quickadd .field{margin:0}
-.tournament-quickadd input{width:100%}
+/* Tiny "QUICK ADD" badge on the top-left so users know what this row is. */
+.tournament-quickadd::before{
+  content:"Quick add";
+  position:absolute;top:-8px;left:22px;
+  padding:2px 10px;border-radius:999px;
+  background:linear-gradient(93deg,var(--grad-a),var(--grad-b));
+  color:var(--ink);font:700 9.5px var(--display);
+  letter-spacing:.28em;text-transform:uppercase;
+  box-shadow:0 6px 16px rgba(168,85,247,.42);
+  pointer-events:none;
+}
+.tournament-quickadd .field{margin:0;min-width:0}
+.tournament-quickadd .field:nth-of-type(1){grid-area:name}
+.tournament-quickadd .field:nth-of-type(2){grid-area:score}
+.tournament-quickadd .field:nth-of-type(3){grid-area:matches}
+.tournament-quickadd .field-label{
+  font-size:9.5px;letter-spacing:.24em;margin-bottom:2px;
+}
+.tournament-quickadd input{
+  width:100%;height:40px;padding:0 12px;border-radius:10px;
+  background:rgba(6,10,24,.7);border:1px solid var(--line);color:var(--ink);
+  font:600 14.5px var(--body);letter-spacing:.01em;outline:none;
+  transition:border-color .16s ease, box-shadow .16s ease, background .16s ease;
+  -webkit-appearance:none;appearance:none;
+  font-variant-numeric:tabular-nums;
+}
+.tournament-quickadd input::placeholder{color:rgba(142,155,194,.42);font-weight:500}
+.tournament-quickadd input:hover{border-color:var(--line-strong)}
+.tournament-quickadd input:focus{
+  border-color:var(--grad-a);
+  box-shadow:0 0 0 3px rgba(168,85,247,.18);
+  background:rgba(6,10,24,.85);
+}
+/* Actions cluster: primary Add first, then secondary Paste rows, then a
+   thin vertical divider, then the danger Clear all button. Consistent
+   40px height across all three so the row reads as one thing. */
+.tournament-quickadd .quickadd-actions{
+  grid-area:actions;
+  display:inline-flex;align-items:center;gap:8px;height:40px;
+}
+.tournament-quickadd .quickadd-actions .divider{
+  width:1px;height:22px;
+  background:linear-gradient(180deg,transparent,var(--line-strong),transparent);
+  margin:0 4px;
+}
+.tournament-quickadd .admin-primary,
+.tournament-quickadd .admin-secondary,
+.tournament-quickadd .admin-danger{
+  height:40px;padding:0 16px;border-radius:10px;
+  font:700 11.5px var(--display);letter-spacing:.18em;text-transform:uppercase;
+  cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  white-space:nowrap;transition:transform .12s ease, border-color .16s ease,
+    background .16s ease, box-shadow .16s ease, color .16s ease;
+}
+.tournament-quickadd .admin-primary{
+  color:var(--ink);border:none;
+  background:linear-gradient(93deg,var(--grad-a),var(--grad-b));
+  box-shadow:0 8px 22px rgba(168,85,247,.34);
+  padding:0 22px;
+}
+.tournament-quickadd .admin-primary:hover{
+  transform:translateY(-1px);
+  box-shadow:0 12px 28px rgba(168,85,247,.44);
+}
+.tournament-quickadd .admin-primary:active{transform:translateY(0)}
+.tournament-quickadd .admin-secondary{
+  color:var(--ink);background:rgba(168,120,255,.06);
+  border:1px solid var(--line-strong);
+}
+.tournament-quickadd .admin-secondary:hover{
+  border-color:var(--grad-a);
+  background:rgba(168,120,255,.12);
+}
+.tournament-quickadd .admin-danger{
+  color:#fca5a5;background:transparent;
+  border:1px solid rgba(251,113,133,.28);
+  padding:0 14px;
+}
+.tournament-quickadd .admin-danger:hover{
+  background:rgba(251,113,133,.12);
+  border-color:rgba(251,113,133,.55);
+  color:#fecdd3;
+}
 .tournament-quickadd-status{
-  min-height:18px;margin:8px 4px 0;font-size:13px;color:var(--ink-dim);
+  min-height:16px;margin:8px 4px 0;font-size:12.5px;color:var(--ink-dim);
+  letter-spacing:.02em;
 }
 .tournament-quickadd-status[data-kind="error"]{color:var(--loss)}
 .tournament-quickadd-status[data-kind="success"]{color:var(--gain)}
-.admin-danger{
-  background:rgba(251,113,133,.12);border:1px solid rgba(251,113,133,.4);
-  color:#fca5a5;font:600 13px var(--display);letter-spacing:.14em;
-  text-transform:uppercase;padding:10px 14px;border-radius:10px;cursor:pointer;
-}
-.admin-danger:hover{background:rgba(251,113,133,.2)}
+/* Slight cohesion with the board below: pull the empty-state up a bit
+   so the "No tournament rankings" line doesn't feel stranded. */
+.tournament-admin + .board .empty-state{padding:44px 24px 48px}
 #tqBulkText{
   width:100%;min-height:180px;padding:10px 12px;font-family:var(--body);font-size:14px;
   background:rgba(12,18,48,.6);color:var(--ink);
   border:1px solid var(--line);border-radius:10px;resize:vertical;
 }
-@media (max-width:820px){
-  .tournament-quickadd{grid-template-columns:1fr 1fr;gap:8px}
-  .tournament-quickadd > .field:first-child{grid-column:1/-1}
-  .tournament-quickadd > button{grid-column:span 1}
+/* Mobile: stack into a compact 3-row layout. Name gets its own row,
+   Score and Matches share a row, and actions get their own row with the
+   primary button spanning the full width. Clear-all stays subtle on the
+   far right so it can't be tapped by accident. */
+@media (max-width:680px){
+  .tournament-admin{margin:0 0 12px}
+  .tournament-quickadd{
+    grid-template-columns:1fr 1fr;
+    grid-template-areas:
+      "name    name"
+      "score   matches"
+      "actions actions";
+    gap:10px;
+    padding:16px 14px 14px;
+  }
+  .tournament-quickadd::before{left:14px}
+  .tournament-quickadd .quickadd-actions{
+    width:100%;display:grid;
+    grid-template-columns:1fr auto auto;
+    gap:8px;height:auto;
+  }
+  .tournament-quickadd .quickadd-actions .divider{display:none}
+  .tournament-quickadd .admin-primary{width:100%}
 }
 .detail-list{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin-bottom:8px}
 .detail-list dt{
