@@ -1092,9 +1092,21 @@ function wireEvents() {
     event.preventDefault();
     if (!state.editingPlayer) return;
     try {
-      const payload = buildPlayerPayload(readFormValues($("editForm")), false);
-      if (payload.flag) flagDirectory.add(payload.flag);
+      const rawValues = readFormValues($("editForm"));
       const player = state.editingPlayer;
+      // Tournament edits hide the Appearance section, so its inputs are
+      // disabled and FormData skips them. That means buildPlayerPayload
+      // would set flag/icons to "" and the merge write would WIPE the
+      // existing flag on every edit. Re-inject the existing cosmetics
+      // from the row so they survive the round trip.
+      if (player.playlist === "tournament") {
+        rawValues.flag = player.flag || "";
+        rawValues.icons = Array.isArray(player.icons)
+          ? player.icons.join(",")
+          : String(player.icons || "");
+      }
+      const payload = buildPlayerPayload(rawValues, false);
+      if (payload.flag) flagDirectory.add(payload.flag);
       // The gateway routes updates to the right collection via payload.playlist
       // (leaderboard vs tournament_leaderboard). buildPlayerPayload strips it
       // for the ranked flow, so re-attach from the row we're editing. Also
