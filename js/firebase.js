@@ -674,14 +674,38 @@ export async function createFirebaseGateway() {
       addDoc(boardFor(payload?.playlist), { ...payload, lastWriteAt: serverTimestamp() })),
     updatePlayer: (id, payload) => chargedWrite("updatePlayer", () =>
       updateDoc(doc(db, collectionNameFor(payload?.playlist), id), { ...payload, lastWriteAt: serverTimestamp() })),
+    // Soft delete: sets deleted:true instead of removing the doc. The
+    // publisher and site filter these out at emit/render time. Two wins:
+    //  - CDC delta picks up the write (a deleteDoc has no lastWriteAt so
+    //    it goes undetected until the daily full-scan).
+    //  - HUD setDoc(merge:true) writes preserve deleted:true across future
+    //    match ends, so a deleted row stays gone even if the player keeps
+    //    playing.
     deletePlayer: (id, playlist) => chargedWrite("deletePlayer", () =>
-      deleteDoc(doc(db, collectionNameFor(playlist), id))),
+      updateDoc(doc(db, collectionNameFor(playlist), id), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        lastWriteAt: serverTimestamp(),
+      })),
+    // Un-hide a previously soft-deleted row so it renders again.
+    undeletePlayer: (id, playlist) => chargedWrite("undeletePlayer", () =>
+      updateDoc(doc(db, collectionNameFor(playlist), id), {
+        deleted: false,
+        deletedAt: null,
+        lastWriteAt: serverTimestamp(),
+      })),
     // Wipes every row from the tournament collection — used by the admin
-    // "Clear all" button between tournaments.
+    // "Clear all" button between tournaments. Also uses soft delete so the
+    // CDN clears within one publish cycle.
     clearTournament: async () => {
       const snap = await chargedGetDocs(tournamentBoard, "tournamentClear");
       await Promise.all(snap.docs.map((d) =>
-        chargedWrite("deleteTournamentPlayer", () => deleteDoc(d.ref))));
+        chargedWrite("deleteTournamentPlayer", () =>
+          updateDoc(d.ref, {
+            deleted: true,
+            deletedAt: serverTimestamp(),
+            lastWriteAt: serverTimestamp(),
+          }))));
       return snap.size;
     },
     addIcon: (payload) => chargedWrite("addIcon", () => addDoc(iconKey, payload)),

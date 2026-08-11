@@ -80,6 +80,11 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
   const name = typeof raw?.name === "string" ? raw.name.trim() : "";
   const sourceUserId = typeof raw?.sourceUserId === "string" ? raw.sourceUserId.trim() : "";
 
+  // Soft-deleted rows are hidden from the board. Quarantine (not filter)
+  // so the count still shows in the admin's diagnostics, but don't render.
+  if (raw?.deleted === true) {
+    return { ok: false, quarantine: { id: id || "unknown", reasons: ["soft-deleted"] } };
+  }
   if (!id) reasons.push("missing document id");
   if (!isPlaylist(playlist) || playlist !== expectedPlaylist) reasons.push("invalid playlist");
   const maximumNameLength = sourceUserId ? 22 : MAX_NAME_LENGTH;
