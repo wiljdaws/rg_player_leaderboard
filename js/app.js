@@ -347,7 +347,15 @@ function render() {
           state.rows = applyTournamentPending(state.rows);
           render();
         } else {
+          // Same optimistic pattern for ranked playlists so admin doesn't
+          // stare at a still-visible row for a minute. If the player's HUD
+          // recreates the doc before the tombstone expires, the row will
+          // come back on the next feed poll.
           log.info("write", "delete requested", { id: player.id, playlist: player.playlist });
+          stashRankedTombstone(player.playlist, player.id);
+          clearPlaylistCache(player.playlist);
+          state.rows = applyRankedTombstones(state.rows, player.playlist);
+          render();
         }
         const result = await writes?.deletePlayer(player.id, player.playlist);
         if (result === false) {
@@ -531,6 +539,39 @@ function stashPendingTournament(kind, payload, realId = null) {
 function stashTournamentTombstone(id) {
   if (!id) return;
   tournamentPending.set(`tomb:${id}`, { kind: "removed", id, ts: Date.now() });
+}
+
+// Tombstones for ranked (1v1/2v2/3v3/wins) rows. Same idea as tournament
+// but keyed per-playlist since these are separate CDN feeds. Rows drop
+// out of state.rows immediately on delete, and the tombstone clears once
+// the CDN publishes without the row (or after PENDING_TTL_MS if the row
+// gets re-created by the player's HUD).
+const rankedTombstones = new Map();
+
+function stashRankedTombstone(playlist, id) {
+  if (!playlist || !id) return;
+  const key = `${playlist}:${id}`;
+  rankedTombstones.set(key, { playlist, id, ts: Date.now() });
+}
+
+function applyRankedTombstones(rows, playlist) {
+  if (!rankedTombstones.size) return rows;
+  const now = Date.now();
+  const drop = new Set();
+  for (const [key, entry] of rankedTombstones) {
+    if (entry.playlist !== playlist) continue;
+    if (now - entry.ts > PENDING_TTL_MS) {
+      rankedTombstones.delete(key);
+      continue;
+    }
+    if (!rows.some(r => r.id === entry.id)) {
+      // Feed no longer has this row; the delete propagated.
+      rankedTombstones.delete(key);
+      continue;
+    }
+    drop.add(entry.id);
+  }
+  return drop.size ? rows.filter(r => !drop.has(r.id)) : rows;
 }
 
 // Stash an in-place update so the admin sees the new values right away.
@@ -1308,7 +1349,7 @@ async function boot() {
       const normalized = normalizePlaylistRows(raw, state.playlist);
       state.rows = state.playlist === "tournament"
         ? applyTournamentPending(normalized.rows)
-        : normalized.rows;
+        : applyRankedTombstones(normalized.rows, state.playlist);
       state.quarantined = normalized.quarantined;
       historyStore.record(state.playlist, state.rows);
       flagDirectory.registerRows(state.rows);
