@@ -701,6 +701,21 @@ export async function createFirebaseGateway() {
         deletedAt: null,
         lastWriteAt: serverTimestamp(),
       }, { merge: true })),
+    // Soft-delete the same player across every ranked playlist. Ranked
+    // doc ids are {sourceUserId}_{playlist} so we can build the four
+    // paths without needing to know which docs actually exist. setDoc
+    // merge means a non-existent doc gets a fresh tombstone, so this
+    // also cleans up ghosts from the pre-soft-delete era.
+    deletePlayerAllPlaylists: (sourceUserId) => chargedWrite("deletePlayerAllPlaylists", async () => {
+      const playlists = ["1v1", "2v2", "3v3", "wins"];
+      const now = serverTimestamp();
+      await Promise.all(playlists.map((pl) =>
+        setDoc(doc(db, "leaderboard", `${sourceUserId}_${pl}`), {
+          deleted: true,
+          deletedAt: now,
+          lastWriteAt: now,
+        }, { merge: true })));
+    }),
     // Wipes every row from the tournament collection — used by the admin
     // "Clear all" button between tournaments. Also uses soft delete so the
     // CDN clears within one publish cycle.

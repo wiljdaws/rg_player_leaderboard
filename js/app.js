@@ -325,9 +325,10 @@ function render() {
       onInspect: openPlayerDetails,
       onEdit: openEdit,
       onDelete: async (player) => {
-        // Tournament rows are hand-typed. Guard against a stray click by
-        // asking to confirm; everything else is HUD-synced and reappears
-        // on the next write so no prompt needed.
+        // Tournament rows are hand-typed, so require confirmation.
+        // Ranked rows offer a "purge all playlists" checkbox for
+        // duplicate-account cleanup.
+        let purgeAllPlaylists = false;
         if (player.playlist === "tournament") {
           const ok = await showConfirm({
             title: "Remove player?",
@@ -336,28 +337,45 @@ function render() {
             variant: "danger",
           });
           if (!ok) return;
+        } else if (player.sourceUserId) {
+          const result = await showConfirm({
+            title: "Remove player?",
+            message: `Remove ${player.name} from ${player.playlist}?`,
+            confirmLabel: "Remove",
+            variant: "danger",
+            checkbox: {
+              label: "Also remove this account from every other playlist",
+              default: false,
+            },
+          });
+          if (!result?.ok) return;
+          purgeAllPlaylists = result.checked;
         }
         clearAdminRosterCache();
         if (player.playlist === "tournament") {
-          // Firestore realtime picks up the soft-delete write in <1s, so
-          // no local overlay needed. Just log it.
           log.info("tournament", "delete requested", { id: player.id, name: player.name });
         } else {
-          // Same optimistic pattern for ranked playlists so admin doesn't
-          // stare at a still-visible row for a minute. If the player's HUD
-          // recreates the doc before the tombstone expires, the row will
-          // come back on the next feed poll.
-          log.info("write", "delete requested", { id: player.id, playlist: player.playlist });
-          stashRankedTombstone(player.playlist, player.id);
-          clearPlaylistCache(player.playlist);
+          // Row disappears from view instantly, then the CDN catches up.
+          log.info("write", "delete requested", { id: player.id, playlist: player.playlist, purgeAllPlaylists });
+          if (purgeAllPlaylists) {
+            for (const pl of ["1v1", "2v2", "3v3", "wins"]) {
+              stashRankedTombstone(pl, `${player.sourceUserId}_${pl}`);
+              clearPlaylistCache(pl);
+            }
+          } else {
+            stashRankedTombstone(player.playlist, player.id);
+            clearPlaylistCache(player.playlist);
+          }
           state.rows = applyRankedTombstones(state.rows, player.playlist);
           render();
         }
-        const result = await writes?.deletePlayer(player.id, player.playlist);
+        const result = purgeAllPlaylists
+          ? await writes?.deletePlayerAllPlaylists(player.sourceUserId)
+          : await writes?.deletePlayer(player.id, player.playlist);
         if (result === false) {
-          log.error("write", "delete failed", new Error(`deletePlayer returned falsy for ${player.id}`));
+          log.error("write", "delete failed", new Error(`delete returned falsy for ${player.id}`));
         } else {
-          log.info("write", "delete completed", { id: player.id, playlist: player.playlist });
+          log.info("write", "delete completed", { id: player.id, playlist: player.playlist, purgeAllPlaylists });
         }
         return result;
       },
@@ -567,7 +585,7 @@ function findTournamentRowByName(name) {
 // Styled confirm dialog. Native window.confirm() looks foreign on the
 // dark-themed site, this one uses the same modal chrome as the edit and
 // bulk-add dialogs.
-function showConfirm({ title = "Are you sure?", message = "", confirmLabel = "Confirm", variant = "primary" } = {}) {
+function showConfirm({ title = "Are you sure?", message = "", confirmLabel = "Confirm", variant = "primary", checkbox = null } = {}) {
   return new Promise((resolve) => {
     const dialog = document.getElementById("confirmDialog");
     if (!dialog) return resolve(window.confirm(message));
@@ -582,13 +600,33 @@ function showConfirm({ title = "Are you sure?", message = "", confirmLabel = "Co
       okBtn.textContent = confirmLabel;
       okBtn.className = variant === "danger" ? "admin-danger" : "admin-primary";
     }
+    // Optional checkbox rendered above the buttons. When present the
+    // promise resolves to { ok: bool, checked: bool } instead of a raw
+    // bool so callers can branch on it.
+    let checkboxEl = null;
+    if (checkbox && msgEl) {
+      const wrap = document.createElement("label");
+      wrap.className = "confirm-checkbox";
+      wrap.dataset.confirmExtra = "1";
+      wrap.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;cursor:pointer;";
+      checkboxEl = document.createElement("input");
+      checkboxEl.type = "checkbox";
+      checkboxEl.checked = Boolean(checkbox.default);
+      wrap.append(checkboxEl, document.createTextNode(" " + checkbox.label));
+      // Remove any leftover from a previous open.
+      msgEl.parentElement?.querySelector("[data-confirm-extra]")?.remove();
+      msgEl.after(wrap);
+    } else {
+      dialog.querySelector("[data-confirm-extra]")?.remove();
+    }
     let settled = false;
-    const finish = (result) => {
+    const finish = (ok) => {
       if (settled) return;
       settled = true;
       cleanup();
       if (dialog.open) dialog.close();
-      resolve(result);
+      const checked = Boolean(checkboxEl?.checked);
+      resolve(checkbox ? { ok, checked } : ok);
     };
     const onSubmit = (e) => { e.preventDefault(); finish(true); };
     const onCancel = () => finish(false);

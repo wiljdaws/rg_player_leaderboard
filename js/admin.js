@@ -42,6 +42,13 @@ export class AdminWriteService {
     return this.run("Removing player", () => this.gateway.deletePlayer(id, playlist));
   }
 
+  deletePlayerAllPlaylists(sourceUserId) {
+    return this.run(
+      "Removing player from all playlists",
+      () => this.gateway.deletePlayerAllPlaylists(sourceUserId),
+    );
+  }
+
   clearTournament() {
     return this.run("Clearing tournament", () => this.gateway.clearTournament());
   }
