@@ -679,26 +679,28 @@ export async function createFirebaseGateway() {
       addDoc(boardFor(payload?.playlist), { ...payload, lastWriteAt: serverTimestamp() })),
     updatePlayer: (id, payload) => chargedWrite("updatePlayer", () =>
       updateDoc(doc(db, collectionNameFor(payload?.playlist), id), { ...payload, lastWriteAt: serverTimestamp() })),
-    // Soft delete: sets deleted:true instead of removing the doc. The
-    // publisher and site filter these out at emit/render time. Two wins:
+    // Soft delete: sets deleted:true instead of removing the doc. Uses
+    // setDoc(merge:true) instead of updateDoc so a ghost row (previously
+    // hard-deleted but still showing in a stale CDN JSON) gets a fresh
+    // tombstone doc rather than throwing "No document to update".
     //  - CDC delta picks up the write (a deleteDoc has no lastWriteAt so
     //    it goes undetected until the daily full-scan).
     //  - HUD setDoc(merge:true) writes preserve deleted:true across future
     //    match ends, so a deleted row stays gone even if the player keeps
     //    playing.
     deletePlayer: (id, playlist) => chargedWrite("deletePlayer", () =>
-      updateDoc(doc(db, collectionNameFor(playlist), id), {
+      setDoc(doc(db, collectionNameFor(playlist), id), {
         deleted: true,
         deletedAt: serverTimestamp(),
         lastWriteAt: serverTimestamp(),
-      })),
+      }, { merge: true })),
     // Un-hide a previously soft-deleted row so it renders again.
     undeletePlayer: (id, playlist) => chargedWrite("undeletePlayer", () =>
-      updateDoc(doc(db, collectionNameFor(playlist), id), {
+      setDoc(doc(db, collectionNameFor(playlist), id), {
         deleted: false,
         deletedAt: null,
         lastWriteAt: serverTimestamp(),
-      })),
+      }, { merge: true })),
     // Wipes every row from the tournament collection — used by the admin
     // "Clear all" button between tournaments. Also uses soft delete so the
     // CDN clears within one publish cycle.
@@ -706,11 +708,11 @@ export async function createFirebaseGateway() {
       const snap = await chargedGetDocs(tournamentBoard, "tournamentClear");
       await Promise.all(snap.docs.map((d) =>
         chargedWrite("deleteTournamentPlayer", () =>
-          updateDoc(d.ref, {
+          setDoc(d.ref, {
             deleted: true,
             deletedAt: serverTimestamp(),
             lastWriteAt: serverTimestamp(),
-          }))));
+          }, { merge: true }))));
       return snap.size;
     },
     addIcon: (payload) => chargedWrite("addIcon", () => addDoc(iconKey, payload)),
