@@ -42,9 +42,8 @@ export function createReadsView({ gateway }) {
   let latestData = null;
   let latestFetchAt = 0;
   let activeFetchToken = 0;
-  // uid -> displayName lookup so the HUD users table can show real names
-  // instead of opaque Firebase Auth uids. Built lazily from the published
-  // wins roster since it's the widest source of uid+name pairs we have.
+  // uid -> displayName lookup so the HUD users table can show names
+  // instead of opaque auth uids. Built lazily from the wins roster.
   let nameByUid = new Map();
   let nameMapLoaded = false;
 
@@ -89,9 +88,8 @@ export function createReadsView({ gateway }) {
     const token = ++activeFetchToken;
     paintLoading();
     if (force) query.invalidateCache();
-    // Kick off the name-map fetch in parallel with the stats query.
-    // If it beats the stats query, great; if not, paint updates on next
-    // refresh.
+    // Fire the name lookup alongside the stats query. If it wins the
+    // race great; if not, the next refresh will pick it up.
     loadNameMap();
     try {
       const data = await query.fetchRange({ ...range, force });

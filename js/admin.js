@@ -18,9 +18,8 @@ export class AdminWriteService {
       const result = await operation();
       setWriteStatus({ kind: "success", message: `${label} complete.` });
       this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
-      // Return the operation's own result when it produces one (e.g. a
-      // DocumentReference from addDoc), otherwise a truthy sentinel so the
-      // existing `if (saved)` callers still work.
+      // Pass the operation's return (e.g. addDoc's ref) back through so
+      // callers can grab the id. Default to true for the void case.
       return result === undefined ? true : result;
     } catch (error) {
       setWriteStatus({ kind: "error", message: error?.message || `${label} failed.`, error });
@@ -30,10 +29,8 @@ export class AdminWriteService {
   }
 
   addPlayer(payload) {
-    // Returns the DocumentReference from addDoc on success so callers can
-    // grab the real doc id (needed for the tournament optimistic overlay
-    // to upsert instead of duplicating when the same name is added twice
-    // in quick succession).
+    // Returns the addDoc DocumentReference on success so callers can
+    // grab the id (used by the tournament optimistic overlay).
     return this.run("Adding player", () => this.gateway.addPlayer(payload));
   }
 
@@ -80,9 +77,8 @@ export function togglePlaylistFields(form, playlist) {
       input.disabled = hidden;
     }
   }
-  // Tournament rows don't own their flag or icon URLs — those come from the
-  // roster autocomplete when a player is added. Hide the whole Appearance
-  // section on tournament so the edit dialog only shows Score / Matches.
+  // Tournament rows pick up flag + icons from the roster autocomplete
+  // at add-time, so hide the Appearance section on that playlist.
   for (const section of form.querySelectorAll("[data-appearance-section]")) {
     const hidden = playlist === "tournament";
     section.hidden = hidden;
@@ -95,10 +91,9 @@ export function togglePlaylistFields(form, playlist) {
 export function setFormValue(form, name, value) {
   const field = form.elements.namedItem(name);
   if (!field) return;
-  // The edit form has two inputs named "matches" on purpose (wins group +
-  // tournament group). namedItem returns a RadioNodeList in that case and
-  // setting .value on it is a no-op for non-radio inputs, so the target
-  // field never gets populated. Iterate through all matches instead.
+  // Two inputs share name="matches" (wins + tournament groups), so
+  // namedItem returns a RadioNodeList and setting .value on it is a
+  // no-op for non-radios. Iterate so both inputs get the value.
   if (field instanceof Element) {
     field.value = value ?? "";
   } else {

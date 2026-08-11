@@ -1,8 +1,5 @@
-// Consistent logger for the site. Every line comes out as
-//   [RG SITE] <category>: <message> {...data}
-// so DevTools filtering "RG " reveals everything we write, and
-// "RG SITE tournament" narrows to one flow. Categories in use so far:
-//   boot, auth, appcheck, playlist, cache, write, tournament, reads, error.
+// Site logger. Every line comes out as `[RG SITE] category: message` so
+// DevTools filtering on "RG " catches everything we write.
 
 const PREFIX = "[RG SITE]";
 const IS_DEV = typeof globalThis !== "undefined"
@@ -31,9 +28,8 @@ function warn(category, message, data) {
 }
 
 function error(category, message, err) {
-  // Preserve the full error object so DevTools can expand the stack, but
-  // also include a stringified code/message alongside for quick scanning
-  // in a wall of logs.
+  // Log a compact summary alongside the raw error so you can scan a
+  // wall of logs but still expand for the stack.
   const summary = {
     code: err?.code || null,
     name: err?.name || null,

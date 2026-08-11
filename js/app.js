@@ -339,10 +339,8 @@ function render() {
         }
         clearAdminRosterCache();
         if (player.playlist === "tournament") {
-          // Optimistic: drop the row locally so admin sees it disappear
-          // right away; the CDN JSON catches up within ~1 min. Also purge
-          // the playlist cache so a page refresh doesn't paint the row
-          // back from stale localStorage.
+          // Drop the row locally so admin sees it disappear right away.
+          // Purge the playlist cache too so a refresh doesn't re-paint it.
           log.info("tournament", "delete requested", { id: player.id, name: player.name });
           stashTournamentTombstone(player.id);
           clearPlaylistCache("tournament");
@@ -516,10 +514,10 @@ function lookupRosterCosmetic(rawName) {
   return tournamentRoster.get(key) || null;
 }
 
-// Optimistic overlay for the tournament tab. The CDN JSON lags admin writes
-// by up to ~90s, so we stash pending rows/tombstones locally and merge them
-// into every feed update. Once the CDN reflects a pending change, it's
-// dropped from here.
+// Optimistic overlay for the tournament tab. Admin writes hit Firestore
+// instantly but the CDN JSON lags by ~1 min, so we merge pending
+// adds/updates/tombstones into every feed update and drop each entry
+// once the CDN reflects it.
 const tournamentPending = new Map();
 const PENDING_TTL_MS = 90_000;
 let pendingCounter = 0;
@@ -535,9 +533,8 @@ function stashTournamentTombstone(id) {
   tournamentPending.set(`tomb:${id}`, { kind: "removed", id, ts: Date.now() });
 }
 
-// Stash an in-place update so the admin sees the new score/matches
-// immediately while the CDN JSON catches up. Keyed by row id so a second
-// edit to the same row supersedes the first.
+// Stash an in-place update so the admin sees the new values right away.
+// Keyed by row id so a second edit to the same row supersedes the first.
 function stashTournamentUpdate(id, payload) {
   if (!id) return;
   tournamentPending.set(`upd:${id}`, { kind: "updated", id, payload, ts: Date.now() });
@@ -606,19 +603,16 @@ function applyTournamentPending(rows) {
       };
     });
   if (!adds.length && !removedIds.size && !updates.size) return filtered;
-  // Re-sort so optimistic adds/updates land in their real rank position
-  // instead of stranding at the wrong rank. Same order the normalizer
-  // applies: score DESC, then name ASC for ties.
+  // Re-sort so optimistic rows land in the right rank position.
   return [...adds, ...filtered].sort(
     (a, b) => b.score - a.score
       || String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" }),
   );
 }
 
-// Look up an existing tournament row by name (case-insensitive). Used by
-// the quick-add flow to upsert instead of creating a duplicate document.
-// Also checks the optimistic-overlay pending map so a rapid double-add
-// upserts against the first write instead of creating a second doc.
+// Find a tournament row by name so quick-add can upsert into it instead
+// of making a duplicate doc. Also checks the pending overlay so two
+// rapid adds of the same name don't slip past each other.
 function findTournamentRowByName(name) {
   const needle = String(name || "").trim().toLowerCase();
   if (!needle) return null;
@@ -626,8 +620,7 @@ function findTournamentRowByName(name) {
     if (row._pending) continue;
     if (String(row.name || "").trim().toLowerCase() === needle) return row;
   }
-  // Fall back to the pending overlay. Only "added" entries with a captured
-  // realId are useful here (we can't upsert against something without an id).
+  // Fall back to pending adds that already have a real Firestore id.
   for (const entry of tournamentPending.values()) {
     if (entry.kind !== "added" || !entry.realId) continue;
     if (String(entry.payload?.name || "").trim().toLowerCase() === needle) {
@@ -859,9 +852,7 @@ function wireTournamentQuickAdd() {
         icons: cosmetic.icons || "",
         flag: cosmetic.flag || "",
       });
-      // Upsert: if a row with this name already exists, update it instead
-      // of creating a duplicate doc. Prevents the "two rows for the same
-      // player" bug when admin types the same name twice.
+      // Upsert on name so a repeat add updates instead of duplicating.
       const existing = findTournamentRowByName(payload.name);
       log.info("tournament", existing ? "quick-add upsert" : "quick-add insert", {
         name: payload.name,
@@ -877,9 +868,8 @@ function wireTournamentQuickAdd() {
           name: payload.name, id: existing?.id || saved?.id || null,
         });
         clearAdminRosterCache();
-        // For new adds, capture the real Firestore doc id off the returned
-        // DocumentReference so a rapid follow-up submit with the same name
-        // can upsert against it before the CDN JSON catches up.
+        // Capture the real Firestore id so a follow-up add of the same
+        // name can upsert against it before the CDN catches up.
         const realId = existing?.id || saved?.id || null;
         stashPendingTournament("added", payload, realId);
         if (state.playlist === "tournament") {
@@ -923,8 +913,7 @@ function wireTournamentQuickAdd() {
     const ok = await writes.clearTournament();
     if (ok) {
       clearAdminRosterCache();
-      // Wipe the whole board locally + drop any pending overlays so admin
-      // sees the empty state right away.
+      // Wipe locally too so admin sees an empty board without waiting.
       tournamentPending.clear();
       clearPlaylistCache("tournament");
       if (state.playlist === "tournament") {
@@ -1130,11 +1119,9 @@ function wireEvents() {
     try {
       const rawValues = readFormValues($("editForm"));
       const player = state.editingPlayer;
-      // Tournament edits hide the Appearance section, so its inputs are
-      // disabled and FormData skips them. That means buildPlayerPayload
-      // would set flag/icons to "" and the merge write would WIPE the
-      // existing flag on every edit. Re-inject the existing cosmetics
-      // from the row so they survive the round trip.
+      // Tournament edits hide the Appearance section, and disabled inputs
+      // are dropped from FormData. Without this, every edit would blank
+      // the row's flag and icons. Re-inject them from the current row.
       if (player.playlist === "tournament") {
         rawValues.flag = player.flag || "";
         rawValues.icons = Array.isArray(player.icons)
@@ -1143,10 +1130,8 @@ function wireEvents() {
       }
       const payload = buildPlayerPayload(rawValues, false);
       if (payload.flag) flagDirectory.add(payload.flag);
-      // The gateway routes updates to the right collection via payload.playlist
-      // (leaderboard vs tournament_leaderboard). buildPlayerPayload strips it
-      // for the ranked flow, so re-attach from the row we're editing. Also
-      // required by the tournament rule's hasOnly() field allowlist.
+      // Re-attach playlist so the gateway routes to tournament_leaderboard
+      // and the rule's hasOnly() check accepts the write.
       log.info("write", "update requested", {
         id: player.id,
         playlist: player.playlist,
@@ -1162,8 +1147,7 @@ function wireEvents() {
       else log.info("write", "update completed", { id: player.id, playlist: player.playlist });
       if (saved) {
         clearAdminRosterCache();
-        // Optimistic update: show the new values in the tournament tab
-        // right away instead of waiting for the CDN publish (~1 min).
+        // Show the new values right away instead of waiting for the CDN.
         if (player.playlist === "tournament") {
           stashTournamentUpdate(player.id, payload);
           if (state.playlist === "tournament") {
@@ -1171,11 +1155,10 @@ function wireEvents() {
             render();
           }
         }
-        // For HUD-synced players (deterministic ID = sourceUserId_playlist),
-        // propagate the cosmetic fields to the other playlist docs so a flag
-        // or glow edit made in 1v1 is reflected in 2v2/3v3/wins too. Score
-        // fields (mmr / wins / matches) stay per-playlist. Tournament rows
-        // are standalone: no sibling docs to fan out to.
+        // Fan the cosmetic fields (name/flag/icons) across sibling
+        // playlist docs so a flag edit made in 1v1 shows up in 2v2/3v3/wins
+        // too. Score fields stay per-playlist. Tournament rows have no
+        // siblings.
         if (player.sourceUserId && player.playlist !== "tournament") {
           const cosmetic = {
             name: payload.name,

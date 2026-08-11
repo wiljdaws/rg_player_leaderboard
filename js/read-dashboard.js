@@ -859,9 +859,8 @@ function renderHudUsersTable(agg, nameByUid) {
     renderCell: (col, row) => {
       const v = row?.[col.key];
       if (col.key === "sourceUserId") {
-        // Prefer the roster display name over the opaque uid. Fall back to
-        // the truncated uid so we still show something for users who aren't
-        // on the wins leaderboard yet.
+        // Prefer the display name; fall back to the truncated uid for
+        // users not yet on the wins leaderboard.
         const name = lookupName(v);
         return name || truncateId(v, 8);
       }

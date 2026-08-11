@@ -24,9 +24,8 @@ const APP_CHECK_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app-ch
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
 const AUTH_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`;
 
-// Public reCAPTCHA v3 site key. Domain-restricted to wiljdaws.github.io
-// in the reCAPTCHA admin. Locks Firestore reads to our own sites once
-// App Check enforcement is turned on in the Firebase console.
+// reCAPTCHA v3 site key. Public by design, domain-locked to
+// wiljdaws.github.io in the reCAPTCHA admin.
 const RECAPTCHA_SITE_KEY = "6LetM38tAAAAADvHq4SYd05r_DGK2AWJo8M3ZmJK";
 
 // Published by the Tampermonkeys publish workflow every 15 min.
@@ -45,10 +44,8 @@ function playlistQuerySpec(playlist) {
 function describeError(error) {
   const code = String(error?.code ?? "");
   const message = String(error?.message ?? "");
-  // Ad blockers and privacy extensions (uBlock, Privacy Badger, Brave)
-  // routinely block firestore.googleapis.com. Chrome surfaces it as
-  // ERR_BLOCKED_BY_CLIENT; Firestore SDK reports it as "unavailable" or a
-  // TypeError/fetch failure. Detect and tell admins to whitelist the site.
+  // Ad blockers / privacy extensions kill Firestore. Turn the raw
+  // network error into a message that points at the fix.
   if (message.includes("ERR_BLOCKED_BY_CLIENT")
       || /Failed to fetch|NetworkError|network request failed/i.test(message)) {
     return "A browser extension (ad blocker / privacy tool) is blocking Firebase. Whitelist wiljdaws.github.io or try an incognito window.";
@@ -177,9 +174,9 @@ function staticJsonUrl(playlist, template = STATIC_JSON_URL_TEMPLATE) {
   return template.replace("{playlist}", encodeURIComponent(playlist));
 }
 
-// JSON rows drop the playlist and (for HUD-sourced rows) sourceUserId to save
-// bytes; put them back so the validator accepts the row. Tournament JSON keeps
-// the doc id directly and has no uid — treat it separately.
+// JSON rows drop the playlist (and sourceUserId for HUD rows) to save
+// bytes. Put them back so the validator accepts the row. Tournament
+// rows carry the doc id directly and have no uid.
 function expandCompactRow(row, playlist) {
   if (!row || typeof row !== "object") return row;
   if (playlist === "tournament") {
@@ -272,9 +269,8 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
       }
 
       if (response.status === 404) {
-        // Blob doesn't exist yet (new playlist, first deploy, etc). Trip
-        // the fallback right away instead of pretending it's a flaky
-        // network and making the user wait 3 poll cycles.
+        // Blob doesn't exist yet. Trip the fallback right away instead
+        // of waiting 3 poll cycles.
         consecutiveFailures = maxFailures;
         throw new Error(`Static JSON not found (404) for playlist "${playlist}".`);
       }
@@ -380,10 +376,8 @@ export async function createFirebaseGateway() {
 
   const app = initializeApp(FIREBASE_CONFIG);
 
-  // App Check attaches a reCAPTCHA v3 attestation to every Firestore
-  // request. Once enforcement is on in the Firebase console, only our
-  // whitelisted domains can read/write. Init errors are non-fatal so
-  // preview builds without console setup still boot.
+  // Attach a reCAPTCHA v3 App Check token to every Firestore request.
+  // Init errors are non-fatal so a broken setup doesn't wedge boot.
   try {
     const { initializeAppCheck, ReCaptchaV3Provider } = appCheckMod;
     initializeAppCheck(app, {
@@ -465,10 +459,8 @@ export async function createFirebaseGateway() {
     }
   }
 
-  // Wraps a write so a permission-denied bumps the deny counter.
-  // Also rewraps the error with describeError() so callers (the write-status
-  // pill, quick-add pill) see a friendly message like "your ad blocker is
-  // blocking Firebase" instead of the SDK's raw code.
+  // Wrap a write to bump the deny counter and rewrap errors with a
+  // friendly message so the status pill has something useful to show.
   async function chargedWrite(label, fn) {
     const startedAt = Date.now();
     try {
