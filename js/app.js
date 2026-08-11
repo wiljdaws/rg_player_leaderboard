@@ -339,13 +339,9 @@ function render() {
         }
         clearAdminRosterCache();
         if (player.playlist === "tournament") {
-          // Drop the row locally so admin sees it disappear right away.
-          // Purge the playlist cache too so a refresh doesn't re-paint it.
+          // Firestore realtime picks up the soft-delete write in <1s, so
+          // no local overlay needed. Just log it.
           log.info("tournament", "delete requested", { id: player.id, name: player.name });
-          stashTournamentTombstone(player.id);
-          clearPlaylistCache("tournament");
-          state.rows = applyTournamentPending(state.rows);
-          render();
         } else {
           // Same optimistic pattern for ranked playlists so admin doesn't
           // stare at a still-visible row for a minute. If the player's HUD
@@ -522,31 +518,13 @@ function lookupRosterCosmetic(rawName) {
   return tournamentRoster.get(key) || null;
 }
 
-// Optimistic overlay for the tournament tab. Admin writes hit Firestore
-// instantly but the CDN JSON lags by ~1 min, so we merge pending
-// adds/updates/tombstones into every feed update and drop each entry
-// once the CDN reflects it.
-const tournamentPending = new Map();
-const PENDING_TTL_MS = 90_000;
-let pendingCounter = 0;
-
-function stashPendingTournament(kind, payload, realId = null) {
-  const tempId = `pending:${++pendingCounter}`;
-  tournamentPending.set(tempId, { kind, payload, ts: Date.now(), realId });
-  return tempId;
-}
-
-function stashTournamentTombstone(id) {
-  if (!id) return;
-  tournamentPending.set(`tomb:${id}`, { kind: "removed", id, ts: Date.now() });
-}
-
-// Tombstones for ranked (1v1/2v2/3v3/wins) rows. Same idea as tournament
-// but keyed per-playlist since these are separate CDN feeds. Rows drop
-// out of state.rows immediately on delete, and the tombstone clears once
-// the CDN publishes without the row (or after PENDING_TTL_MS if the row
-// gets re-created by the player's HUD).
+// Tombstones for ranked (1v1/2v2/3v3/wins) rows. Rows drop out of
+// state.rows immediately on delete; the tombstone clears once the CDN
+// publishes without the row or after PENDING_TTL_MS. Tournament tab
+// doesn't need this since it reads Firestore directly and onSnapshot
+// reflects writes in real time.
 const rankedTombstones = new Map();
+const PENDING_TTL_MS = 90_000;
 
 function stashRankedTombstone(playlist, id) {
   if (!playlist || !id) return;
@@ -574,99 +552,14 @@ function applyRankedTombstones(rows, playlist) {
   return drop.size ? rows.filter(r => !drop.has(r.id)) : rows;
 }
 
-// Stash an in-place update so the admin sees the new values right away.
-// Keyed by row id so a second edit to the same row supersedes the first.
-function stashTournamentUpdate(id, payload) {
-  if (!id) return;
-  tournamentPending.set(`upd:${id}`, { kind: "updated", id, payload, ts: Date.now() });
-}
-
-function matchesRow(pending, row) {
-  return pending?.payload
-      && String(row?.name || "").trim() === String(pending.payload.name || "").trim()
-      && Number(row?.score) === Number(pending.payload.score)
-      && Number(row?.matches) === Number(pending.payload.matches);
-}
-
-function applyTournamentPending(rows) {
-  if (!tournamentPending.size) return rows;
-  const now = Date.now();
-  const removedIds = new Set();
-  const updates = new Map();
-  const adds = [];
-  for (const [key, entry] of tournamentPending) {
-    if (now - entry.ts > PENDING_TTL_MS) {
-      tournamentPending.delete(key);
-      continue;
-    }
-    if (entry.kind === "removed") {
-      if (!rows.some(r => r.id === entry.id)) {
-        tournamentPending.delete(key);
-        continue;
-      }
-      removedIds.add(entry.id);
-    } else if (entry.kind === "updated") {
-      const target = rows.find(r => r.id === entry.id);
-      // Drop the overlay once the feed reflects the values we asked for.
-      if (target && matchesRow(entry, target)) {
-        tournamentPending.delete(key);
-        continue;
-      }
-      if (target) updates.set(entry.id, entry.payload);
-    } else if (entry.kind === "added") {
-      if (rows.some(r => matchesRow(entry, r))) {
-        tournamentPending.delete(key);
-        continue;
-      }
-      adds.push({
-        id: key,
-        playlist: "tournament",
-        name: entry.payload.name,
-        score: Number(entry.payload.score) || 0,
-        matches: Number(entry.payload.matches) || 0,
-        flag: entry.payload.flag || "",
-        icons: entry.payload.icons || "",
-        _pending: true,
-      });
-    }
-  }
-  const filtered = rows
-    .filter(r => !removedIds.has(r.id))
-    .map(r => {
-      const pending = updates.get(r.id);
-      if (!pending) return r;
-      return {
-        ...r,
-        name: pending.name ?? r.name,
-        score: Number(pending.score) || 0,
-        matches: Number(pending.matches) || 0,
-        _pending: true,
-      };
-    });
-  if (!adds.length && !removedIds.size && !updates.size) return filtered;
-  // Re-sort so optimistic rows land in the right rank position.
-  return [...adds, ...filtered].sort(
-    (a, b) => b.score - a.score
-      || String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base" }),
-  );
-}
-
 // Find a tournament row by name so quick-add can upsert into it instead
-// of making a duplicate doc. Also checks the pending overlay so two
-// rapid adds of the same name don't slip past each other.
+// of making a duplicate doc. Firestore realtime keeps state.rows fresh
+// so we can match against it directly without any pending overlay.
 function findTournamentRowByName(name) {
   const needle = String(name || "").trim().toLowerCase();
   if (!needle) return null;
   for (const row of state.rows) {
-    if (row._pending) continue;
     if (String(row.name || "").trim().toLowerCase() === needle) return row;
-  }
-  // Fall back to pending adds that already have a real Firestore id.
-  for (const entry of tournamentPending.values()) {
-    if (entry.kind !== "added" || !entry.realId) continue;
-    if (String(entry.payload?.name || "").trim().toLowerCase() === needle) {
-      return { id: entry.realId, name: entry.payload.name, _pending: true };
-    }
   }
   return null;
 }
@@ -909,14 +802,8 @@ function wireTournamentQuickAdd() {
           name: payload.name, id: existing?.id || saved?.id || null,
         });
         clearAdminRosterCache();
-        // Capture the real Firestore id so a follow-up add of the same
-        // name can upsert against it before the CDN catches up.
-        const realId = existing?.id || saved?.id || null;
-        stashPendingTournament("added", payload, realId);
-        if (state.playlist === "tournament") {
-          state.rows = applyTournamentPending(state.rows);
-          render();
-        }
+        // Firestore realtime updates state.rows within ~500ms; no local
+        // overlay needed on the tournament tab.
         const verb = existing ? "Updated" : "Added";
         setTqStatus(`✓ ${verb} ${payload.name}. Row appears in the board within a second.`, "success");
         form.reset();
@@ -954,13 +841,8 @@ function wireTournamentQuickAdd() {
     const ok = await writes.clearTournament();
     if (ok) {
       clearAdminRosterCache();
-      // Wipe locally too so admin sees an empty board without waiting.
-      tournamentPending.clear();
-      clearPlaylistCache("tournament");
-      if (state.playlist === "tournament") {
-        state.rows = [];
-        render();
-      }
+      // Firestore realtime handles the redraw once the soft-delete
+      // writes propagate.
       setTqStatus("Tournament cleared.", "success");
     } else {
       setTqStatus("Clear failed.", "error");
@@ -1006,18 +888,10 @@ function wireTournamentQuickAdd() {
         const result = existing
           ? await writes?.updatePlayer(existing.id, payload)
           : await writes?.addPlayer(payload);
-        if (result) {
-          added += 1;
-          const realId = existing?.id || result?.id || null;
-          stashPendingTournament("added", payload, realId);
-        }
+        if (result) added += 1;
       } catch (err) {
         errors.push(`${row.name}: ${err?.message || "add failed"}`);
       }
-    }
-    if (state.playlist === "tournament" && added) {
-      state.rows = applyTournamentPending(state.rows);
-      render();
     }
     clearAdminRosterCache();
     if (errors.length) {
@@ -1188,14 +1062,9 @@ function wireEvents() {
       else log.info("write", "update completed", { id: player.id, playlist: player.playlist });
       if (saved) {
         clearAdminRosterCache();
-        // Show the new values right away instead of waiting for the CDN.
-        if (player.playlist === "tournament") {
-          stashTournamentUpdate(player.id, payload);
-          if (state.playlist === "tournament") {
-            state.rows = applyTournamentPending(state.rows);
-            render();
-          }
-        }
+        // Tournament updates propagate via Firestore realtime; no local
+        // overlay needed. Ranked edits stay on the CDN path and rely on
+        // the ~1 min publish cadence.
         // Fan the cosmetic fields (name/flag/icons) across sibling
         // playlist docs so a flag edit made in 1v1 shows up in 2v2/3v3/wins
         // too. Score fields stay per-playlist. Tournament rows have no
@@ -1348,7 +1217,7 @@ async function boot() {
       if (metadata.playlist !== state.playlist) return;
       const normalized = normalizePlaylistRows(raw, state.playlist);
       state.rows = state.playlist === "tournament"
-        ? applyTournamentPending(normalized.rows)
+        ? normalized.rows
         : applyRankedTombstones(normalized.rows, state.playlist);
       state.quarantined = normalized.quarantined;
       historyStore.record(state.playlist, state.rows);

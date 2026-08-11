@@ -633,6 +633,11 @@ export async function createFirebaseGateway() {
   // Anything unrecognized is treated as "firestore" so a corrupt config can't
   // strand the site on a broken path.
   function subscribePlaylistDispatch(playlist, handlers) {
+    // Tournament is small (~20 rows), admin-only writes, and needs
+    // instant feedback. Skip the CDN JSON path and read straight from
+    // Firestore so writes show up in real time without an optimistic
+    // overlay. Ranked playlists still cache via the JSON path.
+    if (playlist === "tournament") return subscribePlaylist(playlist, handlers);
     const source = resolveReadSource();
     if (source === "static") {
       return subscribePlaylistJson(playlist, handlers, {
