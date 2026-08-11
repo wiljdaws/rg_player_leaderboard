@@ -36,11 +36,14 @@ const CLAN_SITE_UA_PATTERN = /clan/i;
 function bucketForDoc(doc) {
   // Explicit `source` field wins when present. "clan" is the clan site;
   // "player" (new) and "site" (legacy alias) both land in the site bucket.
-  // Anything else lands in "unknown" so data drift is visible in the
-  // dashboard instead of quietly rolling up into the wrong bucket.
+  // "visitor" is anonymous browsers of the clan site (uploaded to
+  // visitor_read_stats). Anything else lands in "unknown" so data drift
+  // is visible in the dashboard instead of quietly rolling up into the
+  // wrong bucket.
   const src = typeof doc?.source === "string" ? doc.source : "";
   if (src) {
     if (src === "clan") return "clanSite";
+    if (src === "visitor") return "clanVisitor";
     if (src === "player" || src === "site") return "site";
     return "unknown";
   }
@@ -89,7 +92,7 @@ function safeNumber(value) {
 
 function aggregate({ siteDocs, hudDocs, totalDocs }) {
   const byDate = {};
-  const bySource = { site: 0, clanSite: 0, hud: 0, other: 0, unknown: 0 };
+  const bySource = { site: 0, clanSite: 0, clanVisitor: 0, hud: 0, other: 0, unknown: 0 };
   const byHudVersion = {};
   const siteLabels = {};
   const hudLabels = {};
@@ -354,21 +357,37 @@ export function createReadStatsQuery({
       const totalsFetcher = typeof gateway.fetchReadStatsTotal === "function"
         ? gateway.fetchReadStatsTotal(from, to)
         : Promise.resolve([]);
-      const [siteDocs, hudDocs, totalDocs] = await Promise.all([
+      const visitorFetcher = typeof gateway.fetchVisitorReadStats === "function"
+        ? gateway.fetchVisitorReadStats(from, to)
+        : Promise.resolve([]);
+      const [siteDocs, hudDocs, totalDocs, visitorDocs] = await Promise.all([
         gateway.fetchAdminReadStats(from, to),
         gateway.fetchHudReadStats(from, to),
         totalsFetcher.catch((err) => {
           logger?.warn?.("[RG SITE] read_stats_total fetch failed:", err?.message || err);
           return [];
         }),
+        visitorFetcher.catch((err) => {
+          logger?.warn?.("[RG SITE] visitor_read_stats fetch failed:", err?.message || err);
+          return [];
+        }),
       ]);
       site = Array.isArray(siteDocs) ? siteDocs : [];
       hud = Array.isArray(hudDocs) ? hudDocs : [];
       const totals = Array.isArray(totalDocs) ? totalDocs : [];
-      const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: totals });
-      docs = site.length + hud.length + totals.length;
+      const visitors = Array.isArray(visitorDocs) ? visitorDocs : [];
+      // Visitor docs use the same shape as site admin docs, so we fold
+      // them into the site aggregation with source="visitor" to preserve
+      // per-source visibility.
+      const visitorsTagged = visitors.map(v => ({ ...v, source: "visitor" }));
+      const aggregateResult = aggregate({
+        siteDocs: [...site, ...visitorsTagged],
+        hudDocs: hud,
+        totalDocs: totals,
+      });
+      docs = site.length + hud.length + totals.length + visitors.length;
       const fetchedAt = now();
-      const payload = { range: { from, to }, site, hud, totals, aggregate: aggregateResult, fetchedAt, source };
+      const payload = { range: { from, to }, site, hud, totals, visitors, aggregate: aggregateResult, fetchedAt, source };
       writeCache(storage, storageKey, cacheKey, { payload, fetchedAt });
       try {
         logger?.info?.("[RG SITE] read-stats fetched", { source, docs, ms: fetchedAt - startedAt, cost: docs });

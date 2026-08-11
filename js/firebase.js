@@ -400,6 +400,7 @@ export async function createFirebaseGateway() {
   const adminReadStats = collection(db, "admin_read_stats");
   const hudReadStats = collection(db, "hud_read_stats");
   const readStatsTotal = collection(db, "read_stats_total");
+  const visitorReadStats = collection(db, "visitor_read_stats");
   let iconKeyCache = null;
 
   // --- Read budget ---------------------------------------------------------
@@ -737,6 +738,15 @@ export async function createFirebaseGateway() {
       const snapshot = await chargedGetDocs(
         query(readStatsTotal, where("date", ">=", from), where("date", "<=", to)),
         "totalStatsQuery",
+      );
+      return rawDocuments(snapshot);
+    },
+    // Anonymous clan-page browsers upload here. One doc per visitor session
+    // per day. Rules gate on shape + deviceId, no auth required.
+    fetchVisitorReadStats: async (from, to) => {
+      const snapshot = await chargedGetDocs(
+        query(visitorReadStats, where("date", ">=", from), where("date", "<=", to)),
+        "visitorStatsQuery",
       );
       return rawDocuments(snapshot);
     },

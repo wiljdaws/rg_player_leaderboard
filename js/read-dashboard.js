@@ -618,7 +618,8 @@ function renderSourceBreakdown(agg) {
   const bySource = agg?.bySource || {};
   const raw = [
     { key: "site", label: "Site", value: Number(bySource.site || 0), color: "var(--grad-a)" },
-    { key: "clanSite", label: "Clan site", value: Number(bySource.clanSite || 0), color: "var(--grad-b)" },
+    { key: "clanSite", label: "Clan site (admin)", value: Number(bySource.clanSite || 0), color: "var(--grad-b)" },
+    { key: "clanVisitor", label: "Clan visitors", value: Number(bySource.clanVisitor || 0), color: "var(--warn)" },
     { key: "hud", label: "HUD", value: Number(bySource.hud || 0), color: "var(--gain)" },
     { key: "other", label: "Other", value: Number(bySource.other || 0), color: "var(--ink-dim)" },
   ];
