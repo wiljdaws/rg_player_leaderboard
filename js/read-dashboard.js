@@ -847,6 +847,48 @@ function labelColumn(title, rows, color, rulesByBucket = {}) {
   ]);
 }
 
+function truncateMid(value, head = 8, tail = 4) {
+  const s = String(value ?? "");
+  if (s.length <= head + tail + 1) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
+}
+
+function relativeTime(iso, nowMs = Date.now()) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+  const delta = Math.max(0, nowMs - t);
+  const s = Math.round(delta / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
+}
+
+// Every rule gets a distinct hue so the operator can eyeball a burst
+// of "everyone tripping version-gate at 3pm" without reading the label.
+const DENY_RULE_STYLES = {
+  "version-gate": { fg: "#f5a742", bg: "rgba(245,167,66,.14)" },
+  "blacklisted": { fg: "#f87171", bg: "rgba(248,113,113,.16)" },
+  "device-id": { fg: "#38bdf8", bg: "rgba(56,189,248,.14)" },
+  "write-stamp": { fg: "#a78bfa", bg: "rgba(167,139,250,.16)" },
+  "clan-membership": { fg: "#22d3ee", bg: "rgba(34,211,238,.14)" },
+  "name-blocklist": { fg: "#f472b6", bg: "rgba(244,114,182,.16)" },
+};
+const DENY_RULE_UNKNOWN = { fg: "#94a3b8", bg: "rgba(148,163,184,.14)" };
+
+function renderRuleChip(rule) {
+  const label = rule || "unknown";
+  const style = DENY_RULE_STYLES[label] || DENY_RULE_UNKNOWN;
+  const chip = el("span", { className: "rd-deny-rule-chip", text: label });
+  chip.style.color = style.fg;
+  chip.style.backgroundColor = style.bg;
+  chip.style.borderColor = style.fg;
+  return chip;
+}
+
 function renderRecentDenies(agg, nameByUid) {
   const events = Array.isArray(agg?.hudDenyEvents) ? agg.hudDenyEvents : [];
   if (events.length === 0) return null;
@@ -856,28 +898,54 @@ function renderRecentDenies(agg, nameByUid) {
     if (nameByUid && typeof nameByUid === "object") return nameByUid[uid] || uid;
     return uid;
   };
-  const rows = events.slice(0, 25).map((event) => el("tr", {}, [
-    el("td", { className: "rd-cell-time", text: event.at ? event.at.slice(11, 19) : "—" }),
-    el("td", { text: lookupName(event.uid), attrs: { title: event.uid || "" } }),
-    el("td", { text: event.bucket || "—", attrs: { title: event.path || "" } }),
-    el("td", { text: event.op || "—" }),
-    el("td", { text: event.rule || "—" }),
-    el("td", { text: event.subject || "—", attrs: { title: event.subject || "" } }),
-  ]));
+  const nowMs = Date.now();
+  const rows = events.slice(0, 25).map((event) => {
+    const displayName = lookupName(event.uid);
+    // Show the resolved name when we have one, else a truncated uid so
+    // long verify uuids don't dominate the row.
+    const userLabel = displayName && displayName !== event.uid
+      ? displayName
+      : truncateMid(event.uid || "—", 10, 6);
+    const bucketCell = el("div", { className: "rd-deny-callsite" }, [
+      el("div", { className: "rd-deny-bucket", text: event.bucket || "—" }),
+      event.path
+        ? el("div", { className: "rd-deny-path", text: event.path, attrs: { title: event.path } })
+        : null,
+    ].filter(Boolean));
+    const messageText = event.msg || event.code || "";
+    const codeBadge = event.code
+      ? el("span", { className: "rd-deny-code", text: event.code })
+      : null;
+    const msgCell = el("div", { className: "rd-deny-msg-cell" }, [
+      codeBadge,
+      el("span", { className: "rd-deny-msg-text", text: messageText, attrs: { title: messageText } }),
+    ].filter(Boolean));
+    return el("div", { className: "rd-tr rd-deny-row" }, [
+      el("div", { className: "rd-td rd-deny-when", text: relativeTime(event.at, nowMs), attrs: { title: event.at || "" } }),
+      el("div", { className: "rd-td rd-deny-user", text: userLabel, attrs: { title: event.uid || "" } }),
+      el("div", { className: "rd-td rd-deny-rule" }, [renderRuleChip(event.rule)]),
+      el("div", { className: "rd-td" }, [bucketCell]),
+      el("div", { className: "rd-td rd-deny-op", text: event.op || "—" }),
+      el("div", { className: "rd-td rd-deny-subject", text: event.subject || "—", attrs: { title: event.subject || "" } }),
+      el("div", { className: "rd-td" }, [msgCell]),
+    ]);
+  });
   return el("section", { className: "rd-panel rd-panel-full" }, [
-    panelHead("Recent HUD denies", "Latest deny events with rule + subject for context"),
-    el("div", { className: "rd-table-wrap" }, [
-      el("table", { className: "rd-table" }, [
-        el("thead", {}, [el("tr", {}, [
-          el("th", { text: "Time" }),
-          el("th", { text: "User" }),
-          el("th", { text: "Call-site" }),
-          el("th", { text: "Op" }),
-          el("th", { text: "Rule" }),
-          el("th", { text: "Subject" }),
-        ])]),
-        el("tbody", {}, rows),
+    panelHead(
+      "Recent HUD denies",
+      `Latest ${rows.length} deny event${rows.length === 1 ? "" : "s"} with rule, subject, and Firestore error`,
+    ),
+    el("div", { className: "rd-table rd-deny-table", attrs: { "data-table": "hud-denies" } }, [
+      el("div", { className: "rd-tr rd-thead rd-deny-row" }, [
+        el("div", { className: "rd-th", text: "When" }),
+        el("div", { className: "rd-th", text: "User" }),
+        el("div", { className: "rd-th", text: "Rule" }),
+        el("div", { className: "rd-th", text: "Call-site" }),
+        el("div", { className: "rd-th", text: "Op" }),
+        el("div", { className: "rd-th", text: "Subject" }),
+        el("div", { className: "rd-th", text: "Firestore message" }),
       ]),
+      ...rows,
     ]),
   ]);
 }

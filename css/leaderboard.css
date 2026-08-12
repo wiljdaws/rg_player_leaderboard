@@ -1276,6 +1276,56 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 }
 [data-table="hud-users"] .rd-tr{grid-template-columns:1fr 90px 90px 90px 130px}
 [data-table="site-sessions"] .rd-tr{grid-template-columns:1fr 90px 130px minmax(140px,1fr)}
+/* When · User · Rule · Call-site · Op · Subject · Message */
+[data-table="hud-denies"] .rd-tr{
+  grid-template-columns:96px 160px 152px minmax(200px,1.4fr) 76px minmax(180px,1.4fr) minmax(220px,1.8fr);
+  gap:14px;padding:14px 16px;
+}
+[data-table="hud-denies"]{min-width:1050px}
+.rd-deny-row .rd-td{white-space:normal}
+.rd-deny-when{color:var(--ink-dim);font-size:11.5px}
+.rd-deny-user{
+  font-family:var(--mono);font-size:12px;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rd-deny-op{
+  font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);
+  text-transform:uppercase;letter-spacing:.08em;
+}
+.rd-deny-rule-chip{
+  display:inline-flex;align-items:center;
+  padding:3px 9px;border-radius:999px;
+  border:1px solid transparent;
+  font:700 10.5px var(--display);letter-spacing:.14em;text-transform:uppercase;
+  white-space:nowrap;
+}
+.rd-deny-callsite{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rd-deny-bucket{
+  font:700 12px var(--display);letter-spacing:.06em;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rd-deny-path{
+  font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rd-deny-subject{
+  font-family:var(--mono);font-size:11.5px;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rd-deny-msg-cell{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rd-deny-code{
+  align-self:flex-start;
+  padding:2px 8px;border-radius:6px;
+  background:rgba(248,113,113,.14);border:1px solid rgba(248,113,113,.4);
+  color:#fca5a5;
+  font:700 10px var(--mono);letter-spacing:.06em;
+}
+.rd-deny-msg-text{
+  color:var(--ink-dim);font-size:11.5px;line-height:1.35;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.rd-deny-row:nth-child(even):not(.rd-thead){background:rgba(255,255,255,.015)}
+.rd-deny-row:hover:not(.rd-thead){background:rgba(168,85,247,.06)}
 .rd-tr:last-child{border-bottom:none}
 .rd-thead{
   background:rgba(12,18,48,.85);border-bottom:1px solid var(--line-strong);
