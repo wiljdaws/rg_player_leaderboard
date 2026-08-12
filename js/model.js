@@ -193,7 +193,14 @@ export function normalizePlaylistRows(rawRows, playlist) {
     rows.push(result.player);
   }
 
-  // Mirror the publisher's sort so live and static ranks agree.
+  sortPlaylistRows(rows, playlist);
+  return { rows, quarantined };
+}
+
+// Mirror the publisher's sort so live and static ranks agree. Exported
+// so the admin path can re-sort locally after an optimistic edit.
+export function sortPlaylistRows(rows, playlist) {
+  if (!Array.isArray(rows)) return rows;
   const scoreField = playlist === "wins" ? "wins"
     : playlist === "tournament" ? "score"
     : "mmr";
@@ -214,8 +221,7 @@ export function normalizePlaylistRows(rawRows, playlist) {
     if (nameCompare !== 0) return nameCompare;
     return String(left.id).localeCompare(String(right.id));
   });
-
-  return { rows, quarantined };
+  return rows;
 }
 
 export function normalizeIconKeyRows(rawRows) {

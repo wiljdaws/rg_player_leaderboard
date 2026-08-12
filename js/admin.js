@@ -1,10 +1,10 @@
 import { setWriteStatus } from "./render.js";
 
 // Firestore writes land instantly; the public site polls a cached JSON
-// blob that a cron job rebuilds every ~15 min. Hint appended to
-// every write that affects that JSON so admins stop wondering why the
-// change hasn't shown up yet.
-const PUBLISH_LAG_HINT = "Public site refreshes within ~15 min. Hard-refresh to see the change sooner.";
+// blob that a cron job rebuilds every ~15 min. Admin edits patch the
+// local row list optimistically, so admins see their own change right
+// away — the hint just calls out the public-site lag.
+const PUBLISH_LAG_HINT = "Public site refreshes within ~15 min.";
 
 export class AdminWriteService {
   constructor({ gateway, isAdmin, refreshIcons }) {

@@ -19,6 +19,7 @@ import {
   buildPlayerPayload,
   normalizeIconKeyRows,
   normalizePlaylistRows,
+  sortPlaylistRows,
 } from "./model.js";
 import {
   handleTabKeydown,
@@ -1113,6 +1114,36 @@ function wireEvents() {
       else log.info("write", "update completed", { id: player.id, playlist: player.playlist });
       if (saved) {
         clearAdminRosterCache();
+        // Optimistic overlay: patch the edited row into state.rows and
+        // re-sort so the admin sees their change without waiting for the
+        // ~15-min publish cycle. The CDN update will replace this shortly
+        // and normalizePlaylistRows will re-derive an identical row.
+        if (state.playlist === player.playlist && player.playlist !== "tournament") {
+          const idx = state.rows.findIndex((r) => r.id === player.id);
+          if (idx >= 0) {
+            const patch = { ...state.rows[idx], name: payload.name };
+            if (typeof payload.flag === "string") patch.flag = payload.flag;
+            if (typeof payload.icons === "string") {
+              // model stores icons as an array; payload has the comma string.
+              patch.icons = payload.icons
+                ? payload.icons.split(",").map((s) => s.trim()).filter(Boolean)
+                : [];
+            }
+            if (player.playlist === "wins") {
+              if (Number.isFinite(payload.wins)) patch.wins = payload.wins;
+              if (Number.isFinite(payload.matches)) patch.matches = payload.matches;
+            } else if (Number.isFinite(payload.mmr)) {
+              patch.mmr = payload.mmr;
+            }
+            // Drop the JSON-provided rank so the render falls back to
+            // index+1 after re-sort.
+            delete patch.rank;
+            state.rows[idx] = patch;
+            state.rows.forEach((r) => { delete r.rank; });
+            sortPlaylistRows(state.rows, player.playlist);
+            render();
+          }
+        }
         // Tournament updates propagate via Firestore realtime; no local
         // overlay needed. Ranked edits stay on the CDN path and rely on
         // the ~1 min publish cadence.
