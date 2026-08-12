@@ -20,9 +20,9 @@
 // the actual cost can be audited in DevTools. Turn off with the browser
 // devtools log filter if it gets noisy.
 
-// 30 min — dashboard is backward-looking, doesn't need to be live.
-// Refresh button bypasses this.
-const DEFAULT_TTL_MS = 30 * 60 * 1000;
+// 60 min — dashboard is backward-looking. Refresh clears this, then
+// still tries the CDN snapshot before falling back to Firestore.
+const DEFAULT_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_STORAGE_KEY = "rgLB:readStatsCache:v1";
 
 // Source attribution for admin_read_stats docs. Every writer now stamps an
@@ -392,13 +392,15 @@ export function createReadStatsQuery({
     let hud = [];
     let source = "firestore";
     let docs = 0;
-    if (!force) {
-      const snap = await tryFetchSnapshot(from, to);
-      if (snap) {
-        site = snap.site;
-        hud = snap.hud;
-        source = "snapshot";
-      }
+    // Snapshot is always tried first when the range fits — it's fresher
+    // than any localStorage cache and costs zero Firestore reads. `force`
+    // only invalidates the local cache; it doesn't punish us with 250+
+    // Firestore reads when a free CDN blob would answer.
+    const snap = await tryFetchSnapshot(from, to);
+    if (snap) {
+      site = snap.site;
+      hud = snap.hud;
+      source = "snapshot";
     }
 
     if (source === "firestore") {

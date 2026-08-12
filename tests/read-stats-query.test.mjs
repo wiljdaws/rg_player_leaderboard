@@ -664,7 +664,10 @@ test("snapshot path: falls back to Firestore when CDN fetch throws", async () =>
   assert.equal(result.aggregate.totalReads, 7);
 });
 
-test("snapshot path: force=true bypasses CDN and goes straight to Firestore", async () => {
+test("snapshot path: force=true still hits CDN when snapshot covers range", async () => {
+  // Pins the fix for the "Refresh button burned 17k Firestore reads/day"
+  // regression: force means "invalidate the local cache", not "punish us
+  // with a Firestore fetch when a free CDN blob already answers".
   const snapshot = {
     windowStart: "2026-07-10",
     windowEnd: "2026-08-09",
@@ -679,10 +682,56 @@ test("snapshot path: force=true bypasses CDN and goes straight to Firestore", as
   const { logger } = silentLogger();
   const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
   const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-09", force: true });
-  assert.equal(gateway.calls.snapshot, 0, "snapshot skipped on force");
+  assert.equal(gateway.calls.snapshot, 1, "snapshot is still consulted on force");
+  assert.equal(gateway.calls.site, 0, "no Firestore fallback when snapshot serves");
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.aggregate.totalReads, 10);
+});
+
+test("snapshot path: force=true still falls back to Firestore when snapshot can't serve", async () => {
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-09",
+    site: [],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({
+    snapshot,
+    siteDocs: [{ id: "live", date: "2026-06-01", sessionId: "live", total: 42, perLabel: {}, source: "player" }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  // Range starts before snapshot window → snapshot must decline and we
+  // fall through to Firestore even when force=true.
+  const result = await q.fetchRange({ from: "2026-06-01", to: "2026-08-09", force: true });
+  assert.equal(gateway.calls.snapshot, 1);
   assert.equal(gateway.calls.site, 1);
   assert.equal(result.source, "firestore");
-  assert.equal(result.aggregate.totalReads, 99);
+  assert.equal(result.aggregate.totalReads, 42);
+});
+
+test("snapshot path: force=true still clears the local cache", async () => {
+  // Cache should not survive a manual Refresh — otherwise stale data
+  // lingers even after the admin explicitly asked for fresh.
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-09",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({ snapshot });
+  const { logger } = silentLogger();
+  const clock = makeClock();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: clock.now, logger });
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-09" });
+  assert.equal(gateway.calls.snapshot, 1);
+  // Second call inside TTL — served from cache, no snapshot re-fetch.
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-09" });
+  assert.equal(gateway.calls.snapshot, 1);
+  // force clears cache and re-hits the snapshot.
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-09", force: true });
+  assert.equal(gateway.calls.snapshot, 2);
 });
 
 test("bySource: mixed docs aggregate correctly across all buckets", async () => {
