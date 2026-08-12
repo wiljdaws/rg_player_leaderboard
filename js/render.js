@@ -463,7 +463,7 @@ export function renderIconKey({ rows, admin, loading, error, onDelete }) {
   }
 
   host.replaceChildren();
-  host.append(node("h2", { text: "Icon key" }));
+  host.append(node("h2", { text: "Trophies" }));
 
   if (loading && !rows.length) {
     host.append(node("p", { text: "Loading icon key…" }));
