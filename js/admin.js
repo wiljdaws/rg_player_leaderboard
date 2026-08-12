@@ -1,5 +1,11 @@
 import { setWriteStatus } from "./render.js";
 
+// Firestore writes land instantly; the public site polls a cached JSON
+// blob that a cron job rebuilds every ~15 min. Hint appended to
+// every write that affects that JSON so admins stop wondering why the
+// change hasn't shown up yet.
+const PUBLISH_LAG_HINT = "Public site refreshes within ~15 min. Hard-refresh to see the change sooner.";
+
 export class AdminWriteService {
   constructor({ gateway, isAdmin, refreshIcons }) {
     this.gateway = gateway;
@@ -7,7 +13,7 @@ export class AdminWriteService {
     this.refreshIcons = refreshIcons;
   }
 
-  async run(label, operation) {
+  async run(label, operation, { hint = "" } = {}) {
     if (!this.isAdmin()) {
       setWriteStatus({ kind: "error", message: "Admin access is required for that change." });
       return false;
@@ -16,8 +22,10 @@ export class AdminWriteService {
     setWriteStatus({ kind: "writing", message: `${label}…` });
     try {
       const result = await operation();
-      setWriteStatus({ kind: "success", message: `${label} complete.` });
-      this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
+      setWriteStatus({ kind: "success", message: `${label} complete.`, hint });
+      // Give the hint enough time to actually be read.
+      const clearMs = hint ? 12000 : 5000;
+      this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), clearMs);
       // Pass the operation's return (e.g. addDoc's ref) back through so
       // callers can grab the id. Default to true for the void case.
       return result === undefined ? true : result;
@@ -29,28 +37,43 @@ export class AdminWriteService {
   }
 
   addPlayer(payload) {
-    // Returns the addDoc DocumentReference on success so callers can
-    // grab the id (used by the tournament optimistic overlay).
-    return this.run("Adding player", () => this.gateway.addPlayer(payload));
+    return this.run(
+      "Adding player",
+      () => this.gateway.addPlayer(payload),
+      { hint: PUBLISH_LAG_HINT },
+    );
   }
 
   updatePlayer(id, payload) {
-    return this.run("Saving player", () => this.gateway.updatePlayer(id, payload));
+    return this.run(
+      "Saving player",
+      () => this.gateway.updatePlayer(id, payload),
+      { hint: PUBLISH_LAG_HINT },
+    );
   }
 
   deletePlayer(id, playlist) {
-    return this.run("Removing player", () => this.gateway.deletePlayer(id, playlist));
+    return this.run(
+      "Removing player",
+      () => this.gateway.deletePlayer(id, playlist),
+      { hint: PUBLISH_LAG_HINT },
+    );
   }
 
   deletePlayerAllPlaylists(sourceUserId) {
     return this.run(
       "Removing player from all playlists",
       () => this.gateway.deletePlayerAllPlaylists(sourceUserId),
+      { hint: PUBLISH_LAG_HINT },
     );
   }
 
   clearTournament() {
-    return this.run("Clearing tournament", () => this.gateway.clearTournament());
+    return this.run(
+      "Clearing tournament",
+      () => this.gateway.clearTournament(),
+      { hint: PUBLISH_LAG_HINT },
+    );
   }
 
   addIcon(payload) {

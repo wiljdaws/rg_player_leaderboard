@@ -1079,6 +1079,11 @@ export function setWriteStatus(status) {
   if (!el) return;
   const kind = status?.kind || "idle";
   el.dataset.state = kind;
-  el.textContent = status?.message || "";
   el.hidden = !status?.message;
+  el.replaceChildren();
+  if (!status?.message) return;
+  el.append(node("span", { className: "write-status-msg", text: status.message }));
+  if (status.hint) {
+    el.append(node("span", { className: "write-status-hint", text: status.hint }));
+  }
 }
