@@ -126,6 +126,34 @@ test("normalizePlayerDocument quarantines wins > matches", () => {
   assert.ok(result.quarantine.reasons.includes("wins exceed matches"));
 });
 
+test("normalizePlaylistRows wins ties break on fewer matches then name", () => {
+  const { rows } = normalizePlaylistRows(
+    [
+      { id: "hamzaeg_wins", playlist: "wins", name: "HAMZAEG", wins: 7, matches: 12 },
+      { id: "og_wins", playlist: "wins", name: "[OG] ....", wins: 7, matches: 10 },
+      { id: "future_wins", playlist: "wins", name: "FutureDemon.5FP", wins: 0, matches: 1 },
+      { id: "jajaa_wins", playlist: "wins", name: "Jajaa", wins: 0, matches: 1 },
+    ],
+    "wins",
+  );
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    ["og_wins", "hamzaeg_wins", "future_wins", "jajaa_wins"],
+  );
+});
+
+test("normalizePlaylistRows is stable across shuffled inputs", () => {
+  const inputs = [
+    { id: "a1", playlist: "1v1", name: "Same", mmr: 1500 },
+    { id: "a2", playlist: "1v1", name: "Same", mmr: 1500 },
+    { id: "b", playlist: "1v1", name: "Other", mmr: 1500 },
+  ];
+  const first = normalizePlaylistRows(inputs, "1v1").rows.map((r) => r.id);
+  const shuffled = [inputs[2], inputs[0], inputs[1]];
+  const second = normalizePlaylistRows(shuffled, "1v1").rows.map((r) => r.id);
+  assert.deepEqual(second, first);
+});
+
 test("normalizePlaylistRows sorts descending by score and quarantines duplicates", () => {
   const { rows, quarantined } = normalizePlaylistRows(
     [

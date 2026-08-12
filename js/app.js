@@ -263,11 +263,24 @@ function urlState(push = false) {
 
 function effectiveStatus() {
   if (!state.quarantined.length) return state.status;
+  const count = state.quarantined.length;
+  // Show the top reasons so it's obvious why a row vanished.
+  const reasonCounts = new Map();
+  for (const q of state.quarantined) {
+    for (const reason of q?.reasons ?? []) {
+      reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+    }
+  }
+  const topReasons = [...reasonCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([reason, n]) => (n > 1 ? `${n}× ${reason}` : reason))
+    .join(", ");
+  const noun = count === 1 ? "row was" : "rows were";
+  const suffix = topReasons ? ` (${topReasons})` : "";
   return {
     kind: "degraded",
-    message:
-      `${state.status.message} · ${state.quarantined.length} invalid ` +
-      `${state.quarantined.length === 1 ? "row was" : "rows were"} hidden.`,
+    message: `${state.status.message} · ${count} invalid ${noun} hidden${suffix}.`,
   };
 }
 
@@ -322,6 +335,7 @@ function render() {
       historyStore,
       admin: state.admin,
       emptyMessage: emptyMessage(),
+      iconKeyRows: state.icons,
       onInspect: openPlayerDetails,
       onEdit: openEdit,
       onDelete: async (player) => {

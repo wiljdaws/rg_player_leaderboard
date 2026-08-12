@@ -128,61 +128,54 @@ h1{
   overflow:hidden;
 }
 .board-head{
-  /* Player is capped at 320px and a 1fr spacer column sits between Player
-     and MMR to absorb slack. That keeps the numeric columns (MMR / Streak /
-     Recent / Actions) hugging the right edge instead of drifting away from
-     the player name on wide screens. Header + row grids must stay in sync,
-     so both add a matching empty span in JS to occupy the spacer slot. */
-  display:grid;grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
+  /* Trophies column at the far left (48px, Pal's request), then Rank,
+     Player capped at 320px, and a 1fr spacer column to absorb slack so
+     numeric columns hug the right edge. Header + row grids stay in sync;
+     both add matching empty spans in JS to occupy the spacer slot. */
+  display:grid;grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
   padding:15px 22px;border-bottom:1px solid var(--line);
   font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.26em;
   text-transform:uppercase;color:var(--ink-dim);
   position:sticky;top:0;background:rgba(12,18,48,.92);backdrop-filter:blur(8px);z-index:5;
 }
-/* Headers align with the data cell underneath: numeric columns and the
-   momentum / streak / actions columns are all right-aligned in the row,
-   so their labels are too. Rank + Player stay left. Columns 4-6 (MMR,
-   Streak, Recent) and the trailing Actions column all right-align. */
+/* Trophy column header is centered; numeric + trailing columns right-align. */
+.board-head > :first-child{text-align:center}
 .board-head .num{text-align:right}
-.board-head > :nth-child(4),
 .board-head > :nth-child(5),
 .board-head > :nth-child(6),
+.board-head > :nth-child(7),
 .board-head > :last-child{text-align:right}
-.board-head[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
-.board-head[data-playlist="wins"] > :nth-child(5),
+.board-head[data-playlist="wins"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
 .board-head[data-playlist="wins"] > :nth-child(6),
 .board-head[data-playlist="wins"] > :nth-child(7),
+.board-head[data-playlist="wins"] > :nth-child(8),
 .board-head[data-playlist="wins"] > :last-child{text-align:right}
-/* Tournament: rank | player | spacer | score | matches (+ actions in admin). */
-.board-head[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px}
-.board-head[data-playlist="tournament"] > :nth-child(4),
-.board-head[data-playlist="tournament"] > :nth-child(5){text-align:right}
-.board-head.admin[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px 150px}
-/* Header grid mirrors .player-row.admin so the ACTIONS column lines up
-   with the Edit/Remove buttons instead of wrapping to a new line.
-   Actions column is a FIXED 150px (not auto) so the header grid and the row
-   grid compute the same column widths — with `auto`, the header's Actions
-   column sized to the "ACTIONS" text (~70px) while the row's sized to the
-   Edit+Remove button pair (~130px), which shifted every fixed-width column
-   between the two grids by ~60px and made labels drift off their data. The
-   150px width also gives ~20px of left-side slack (buttons `justify-self:end`
-   inside the column), which is what creates the visible gap between the
-   last-data column (Recent / Streak) and the Edit button. */
-.board-head.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
-.board-head.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
+/* Tournament: trophies | rank | player | spacer | score | matches (+ actions in admin). */
+.board-head[data-playlist="tournament"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 120px}
+.board-head[data-playlist="tournament"] > :nth-child(5),
+.board-head[data-playlist="tournament"] > :nth-child(6){text-align:right}
+.board-head.admin[data-playlist="tournament"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 120px 150px}
+.board-head.admin{grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
+.board-head.admin[data-playlist="wins"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
 
 .player-row{
-  display:grid;grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
+  display:grid;grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 92px 120px;gap:12px;align-items:center;
   padding:14px 22px;border-bottom:1px solid var(--line);
   transition:background .16s ease;position:relative;overflow:hidden;
 }
-.player-row[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
-.player-row[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px}
+.player-row[data-playlist="wins"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 90px 90px 80px 84px}
+.player-row[data-playlist="tournament"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 120px}
 .player-row:last-child{border-bottom:none}
 .player-row:hover{background:rgba(168,85,247,.06)}
-.player-row.admin{grid-template-columns:64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
-.player-row.admin[data-playlist="wins"]{grid-template-columns:64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
-.player-row.admin[data-playlist="tournament"]{grid-template-columns:64px minmax(200px,320px) 1fr 140px 120px 150px}
+.player-row.admin{grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 92px 120px 150px}
+.player-row.admin[data-playlist="wins"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 90px 90px 80px 84px 150px}
+.player-row.admin[data-playlist="tournament"]{grid-template-columns:48px 64px minmax(200px,320px) 1fr 140px 120px 150px}
+
+/* Trophies column: stack icons vertically, one per line. */
+.p-trophies{display:flex;justify-content:center}
+.trophy-stack{display:flex;flex-direction:column;align-items:center;gap:3px}
+.trophy-line{display:flex;align-items:center;justify-content:center;line-height:0}
+.trophy-icon{display:block}
 
 /* =========================================================
    Top-3 / top-10 podium treatment — applied to every playlist.
@@ -929,23 +922,19 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .tabs{display:flex;width:100%;overflow-x:auto}
   .tab{flex:1;min-height:44px;white-space:nowrap}
   .share-btn{align-self:end}
-  /* Same 6-col (7 admin) shape as desktop — the 0 spacer keeps the column
-     count matching the DOM (empty span between Player and MMR) so the
-     header labels sit directly above their data. Player takes remaining
-     slack via 1fr since screen width is tight on tablets. */
-  .board-head,.player-row{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px;padding:12px 14px;gap:8px}
-  /* Fixed 150px actions column so header + row grids compute identical
-     column widths (see desktop admin block above for the full rationale). */
+  /* Trophies column stays on mobile (36px, tighter than desktop). The
+     `0` between Player and the numerics is the spacer column. */
+  .board-head,.player-row{grid-template-columns:36px 44px minmax(160px,1fr) 0 96px 74px 100px;padding:12px 14px;gap:8px}
   .board-head.admin,
-  .player-row.admin{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 100px 150px}
+  .player-row.admin{grid-template-columns:36px 44px minmax(160px,1fr) 0 96px 74px 100px 150px}
   .board-head[data-playlist="wins"],
-  .player-row[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px}
+  .player-row[data-playlist="wins"]{grid-template-columns:36px 44px 1fr 0 68px 68px 66px 70px}
   .board-head.admin[data-playlist="wins"],
-  .player-row.admin[data-playlist="wins"]{grid-template-columns:44px 1fr 0 68px 68px 66px 70px 150px}
+  .player-row.admin[data-playlist="wins"]{grid-template-columns:36px 44px 1fr 0 68px 68px 66px 70px 150px}
   .board-head[data-playlist="tournament"],
-  .player-row[data-playlist="tournament"]{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px}
+  .player-row[data-playlist="tournament"]{grid-template-columns:36px 44px minmax(160px,1fr) 0 96px 74px}
   .board-head.admin[data-playlist="tournament"],
-  .player-row.admin[data-playlist="tournament"]{grid-template-columns:44px minmax(160px,1fr) 0 96px 74px 150px}
+  .player-row.admin[data-playlist="tournament"]{grid-template-columns:36px 44px minmax(160px,1fr) 0 96px 74px 150px}
   .rank{font-size:18px}
   .p-name{font-size:14.5px}
   .p-score{font-size:16px}

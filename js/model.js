@@ -193,14 +193,27 @@ export function normalizePlaylistRows(rawRows, playlist) {
     rows.push(result.player);
   }
 
+  // Mirror the publisher's sort so live and static ranks agree.
   const scoreField = playlist === "wins" ? "wins"
     : playlist === "tournament" ? "score"
     : "mmr";
-  rows.sort(
-    (left, right) =>
-      right[scoreField] - left[scoreField] ||
-      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
-  );
+  rows.sort((left, right) => {
+    const scoreDelta = right[scoreField] - left[scoreField];
+    if (scoreDelta !== 0) return scoreDelta;
+    if (playlist === "wins" || playlist === "tournament") {
+      const leftMatches = Number(left.matches);
+      const rightMatches = Number(right.matches);
+      if (Number.isFinite(leftMatches) && Number.isFinite(rightMatches)
+          && leftMatches !== rightMatches) {
+        return leftMatches - rightMatches;
+      }
+    }
+    const nameCompare = left.name.localeCompare(right.name, undefined, {
+      sensitivity: "base",
+    });
+    if (nameCompare !== 0) return nameCompare;
+    return String(left.id).localeCompare(String(right.id));
+  });
 
   return { rows, quarantined };
 }
