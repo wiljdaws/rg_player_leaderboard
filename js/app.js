@@ -421,6 +421,7 @@ function openEdit(player) {
   const form = $("editForm");
   setFormValue(form, "playlist", player.playlist);
   setFormValue(form, "name", player.name);
+  setFormValue(form, "sourceUserId", player.sourceUserId ?? "");
   setFormValue(form, "mmr", player.mmr ?? 0);
   setFormValue(form, "wins", player.wins ?? 0);
   setFormValue(form, "matches", player.matches ?? 0);
@@ -1134,6 +1135,12 @@ function wireEvents() {
               if (Number.isFinite(payload.matches)) patch.matches = payload.matches;
             } else if (Number.isFinite(payload.mmr)) {
               patch.mmr = payload.mmr;
+            }
+            // A freshly-attached source id should show up immediately —
+            // otherwise the ATLAS badge / purge-all-playlists behavior
+            // only kicks in after the next publish.
+            if (typeof payload.sourceUserId === "string" && payload.sourceUserId) {
+              patch.sourceUserId = payload.sourceUserId;
             }
             // Drop the JSON-provided rank so the render falls back to
             // index+1 after re-sort.

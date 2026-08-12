@@ -189,14 +189,19 @@ function expandCompactRow(row, playlist) {
   // there matches the deterministic ${sourceUserId}_${playlist} slot.
   const explicitDocId = typeof row._docId === "string" && row._docId ? row._docId : "";
   const id = explicitDocId || (uid ? `${uid}_${playlist}` : "");
+  // Prefer the explicit sourceUserId (present when the doc actually has
+  // one, including hybrid rows sitting at random-id paths). Fall back to
+  // uid only when _docId isn't set — in that case uid IS the sourceUserId
+  // (deterministic path). Otherwise leave empty so the row stays scoped
+  // to a single playlist for delete.
+  const explicitSource = typeof row.sourceUserId === "string" && row.sourceUserId
+    ? row.sourceUserId
+    : "";
   return {
     ...row,
     id,
     playlist,
-    // Only tag as ATLAS-synced when the id is the deterministic form.
-    // Otherwise sourceUserId stays empty so delete stays scoped to
-    // this playlist and doesn't fan out.
-    sourceUserId: explicitDocId ? "" : uid,
+    sourceUserId: explicitSource || (explicitDocId ? "" : uid),
   };
 }
 
