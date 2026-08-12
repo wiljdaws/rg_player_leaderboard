@@ -75,7 +75,7 @@ test("fetchRange returns the range and empty aggregate for a zero-doc result", a
   assert.equal(result.aggregate.totalReads, 0);
   assert.equal(result.aggregate.totalWrites, 0);
   assert.deepEqual(result.aggregate.byDate, {});
-  assert.deepEqual(result.aggregate.bySource, { site: 0, clanSite: 0, hud: 0, other: 0, unknown: 0 });
+  assert.deepEqual(result.aggregate.bySource, { site: 0, clanSite: 0, clanVisitor: 0, hud: 0, other: 0, unknown: 0 });
   assert.deepEqual(result.aggregate.byHudVersion, {});
   assert.deepEqual(result.aggregate.byLabel, { site: [], hud: [] });
   assert.deepEqual(result.aggregate.byHudUser, []);
@@ -402,7 +402,7 @@ test("fetch logs a cost breadcrumb via logger.info", async () => {
   await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
   assert.equal(calls.info.length, 1);
   const [msg, meta] = calls.info[0];
-  assert.equal(msg, "[rgLB] read-stats fetched");
+  assert.equal(msg, "[RG SITE] read-stats fetched");
   assert.equal(meta.docs, 3);
   assert.equal(meta.cost, 3);
 });
