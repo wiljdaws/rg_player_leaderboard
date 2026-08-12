@@ -281,7 +281,7 @@ export function effectiveStreak(player, historyStore, now = Date.now()) {
 }
 
 
-function playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete, iconLabelMap }) {
+function playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete }) {
   const row = node("div", { className: `player-row${admin ? " admin" : ""}` });
   row.dataset.playlist = playlist;
   row.dataset.playerId = player.id;
@@ -292,7 +292,6 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   row.dataset.rank = rank;
   if (rank >= 4 && rank <= 10) row.classList.add("top10");
 
-  row.append(trophyCell(player, iconLabelMap));
   row.append(node("div", { className: `rank ${rankClass(rank)}`, text: `#${rank}` }));
 
   const ident = node("div", { className: "p-ident" });
@@ -326,6 +325,14 @@ function playerRow(player, index, playlist, historyStore, { admin, onInspect, on
   nameEl.textContent = player.name;
   if (glow) nameEl.style.textShadow = glow;
   nameWrap.append(nameEl);
+
+  if (player.icons?.length) {
+    const icons = node("div", { className: "p-icons" });
+    for (const url of player.icons) {
+      icons.append(safeImage(url, "p-icon", ""));
+    }
+    nameWrap.append(icons);
+  }
 
   ident.append(nameWrap);
   row.append(ident);
@@ -389,7 +396,7 @@ function adminActions(player, onEdit, onDelete) {
   return wrap;
 }
 
-export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage, onInspect, onEdit, onDelete, iconKeyRows = [] }) {
+export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage, onInspect, onEdit, onDelete }) {
   const body = $("boardBody");
   const head = $("boardHead");
   if (!body || !head) return;
@@ -397,12 +404,10 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
   head.dataset.playlist = playlist;
   head.classList.toggle("admin", !!admin);
   head.replaceChildren();
-  const iconLabelMap = buildIconLabelMap(iconKeyRows);
-  // Trophies column sits at the far left. Empty span between Player and
-  // the numeric columns is a spacer that occupies the 1fr slack column.
+  // Empty span between Player and the numeric columns is a spacer that
+  // occupies the 1fr slack column in the grid.
   if (playlist === "tournament") {
     head.append(
-      node("span", { text: "Trophies" }),
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
       node("span", { className: "col-spacer" }),
@@ -412,7 +417,6 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
     if (admin) head.append(node("span", { text: "Actions" }));
   } else if (playlist === "wins") {
     head.append(
-      node("span", { text: "Trophies" }),
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
       node("span", { className: "col-spacer" }),
@@ -424,7 +428,6 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
     if (admin) head.append(node("span", { text: "Actions" }));
   } else {
     head.append(
-      node("span", { text: "Trophies" }),
       node("span", { text: "Rank" }),
       node("span", { text: "Player" }),
       node("span", { className: "col-spacer" }),
@@ -442,35 +445,10 @@ export function renderBoard({ playlist, rows, historyStore, admin, emptyMessage,
 
   const fragment = document.createDocumentFragment();
   rows.forEach((player, index) => {
-    fragment.append(playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete, iconLabelMap }));
+    fragment.append(playerRow(player, index, playlist, historyStore, { admin, onInspect, onEdit, onDelete }));
   });
   body.replaceChildren(fragment);
   applyMarquees(body);
-}
-
-function buildIconLabelMap(iconKeyRows) {
-  const map = new Map();
-  for (const row of Array.isArray(iconKeyRows) ? iconKeyRows : []) {
-    if (row?.icon && row?.label) map.set(row.icon, row.label);
-  }
-  return map;
-}
-
-function trophyCell(player, iconLabelMap) {
-  const cell = node("div", { className: "p-trophies" });
-  const stack = node("div", { className: "trophy-stack" });
-  if (Array.isArray(player.icons)) {
-    for (const url of player.icons) {
-      const label = iconLabelMap?.get?.(url) || "";
-      const line = node("div", { className: "trophy-line" });
-      const image = safeImage(url, "p-icon trophy-icon", label);
-      if (label) image.title = label;
-      line.append(image);
-      stack.append(line);
-    }
-  }
-  cell.append(stack);
-  return cell;
 }
 
 export function renderIconKey({ rows, admin, loading, error, onDelete }) {
@@ -502,8 +480,8 @@ export function renderIconKey({ rows, admin, loading, error, onDelete }) {
 
   for (const item of rows) {
     const chip = node("div", { className: "icon-key-item" });
-    chip.append(safeImage(item.icon, "", ""));
-    chip.append(node("span", { text: item.label }));
+    chip.append(safeImage(item.icon, "", item.label));
+    chip.append(node("span", { className: "label", text: item.label }));
     if (admin) {
       const remove = node("button", { className: "remove", text: "×", type: "button" });
       remove.setAttribute("aria-label", `Remove ${item.label}`);

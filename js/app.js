@@ -335,7 +335,6 @@ function render() {
       historyStore,
       admin: state.admin,
       emptyMessage: emptyMessage(),
-      iconKeyRows: state.icons,
       onInspect: openPlayerDetails,
       onEdit: openEdit,
       onDelete: async (player) => {
