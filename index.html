@@ -13,14 +13,14 @@
 <meta property="og:description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
 <meta name="twitter:card" content="summary">
 
-<link rel="icon" type="image/png" href="assets/icon.png?v=5007fd88">
-<link rel="apple-touch-icon" href="assets/icon.png?v=5007fd88">
+<link rel="icon" type="image/png" href="assets/icon.png?v=31dcdca5">
+<link rel="apple-touch-icon" href="assets/icon.png?v=31dcdca5">
 <link rel="manifest" href="site.webmanifest">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/leaderboard.css?v=5007fd88">
+<link rel="stylesheet" href="css/leaderboard.css?v=31dcdca5">
 </head>
 <body>
 <div class="wrap">
@@ -144,6 +144,10 @@
         <label class="field field-wide">
           <span class="field-label">Player name</span>
           <input id="playerName" name="name" type="text" maxlength="80" required placeholder="e.g. [KING] JesusDied4U">
+        </label>
+        <label class="field field-wide" data-source-user-id-field>
+          <span class="field-label">RG user id <em>(optional — links this row to a HUD account)</em></span>
+          <input id="playerSourceUserId" name="sourceUserId" type="text" maxlength="120" autocomplete="off" placeholder="Leave blank for a manual entry">
         </label>
 
         <div class="score-group" data-score-fields="ranked">
@@ -307,28 +311,28 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/admin.js":             "./js/admin.js?v=5007fd88",
-    "./js/config.js":            "./js/config.js?v=5007fd88",
-    "./js/firebase.js":          "./js/firebase.js?v=5007fd88",
-    "./js/flag-directory.js":    "./js/flag-directory.js?v=5007fd88",
-    "./js/history.js":           "./js/history.js?v=5007fd88",
-    "./js/listener-manager.js":  "./js/listener-manager.js?v=5007fd88",
-    "./js/local-cache.js":       "./js/local-cache.js?v=5007fd88",
-    "./js/log.js":               "./js/log.js?v=5007fd88",
-    "./js/model.js":             "./js/model.js?v=5007fd88",
-    "./js/momentum.js":          "./js/momentum.js?v=5007fd88",
-    "./js/publish-pipeline.js":  "./js/publish-pipeline.js?v=5007fd88",
-    "./js/read-budget.js":       "./js/read-budget.js?v=5007fd88",
-    "./js/read-dashboard.js":    "./js/read-dashboard.js?v=5007fd88",
-    "./js/read-stats-export.js": "./js/read-stats-export.js?v=5007fd88",
-    "./js/read-stats-query.js":  "./js/read-stats-query.js?v=5007fd88",
-    "./js/read-telemetry.js":    "./js/read-telemetry.js?v=5007fd88",
-    "./js/reads-view.js":        "./js/reads-view.js?v=5007fd88",
-    "./js/render.js":            "./js/render.js?v=5007fd88",
-    "./js/url-state.js":         "./js/url-state.js?v=5007fd88"
+    "./js/admin.js":             "./js/admin.js?v=31dcdca5",
+    "./js/config.js":            "./js/config.js?v=31dcdca5",
+    "./js/firebase.js":          "./js/firebase.js?v=31dcdca5",
+    "./js/flag-directory.js":    "./js/flag-directory.js?v=31dcdca5",
+    "./js/history.js":           "./js/history.js?v=31dcdca5",
+    "./js/listener-manager.js":  "./js/listener-manager.js?v=31dcdca5",
+    "./js/local-cache.js":       "./js/local-cache.js?v=31dcdca5",
+    "./js/log.js":               "./js/log.js?v=31dcdca5",
+    "./js/model.js":             "./js/model.js?v=31dcdca5",
+    "./js/momentum.js":          "./js/momentum.js?v=31dcdca5",
+    "./js/publish-pipeline.js":  "./js/publish-pipeline.js?v=31dcdca5",
+    "./js/read-budget.js":       "./js/read-budget.js?v=31dcdca5",
+    "./js/read-dashboard.js":    "./js/read-dashboard.js?v=31dcdca5",
+    "./js/read-stats-export.js": "./js/read-stats-export.js?v=31dcdca5",
+    "./js/read-stats-query.js":  "./js/read-stats-query.js?v=31dcdca5",
+    "./js/read-telemetry.js":    "./js/read-telemetry.js?v=31dcdca5",
+    "./js/reads-view.js":        "./js/reads-view.js?v=31dcdca5",
+    "./js/render.js":            "./js/render.js?v=31dcdca5",
+    "./js/url-state.js":         "./js/url-state.js?v=31dcdca5"
   }
 }
 </script>
-<script type="module" src="js/app.js?v=5007fd88" data-asset-version="5007fd88"></script>
+<script type="module" src="js/app.js?v=31dcdca5" data-asset-version="31dcdca5"></script>
 </body>
 </html>

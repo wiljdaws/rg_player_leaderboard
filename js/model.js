@@ -266,12 +266,19 @@ export function buildPlayerPayload(input, includePlaylist = true) {
   const flag = sanitizeHttpUrl(rawFlag);
   if (rawFlag && !flag) throw new Error("Flag URL must use http or https.");
 
+  // Optional — links a manual row back to a HUD account so future ATLAS
+  // writes upsert instead of creating a duplicate, and so admin's
+  // "purge all playlists" sweep can reach it.
+  const sourceUserId = typeof input?.sourceUserId === "string" ? input.sourceUserId.trim() : "";
+  if (sourceUserId && sourceUserId.length > 120) throw new Error("RG user id is too long.");
+
   const payload = {
     name,
     flag,
     icons,
   };
   if (includePlaylist) payload.playlist = playlist;
+  if (sourceUserId) payload.sourceUserId = sourceUserId;
 
   if (playlist === "tournament") {
     const score = Number(input.score);

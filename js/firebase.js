@@ -675,8 +675,20 @@ export async function createFirebaseGateway() {
     signIn: () => signInWithPopup(auth, provider),
     signOut: () => signOut(auth),
     loadIconKey,
-    addPlayer: (payload) => chargedWrite("addPlayer", () =>
-      addDoc(boardFor(payload?.playlist), { ...payload, lastWriteAt: serverTimestamp() })),
+    addPlayer: (payload) => chargedWrite("addPlayer", () => {
+      const stamped = { ...payload, lastWriteAt: serverTimestamp() };
+      // When the admin provided an RG user id, write to the deterministic
+      // slot (sourceUserId_playlist) with merge so a re-add updates the
+      // same row instead of duplicating. Ranked collection only —
+      // tournament rows never carry a sourceUserId.
+      const uid = typeof payload?.sourceUserId === "string" ? payload.sourceUserId.trim() : "";
+      if (uid && payload?.playlist && payload.playlist !== "tournament") {
+        const docId = `${uid}_${payload.playlist}`;
+        const ref = doc(db, collectionNameFor(payload.playlist), docId);
+        return setDoc(ref, stamped, { merge: true }).then(() => ref);
+      }
+      return addDoc(boardFor(payload?.playlist), stamped);
+    }),
     updatePlayer: (id, payload) => chargedWrite("updatePlayer", () =>
       updateDoc(doc(db, collectionNameFor(payload?.playlist), id), { ...payload, lastWriteAt: serverTimestamp() })),
     // Soft delete: sets deleted:true instead of removing the doc. Uses
@@ -701,16 +713,28 @@ export async function createFirebaseGateway() {
         deletedAt: null,
         lastWriteAt: serverTimestamp(),
       }, { merge: true })),
-    // Soft-delete the same player across every ranked playlist. Ranked
-    // doc ids are {sourceUserId}_{playlist} so we can build the four
-    // paths without needing to know which docs actually exist. setDoc
-    // merge means a non-existent doc gets a fresh tombstone, so this
-    // also cleans up ghosts from the pre-soft-delete era.
+    // Soft-delete the same player across every ranked playlist. Fans out
+    // to the deterministic {sourceUserId}_{playlist} slots AND to any
+    // legacy random-id docs that carry the same sourceUserId — those are
+    // the "stuck" rows left over from the admin form before it wrote
+    // deterministic ids.
     deletePlayerAllPlaylists: (sourceUserId) => chargedWrite("deletePlayerAllPlaylists", async () => {
       const playlists = ["1v1", "2v2", "3v3", "wins"];
       const now = serverTimestamp();
-      await Promise.all(playlists.map((pl) =>
-        setDoc(doc(db, "leaderboard", `${sourceUserId}_${pl}`), {
+      const targets = new Set(playlists.map(pl => `${sourceUserId}_${pl}`));
+      // Scan for any other doc ids that share this sourceUserId — random-id
+      // rows created before the deterministic-id fix land here.
+      try {
+        const snap = await chargedGetDocs(
+          query(leaderboard, where("sourceUserId", "==", sourceUserId)),
+          "deletePlayerAllPlaylists:scan",
+        );
+        for (const entry of snap.docs) targets.add(entry.id);
+      } catch (err) {
+        log.warn("write", "deletePlayerAllPlaylists scan failed", err);
+      }
+      await Promise.all([...targets].map(id =>
+        setDoc(doc(db, "leaderboard", id), {
           deleted: true,
           deletedAt: now,
           lastWriteAt: now,
