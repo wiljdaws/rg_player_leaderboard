@@ -184,11 +184,19 @@ function expandCompactRow(row, playlist) {
   }
   if (row.id) return row;
   const uid = typeof row.uid === "string" ? row.uid : "";
+  // Manual admin rows carry _docId so we can hit the real Firestore
+  // path on edit/delete. ATLAS-synced rows omit _docId; the doc id
+  // there matches the deterministic ${sourceUserId}_${playlist} slot.
+  const explicitDocId = typeof row._docId === "string" && row._docId ? row._docId : "";
+  const id = explicitDocId || (uid ? `${uid}_${playlist}` : "");
   return {
     ...row,
-    id: uid ? `${uid}_${playlist}` : "",
+    id,
     playlist,
-    sourceUserId: uid,
+    // Only tag as ATLAS-synced when the id is the deterministic form.
+    // Otherwise sourceUserId stays empty so delete stays scoped to
+    // this playlist and doesn't fan out.
+    sourceUserId: explicitDocId ? "" : uid,
   };
 }
 
