@@ -243,6 +243,8 @@ export function renderReadDashboard(container, data, options = {}) {
   ));
   container.appendChild(renderTopLabels(aggregate));
   container.appendChild(renderTopDenies(aggregate));
+  const recent = renderRecentDenies(aggregate, nameByUid);
+  if (recent) container.appendChild(recent);
   container.appendChild(renderHudUsersTable(aggregate, nameByUid));
   container.appendChild(renderSiteSessionsTable(aggregate));
 }
@@ -793,19 +795,28 @@ function renderTopDenies(agg) {
   const totalSite = Number(agg?.byDenyLabel?.totalSite) || 0;
   const totalHud = Number(agg?.byDenyLabel?.totalHud) || 0;
   const total = totalSite + totalHud;
+  const rulesByBucket = agg?.hudDenyRulesByBucket || {};
   const subtitle = total === 0
     ? "No permission-denied errors in range · rules are clean"
     : `${fmtNum(total)} permission-denied across site + HUD in range`;
   return el("section", { className: "rd-panel rd-panel-full" }, [
     panelHead("Denies by call-site", subtitle),
     el("div", { className: "rd-toplabels-grid" }, [
-      labelColumn("Site", site.slice(0, 10), "var(--warn, #f5a742)"),
-      labelColumn("HUD", hud.slice(0, 10), "var(--warn, #f5a742)"),
+      labelColumn("Site", site.slice(0, 10), "var(--warn, #f5a742)", {}),
+      labelColumn("HUD", hud.slice(0, 10), "var(--warn, #f5a742)", rulesByBucket),
     ]),
   ]);
 }
 
-function labelColumn(title, rows, color) {
+function ruleSummary(rules) {
+  if (!Array.isArray(rules) || rules.length === 0) return "";
+  return rules
+    .slice(0, 3)
+    .map(({ rule, count }) => `${count}× ${rule || "unknown"}`)
+    .join(" · ");
+}
+
+function labelColumn(title, rows, color, rulesByBucket = {}) {
   const max = rows.reduce((m, r) => Math.max(m, Number(r?.total) || 0), 0);
   return el("div", { className: "rd-toplabels-col" }, [
     el("h4", { className: "rd-toplabels-title", text: title }),
@@ -814,8 +825,15 @@ function labelColumn(title, rows, color) {
       : el("ul", { className: "rd-toplabels-list" }, rows.map((r) => {
         const total = Number(r?.total) || 0;
         const pct = max > 0 ? (total / max) * 100 : 0;
+        const rules = rulesByBucket[r?.label] || [];
+        const rulesText = ruleSummary(rules);
         return el("li", { className: "rd-toplabels-row" }, [
-          el("span", { className: "rd-toplabels-label", text: r?.label || "—", attrs: { title: r?.label || "" } }),
+          el("div", { className: "rd-toplabels-label-wrap" }, [
+            el("span", { className: "rd-toplabels-label", text: r?.label || "—", attrs: { title: r?.label || "" } }),
+            rulesText
+              ? el("span", { className: "rd-toplabels-sub", text: rulesText, attrs: { title: rulesText } })
+              : null,
+          ].filter(Boolean)),
           el("div", { className: "rd-toplabels-track" }, [
             el("div", {
               className: "rd-toplabels-fill",
@@ -826,6 +844,41 @@ function labelColumn(title, rows, color) {
           el("span", { className: "rd-toplabels-count", text: fmtNum(total) }),
         ]);
       })),
+  ]);
+}
+
+function renderRecentDenies(agg, nameByUid) {
+  const events = Array.isArray(agg?.hudDenyEvents) ? agg.hudDenyEvents : [];
+  if (events.length === 0) return null;
+  const lookupName = (uid) => {
+    if (!uid) return "";
+    if (nameByUid?.get) return nameByUid.get(uid) || uid;
+    if (nameByUid && typeof nameByUid === "object") return nameByUid[uid] || uid;
+    return uid;
+  };
+  const rows = events.slice(0, 25).map((event) => el("tr", {}, [
+    el("td", { className: "rd-cell-time", text: event.at ? event.at.slice(11, 19) : "—" }),
+    el("td", { text: lookupName(event.uid), attrs: { title: event.uid || "" } }),
+    el("td", { text: event.bucket || "—", attrs: { title: event.path || "" } }),
+    el("td", { text: event.op || "—" }),
+    el("td", { text: event.rule || "—" }),
+    el("td", { text: event.subject || "—", attrs: { title: event.subject || "" } }),
+  ]));
+  return el("section", { className: "rd-panel rd-panel-full" }, [
+    panelHead("Recent HUD denies", "Latest deny events with rule + subject for context"),
+    el("div", { className: "rd-table-wrap" }, [
+      el("table", { className: "rd-table" }, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: "Time" }),
+          el("th", { text: "User" }),
+          el("th", { text: "Call-site" }),
+          el("th", { text: "Op" }),
+          el("th", { text: "Rule" }),
+          el("th", { text: "Subject" }),
+        ])]),
+        el("tbody", {}, rows),
+      ]),
+    ]),
   ]);
 }
 

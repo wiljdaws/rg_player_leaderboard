@@ -1243,6 +1243,12 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   font-family:var(--mono);font-size:12px;color:var(--ink);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
 }
+.rd-toplabels-label-wrap{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rd-toplabels-sub{
+  font-family:var(--mono);font-size:10px;color:var(--ink-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+}
+.rd-cell-time{font-variant-numeric:tabular-nums;color:var(--ink-dim)}
 .rd-toplabels-track{
   height:8px;border-radius:5px;background:rgba(168,85,247,.06);
   border:1px solid var(--line);overflow:hidden;

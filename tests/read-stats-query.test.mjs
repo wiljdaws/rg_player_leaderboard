@@ -82,6 +82,81 @@ test("fetchRange returns the range and empty aggregate for a zero-doc result", a
   assert.deepEqual(result.aggregate.bySiteSession, []);
 });
 
+test("hudDenyEvents + hudDenyRulesByBucket carry rule / subject context", async () => {
+  const hudDocs = [
+    {
+      date: "2026-08-11",
+      sourceUserId: "u1",
+      readTotal: 5,
+      writeTotal: 0,
+      perLabelDenies: { "leaderboard": 3 },
+      deniesRecent: [
+        { at: "2026-08-11T10:00:00.000Z", bucket: "leaderboard", path: "leaderboard/u1_1v1",
+          op: "write", code: "permission-denied", msg: "Missing or insufficient permissions.",
+          subject: "playlist=1v1", rule: "version-gate" },
+        { at: "2026-08-11T10:01:00.000Z", bucket: "leaderboard", path: "leaderboard/u1_2v2",
+          op: "write", code: "permission-denied", msg: "blacklist",
+          subject: "playlist=2v2", rule: "blacklisted" },
+      ],
+    },
+    {
+      date: "2026-08-11",
+      sourceUserId: "u2",
+      readTotal: 2,
+      writeTotal: 0,
+      perLabelDenies: { "leaderboard": 1 },
+      deniesRecent: [
+        { at: "2026-08-11T11:00:00.000Z", bucket: "leaderboard", path: "leaderboard/u2_1v1",
+          op: "write", code: "permission-denied", msg: "version too old",
+          subject: "playlist=1v1", rule: "version-gate" },
+      ],
+    },
+  ];
+  const gateway = makeGateway({ siteDocs: [], hudDocs });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-11", to: "2026-08-11" });
+  assert.equal(result.aggregate.hudDenyEvents.length, 3);
+  // Newest first.
+  assert.equal(result.aggregate.hudDenyEvents[0].at, "2026-08-11T11:00:00.000Z");
+  assert.equal(result.aggregate.hudDenyEvents[0].uid, "u2");
+  assert.equal(result.aggregate.hudDenyEvents[0].rule, "version-gate");
+  const rules = result.aggregate.hudDenyRulesByBucket.leaderboard;
+  assert.deepEqual(
+    rules.map((r) => `${r.count}× ${r.rule}`),
+    ["2× version-gate", "1× blacklisted"],
+  );
+});
+
+test("aggregate tolerates hud docs without deniesRecent (old schema)", async () => {
+  const hudDocs = [
+    {
+      date: "2026-08-01",
+      sourceUserId: "u1",
+      readTotal: 1,
+      writeTotal: 0,
+      perLabelDenies: { "leaderboard": 1 },
+      // no deniesRecent — pre-18.6 schema
+    },
+  ];
+  const gateway = makeGateway({ siteDocs: [], hudDocs });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.deepEqual(result.aggregate.hudDenyEvents, []);
+  assert.deepEqual(result.aggregate.hudDenyRulesByBucket, {});
+});
+
 test("aggregate sums reads/writes across site + hud and sorts byLabel desc", async () => {
   const siteDocs = [
     {

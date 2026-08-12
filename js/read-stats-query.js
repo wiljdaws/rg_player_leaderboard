@@ -85,6 +85,28 @@ function sortedLabelList(labels) {
     .sort((a, b) => b.total - a.total);
 }
 
+// { bucket: [{ rule, count }] } — shows which rule fired most in each
+// call-site so the dashboard can say "leaderboard: 12× version-gate,
+// 3× blacklisted" instead of a bare count.
+function rollupRulesByBucket(events) {
+  const bucketRules = new Map();
+  for (const event of Array.isArray(events) ? events : []) {
+    const bucket = event?.bucket || "";
+    const rule = event?.rule || "unknown";
+    if (!bucket) continue;
+    const rules = bucketRules.get(bucket) || new Map();
+    rules.set(rule, (rules.get(rule) || 0) + 1);
+    bucketRules.set(bucket, rules);
+  }
+  const out = {};
+  for (const [bucket, rules] of bucketRules) {
+    out[bucket] = Array.from(rules.entries())
+      .map(([rule, count]) => ({ rule, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+  return out;
+}
+
 function safeNumber(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : 0;
@@ -98,6 +120,7 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
   const hudLabels = {};
   const siteDenies = {};
   const hudDenies = {};
+  const hudDenyEvents = [];
   const hudUsersById = new Map();
   const sessionRows = [];
 
@@ -144,6 +167,27 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
 
     accumulateLabels(hudLabels, doc.perLabelReads);
     accumulateLabels(hudDenies, doc.perLabelDenies);
+
+    // deniesRecent is a ring buffer per HUD session (added in 18.6+).
+    // Older docs won't have it — that's fine, the array stays empty.
+    if (Array.isArray(doc.deniesRecent)) {
+      const uid = typeof doc.sourceUserId === "string" ? doc.sourceUserId : (doc.id || "");
+      for (const event of doc.deniesRecent) {
+        if (!event || typeof event !== "object") continue;
+        hudDenyEvents.push({
+          at: typeof event.at === "string" ? event.at : "",
+          date,
+          uid,
+          bucket: typeof event.bucket === "string" ? event.bucket : "",
+          path: typeof event.path === "string" ? event.path : "",
+          op: typeof event.op === "string" ? event.op : "",
+          code: typeof event.code === "string" ? event.code : "",
+          msg: typeof event.msg === "string" ? event.msg : "",
+          subject: typeof event.subject === "string" ? event.subject : "",
+          rule: typeof event.rule === "string" ? event.rule : "",
+        });
+      }
+    }
 
     const versionKey = doc.scriptVersion != null
       ? String(doc.scriptVersion)
@@ -223,6 +267,10 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
       totalSite: Object.values(siteDenies).reduce((s, v) => s + v, 0),
       totalHud: Object.values(hudDenies).reduce((s, v) => s + v, 0),
     },
+    hudDenyEvents: hudDenyEvents
+      .sort((a, b) => (b.at || "").localeCompare(a.at || ""))
+      .slice(0, 100),
+    hudDenyRulesByBucket: rollupRulesByBucket(hudDenyEvents),
     byHudUser: Array.from(hudUsersById.values()).sort((a, b) => b.reads - a.reads),
     bySiteSession: sessionRows.sort((a, b) => b.total - a.total),
     monitoring: {
