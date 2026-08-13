@@ -222,8 +222,8 @@ test("aggregate sums reads/writes across site + hud and sorts byLabel desc", asy
   assert.equal(result.aggregate.totalReads, 40 + 60 + 20 + 10 + 5);
   assert.equal(result.aggregate.totalWrites, 3 + 2 + 1);
   assert.deepEqual(result.aggregate.byDate, {
-    "2026-08-01": { site: 40, hud: 20 },
-    "2026-08-02": { site: 60, hud: 15 },
+    "2026-08-01": { site: 40, hud: 20, versions: { "17.4": 20 } },
+    "2026-08-02": { site: 60, hud: 15, versions: { "17.4": 10, "17.3": 5 } },
   });
   // s2's userAgent matches /clan/i so it lands in clanSite; s1 stays site.
   assert.equal(result.aggregate.bySource.site, 40);

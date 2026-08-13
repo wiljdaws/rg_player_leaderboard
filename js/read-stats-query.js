@@ -138,6 +138,7 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
 
     const dayBucket = byDate[date] || (byDate[date] = { site: 0, hud: 0 });
     dayBucket.site += reads;
+    if (!dayBucket.versions) dayBucket.versions = {};
 
     accumulateLabels(siteLabels, doc.perLabel);
     accumulateLabels(siteDenies, doc.perLabelDenies);
@@ -164,6 +165,13 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
 
     const dayBucket = byDate[date] || (byDate[date] = { site: 0, hud: 0 });
     dayBucket.hud += reads;
+    // Per-day per-version breakdown drives the version-split chart.
+    // Older docs may not carry a version — bucket as "unknown".
+    const versionForBucket = doc.scriptVersion != null
+      ? String(doc.scriptVersion)
+      : (doc.versionNum != null ? String(doc.versionNum) : "unknown");
+    if (!dayBucket.versions) dayBucket.versions = {};
+    dayBucket.versions[versionForBucket] = (dayBucket.versions[versionForBucket] || 0) + reads;
 
     accumulateLabels(hudLabels, doc.perLabelReads);
     accumulateLabels(hudDenies, doc.perLabelDenies);

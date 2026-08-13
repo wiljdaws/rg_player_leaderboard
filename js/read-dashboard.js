@@ -515,8 +515,125 @@ function chipTile(label, value, tone, hint) {
 // Reads-over-time line chart
 // ------------------------------------------------------------
 
+// Distinct hues for per-version lines. Current release always paints
+// green (--gain) so it pops; palette skips green/purple so lines don't
+// collide with the site accent.
+const VERSION_LINE_PALETTE = [
+  "#f5b64c", // amber
+  "#4cd8f5", // cyan
+  "#f56b9c", // pink
+  "#ff8a5b", // coral
+  "#b892ff", // lavender
+  "#7be0a4", // mint
+  "#e6e6e6", // near-white (last resort)
+];
+const OLDER_VERSION_COLOR = "#7a7a92";
+const MAX_VERSION_LINES = 5;
+
 function renderTimeChart(agg) {
   const byDate = agg?.byDate || {};
+  const state = { mode: "source", selectedVersions: null };
+
+  // Collect the set of versions we've ever seen in this range, ranked
+  // by total reads so the multi-select puts the highest first.
+  const versionTotals = {};
+  for (const day of Object.values(byDate)) {
+    const vers = day?.versions || {};
+    for (const [v, n] of Object.entries(vers)) {
+      versionTotals[v] = (versionTotals[v] || 0) + Number(n || 0);
+    }
+  }
+  const rankedVersions = Object.entries(versionTotals)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([v]) => v);
+
+  // Pre-select the top N. If the current release exists in the data,
+  // keep it selected too even if it's not top-N.
+  const initialSelected = new Set(rankedVersions.slice(0, MAX_VERSION_LINES));
+  if (rankedVersions.includes(CURRENT_HUD_VERSION)) initialSelected.add(CURRENT_HUD_VERSION);
+  state.selectedVersions = initialSelected;
+
+  const chartHost = el("div", { className: "rd-timechart-wrap" });
+  const legendHost = el("div", { className: "rd-chart-legend" });
+
+  function paint() {
+    chartHost.innerHTML = "";
+    legendHost.innerHTML = "";
+    chartHost.appendChild(buildChartSvg(byDate, state));
+    for (const swatch of buildLegend(state)) legendHost.appendChild(swatch);
+  }
+
+  const controls = buildChartControls(rankedVersions, versionTotals, state, paint);
+  paint();
+
+  return el("section", { className: "rd-panel" }, [
+    panelHead("Reads over time", "Daily totals — pick source or version breakdown"),
+    controls,
+    chartHost,
+    legendHost,
+  ]);
+}
+
+function buildChartControls(rankedVersions, versionTotals, state, paint) {
+  const modeSelect = el("select", {
+    className: "rd-chart-mode",
+    attrs: { "aria-label": "Chart grouping" },
+    on: {
+      change: (e) => {
+        state.mode = e.target.value;
+        versionRow.hidden = state.mode !== "version";
+        paint();
+      },
+    },
+  }, [
+    optionEl("source", "By source (Site vs HUD)", true),
+    optionEl("version", "By HUD version"),
+  ]);
+
+  // Toggleable chips — one per version, top N pre-selected.
+  const chips = rankedVersions.map((ver) => {
+    const isOn = state.selectedVersions.has(ver);
+    const chip = el("button", {
+      className: `rd-verchip${isOn ? " rd-verchip-on" : ""}`,
+      attrs: { type: "button", "data-ver": ver, "aria-pressed": isOn ? "true" : "false" },
+      text: `${ver} · ${fmtCompact(versionTotals[ver] || 0)}`,
+      on: {
+        click: () => {
+          if (state.selectedVersions.has(ver)) state.selectedVersions.delete(ver);
+          else state.selectedVersions.add(ver);
+          const on = state.selectedVersions.has(ver);
+          chip.className = `rd-verchip${on ? " rd-verchip-on" : ""}`;
+          chip.setAttribute("aria-pressed", on ? "true" : "false");
+          paint();
+        },
+      },
+    });
+    return chip;
+  });
+  const versionRow = el("div", {
+    className: "rd-verchip-row",
+    attrs: { "aria-label": "HUD versions to plot" },
+  }, chips);
+  versionRow.hidden = true;
+
+  return el("div", { className: "rd-chart-controls" }, [
+    el("label", { className: "rd-chart-mode-label", text: "Group by:" }),
+    modeSelect,
+    versionRow,
+  ]);
+}
+
+function optionEl(value, label, selected = false) {
+  const opt = el("option", {
+    text: label,
+    attrs: { value },
+  });
+  if (selected) opt.selected = true;
+  return opt;
+}
+
+function buildChartSvg(byDate, state) {
   const keys = Object.keys(byDate).sort();
   const width = 720;
   const height = 260;
@@ -526,10 +643,14 @@ function renderTimeChart(agg) {
   const innerW = width - padX * 2;
   const innerH = height - padTop - padBottom;
 
-  const site = keys.map((k) => Number(byDate[k]?.site || 0));
-  const hud = keys.map((k) => Number(byDate[k]?.hud || 0));
-  const totalMax = Math.max(1, ...site, ...hud);
-  const yMax = niceCeil(totalMax);
+  // Assemble series based on mode. Each series is
+  // { name, color, values: [n per date], titlePrefix }.
+  const series = state.mode === "version"
+    ? seriesByVersion(byDate, keys, state.selectedVersions)
+    : seriesBySource(byDate, keys);
+
+  const allValues = series.flatMap((s) => s.values.filter((v) => Number.isFinite(v)));
+  const yMax = niceCeil(Math.max(1, ...allValues));
 
   const xForIdx = (i) => {
     if (keys.length <= 1) return padX + innerW / 2;
@@ -538,106 +659,117 @@ function renderTimeChart(agg) {
   const yForVal = (v) => padTop + innerH - (v / yMax) * innerH;
 
   const svgChildren = [];
-  // Grid lines
   for (let i = 0; i <= 4; i++) {
     const y = padTop + (innerH * i) / 4;
     const gridVal = yMax * (1 - i / 4);
     svgChildren.push(svg("line", {
-      x1: padX,
-      x2: width - padX,
-      y1: y,
-      y2: y,
-      stroke: "rgba(168,120,255,0.12)",
-      "stroke-width": 1,
+      x1: padX, x2: width - padX, y1: y, y2: y,
+      stroke: "rgba(168,120,255,0.12)", "stroke-width": 1,
     }));
     svgChildren.push(text(padX - 8, y + 4, fmtCompact(gridVal), {
-      "text-anchor": "end",
-      fill: "var(--ink-dim)",
-      "font-size": 11,
-      "font-family": "var(--display)",
+      "text-anchor": "end", fill: "var(--ink-dim)",
+      "font-size": 11, "font-family": "var(--display)",
     }));
   }
 
-  // X-axis ticks — every ~5th date to avoid crowding.
   const tickStep = Math.max(1, Math.ceil(keys.length / 6));
   keys.forEach((k, i) => {
     if (i % tickStep !== 0 && i !== keys.length - 1) return;
-    const x = xForIdx(i);
-    svgChildren.push(text(x, height - padBottom + 18, fmtDateShort(k), {
-      "text-anchor": "middle",
-      fill: "var(--ink-dim)",
-      "font-size": 11,
-      "font-family": "var(--display)",
+    svgChildren.push(text(xForIdx(i), height - padBottom + 18, fmtDateShort(k), {
+      "text-anchor": "middle", fill: "var(--ink-dim)",
+      "font-size": 11, "font-family": "var(--display)",
     }));
   });
 
-  // Series paths.
-  const sitePath = pathFor(site, xForIdx, yForVal);
-  const hudPath = pathFor(hud, xForIdx, yForVal);
-  if (sitePath) {
-    svgChildren.push(svg("path", {
-      d: sitePath,
-      fill: "none",
-      stroke: "var(--grad-a)",
-      "stroke-width": 2,
-      "stroke-linecap": "round",
-      "stroke-linejoin": "round",
-    }));
-  }
-  if (hudPath) {
-    svgChildren.push(svg("path", {
-      d: hudPath,
-      fill: "none",
-      stroke: "var(--gain)",
-      "stroke-width": 2,
-      "stroke-linecap": "round",
-      "stroke-linejoin": "round",
-    }));
+  for (const s of series) {
+    const path = pathFor(s.values, xForIdx, yForVal);
+    if (path) {
+      svgChildren.push(svg("path", {
+        d: path, fill: "none", stroke: s.color, "stroke-width": 2,
+        "stroke-linecap": "round", "stroke-linejoin": "round",
+      }));
+    }
+    keys.forEach((k, i) => {
+      const v = s.values[i];
+      if (!Number.isFinite(v)) return;
+      svgChildren.push(svg("circle", {
+        cx: xForIdx(i), cy: yForVal(v), r: 3.5, fill: s.color,
+        "aria-label": `${s.name} ${fmtDateShort(k)}: ${v}`,
+      }, [svg("title", {}, [textNode(`${s.name} · ${fmtDateShort(k)}: ${fmtNum(v)}`)])]));
+    });
   }
 
-  // Data-point dots with tooltip via <title>.
-  keys.forEach((k, i) => {
-    const xs = xForIdx(i);
-    if (Number.isFinite(site[i])) {
-      const dot = svg("circle", {
-        cx: xs,
-        cy: yForVal(site[i]),
-        r: 3.5,
-        fill: "var(--grad-a)",
-        "aria-label": `Site ${fmtDateShort(k)}: ${site[i]}`,
-      }, [svg("title", {}, [textNode(`Site · ${fmtDateShort(k)}: ${fmtNum(site[i])}`)])]);
-      svgChildren.push(dot);
-    }
-    if (Number.isFinite(hud[i])) {
-      const dot = svg("circle", {
-        cx: xs,
-        cy: yForVal(hud[i]),
-        r: 3.5,
-        fill: "var(--gain)",
-        "aria-label": `HUD ${fmtDateShort(k)}: ${hud[i]}`,
-      }, [svg("title", {}, [textNode(`HUD · ${fmtDateShort(k)}: ${fmtNum(hud[i])}`)])]);
-      svgChildren.push(dot);
-    }
-  });
-
-  const chart = svg("svg", {
+  return svg("svg", {
     class: "rd-timechart",
     viewBox: `0 0 ${width} ${height}`,
     preserveAspectRatio: "xMidYMid meet",
     role: "img",
     "aria-label": "Reads over time",
   }, svgChildren);
+}
 
-  const legend = el("div", { className: "rd-chart-legend" }, [
-    legendSwatch("Site", "var(--grad-a)"),
-    legendSwatch("HUD", "var(--gain)"),
-  ]);
+function seriesBySource(byDate, keys) {
+  return [
+    { name: "Site", color: "var(--grad-a)", values: keys.map((k) => Number(byDate[k]?.site || 0)) },
+    { name: "HUD",  color: "var(--gain)",   values: keys.map((k) => Number(byDate[k]?.hud  || 0)) },
+  ];
+}
 
-  return el("section", { className: "rd-panel" }, [
-    panelHead("Reads over time", "Daily totals split by source"),
-    el("div", { className: "rd-timechart-wrap" }, [chart]),
-    legend,
-  ]);
+function seriesByVersion(byDate, keys, selected) {
+  const list = [...(selected || new Set())];
+  // Stable order: current release first (gets --gain), then by size desc.
+  const totals = new Map();
+  for (const v of list) {
+    let sum = 0;
+    for (const k of keys) sum += Number(byDate[k]?.versions?.[v] || 0);
+    totals.set(v, sum);
+  }
+  list.sort((a, b) => {
+    if (a === CURRENT_HUD_VERSION) return -1;
+    if (b === CURRENT_HUD_VERSION) return 1;
+    return (totals.get(b) || 0) - (totals.get(a) || 0);
+  });
+  let paletteIdx = 0;
+  return list.map((v) => {
+    const isCurrent = v === CURRENT_HUD_VERSION;
+    const color = isCurrent
+      ? "var(--gain)"
+      : (VERSION_LINE_PALETTE[paletteIdx++ % VERSION_LINE_PALETTE.length]);
+    return {
+      name: `v${v}`,
+      color,
+      values: keys.map((k) => Number(byDate[k]?.versions?.[v] || 0)),
+    };
+  });
+}
+
+function buildLegend(state) {
+  const items = state.mode === "version"
+    ? legendItemsForVersions(state.selectedVersions)
+    : [
+        { name: "Site", color: "var(--grad-a)" },
+        { name: "HUD",  color: "var(--gain)"   },
+      ];
+  if (state.mode === "version" && items.length === 0) {
+    return [el("span", { className: "rd-chart-legend-empty", text: "Pick a version above to plot." })];
+  }
+  return items.map((it) => legendSwatch(it.name, it.color));
+}
+
+function legendItemsForVersions(selected) {
+  const list = [...(selected || new Set())];
+  list.sort((a, b) => {
+    if (a === CURRENT_HUD_VERSION) return -1;
+    if (b === CURRENT_HUD_VERSION) return 1;
+    return String(b).localeCompare(String(a), undefined, { numeric: true });
+  });
+  let paletteIdx = 0;
+  return list.map((v) => ({
+    name: `v${v}${v === CURRENT_HUD_VERSION ? " (current)" : ""}`,
+    color: v === CURRENT_HUD_VERSION
+      ? "var(--gain)"
+      : VERSION_LINE_PALETTE[paletteIdx++ % VERSION_LINE_PALETTE.length],
+  }));
 }
 
 function pathFor(values, xForIdx, yForVal) {
