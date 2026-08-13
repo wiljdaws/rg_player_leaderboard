@@ -11,10 +11,81 @@
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// Version tag we consider "current release" — highlighted in green in the
-// HUD version breakdown. If this ever changes, only this constant needs to
-// move.
-const CURRENT_HUD_VERSION = "18.2";
+// "Current release" is derived from the live userscript header on GitHub
+// so bumping @version in rg_hud.user.js is the single source of truth —
+// no manual step here on release. Cached in sessionStorage with a 24h
+// TTL so a normal dashboard visit hits GitHub zero times. First open
+// of a fresh tab does one CDN-cached fetch, and the value updates in
+// place when it lands.
+let CURRENT_HUD_VERSION = "19.4";
+const HUD_RAW_URL = "https://raw.githubusercontent.com/wiljdaws/Tampermonkeys/main/rg_hud.user.js";
+const HUD_VERSION_CACHE_KEY = "rgAtlas.currentHudVersion.v1";
+const HUD_VERSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+function readCachedHudVersion() {
+  try {
+    const raw = sessionStorage.getItem(HUD_VERSION_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.ver || !parsed.at) return null;
+    if (Date.now() - Number(parsed.at) > HUD_VERSION_TTL_MS) return null;
+    return String(parsed.ver);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedHudVersion(ver) {
+  try {
+    sessionStorage.setItem(HUD_VERSION_CACHE_KEY, JSON.stringify({ ver, at: Date.now() }));
+  } catch {
+    // storage full / disabled — the fetch just re-runs next load
+  }
+}
+
+async function refreshCurrentHudVersion() {
+  const cached = readCachedHudVersion();
+  if (cached) {
+    if (cached !== CURRENT_HUD_VERSION) {
+      CURRENT_HUD_VERSION = cached;
+      repaintCurrentReleaseLabels();
+    }
+    return;
+  }
+  try {
+    const res = await fetch(HUD_RAW_URL, { cache: "no-cache" });
+    if (!res.ok) return;
+    const text = await res.text();
+    const m = text.match(/^\/\/\s*@version\s+([^\s]+)/m);
+    if (!m) return;
+    const next = m[1].trim();
+    if (!next) return;
+    writeCachedHudVersion(next);
+    if (next !== CURRENT_HUD_VERSION) {
+      CURRENT_HUD_VERSION = next;
+      repaintCurrentReleaseLabels();
+    }
+  } catch {
+    // fall back to the compile-time default; not worth surfacing
+  }
+}
+
+function repaintCurrentReleaseLabels() {
+  const doc = getDoc();
+  if (!doc) return;
+  const nodes = doc.querySelectorAll("[data-current-release-label]");
+  nodes.forEach((n) => { n.textContent = `Current release: ${CURRENT_HUD_VERSION}`; });
+  const rows = doc.querySelectorAll("[data-verbar-ver]");
+  rows.forEach((row) => {
+    const ver = row.getAttribute("data-verbar-ver");
+    if (ver === CURRENT_HUD_VERSION) row.setAttribute("data-current", "true");
+    else row.removeAttribute("data-current");
+  });
+}
+
+// Kick off the fetch as soon as this module loads; it'll patch the DOM
+// in place once the version resolves.
+refreshCurrentHudVersion();
 
 // ------------------------------------------------------------
 // DOM helpers
@@ -751,7 +822,7 @@ function renderVersionBreakdown(agg) {
       const isCurrent = String(e.ver) === CURRENT_HUD_VERSION;
       return el("div", {
         className: "rd-verbar-row",
-        dataset: isCurrent ? { current: "true" } : {},
+        dataset: { verbarVer: String(e.ver), ...(isCurrent ? { current: "true" } : {}) },
       }, [
         el("span", { className: "rd-verbar-tag", text: e.ver }),
         el("div", { className: "rd-verbar-track" }, [
@@ -766,7 +837,11 @@ function renderVersionBreakdown(agg) {
     });
 
   return el("section", { className: "rd-panel rd-panel-half" }, [
-    panelHead("HUD version breakdown", `Current release: ${CURRENT_HUD_VERSION}`),
+    panelHead(
+      "HUD version breakdown",
+      `Current release: ${CURRENT_HUD_VERSION}`,
+      { subtitleAttrs: { "data-current-release-label": "true" } },
+    ),
     el("div", { className: "rd-verbar-list" }, rows),
   ]);
 }
@@ -1175,11 +1250,16 @@ function sortableTable({
 // Shared building blocks
 // ------------------------------------------------------------
 
-function panelHead(title, subtitle) {
+function panelHead(title, subtitle, opts = {}) {
+  const subtitleAttrs = opts.subtitleAttrs || null;
   return el("div", { className: "rd-panel-head" }, [
     el("h3", { className: "rd-panel-title", text: title }),
     subtitle
-      ? el("p", { className: "rd-panel-sub", text: subtitle })
+      ? el("p", {
+          className: "rd-panel-sub",
+          text: subtitle,
+          ...(subtitleAttrs ? { attrs: subtitleAttrs } : {}),
+        })
       : null,
   ].filter(Boolean));
 }
