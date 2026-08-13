@@ -560,7 +560,12 @@ function renderTimeChart(agg) {
   function paint() {
     chartHost.innerHTML = "";
     legendHost.innerHTML = "";
-    chartHost.appendChild(buildChartSvg(byDate, state));
+    const model = buildChartModel(byDate, state);
+    const svgEl = buildChartSvg(model);
+    chartHost.appendChild(svgEl);
+    const tooltip = createChartTooltip();
+    chartHost.appendChild(tooltip);
+    installChartHover(chartHost, svgEl, tooltip, model);
     for (const swatch of buildLegend(state)) legendHost.appendChild(swatch);
   }
 
@@ -633,7 +638,7 @@ function optionEl(value, label, selected = false) {
   return opt;
 }
 
-function buildChartSvg(byDate, state) {
+function buildChartModel(byDate, state) {
   const keys = Object.keys(byDate).sort();
   const width = 720;
   const height = 260;
@@ -642,23 +647,27 @@ function buildChartSvg(byDate, state) {
   const padBottom = 34;
   const innerW = width - padX * 2;
   const innerH = height - padTop - padBottom;
-
-  // Assemble series based on mode. Each series is
-  // { name, color, values: [n per date], titlePrefix }.
   const series = state.mode === "version"
     ? seriesByVersion(byDate, keys, state.selectedVersions)
     : seriesBySource(byDate, keys);
-
   const allValues = series.flatMap((s) => s.values.filter((v) => Number.isFinite(v)));
   const yMax = niceCeil(Math.max(1, ...allValues));
-
   const xForIdx = (i) => {
     if (keys.length <= 1) return padX + innerW / 2;
     return padX + (i / (keys.length - 1)) * innerW;
   };
   const yForVal = (v) => padTop + innerH - (v / yMax) * innerH;
+  return {
+    keys, series, width, height, padX, padTop, padBottom, innerW, innerH, yMax,
+    xForIdx, yForVal,
+  };
+}
 
+function buildChartSvg(model) {
+  const { keys, series, width, height, padX, padTop, padBottom, innerH, yMax,
+    xForIdx, yForVal } = model;
   const svgChildren = [];
+
   for (let i = 0; i <= 4; i++) {
     const y = padTop + (innerH * i) / 4;
     const gridVal = yMax * (1 - i / 4);
@@ -681,6 +690,15 @@ function buildChartSvg(byDate, state) {
     }));
   });
 
+  // Vertical crosshair guide, hidden until hover picks a column.
+  svgChildren.push(svg("line", {
+    class: "rd-tc-guide",
+    x1: 0, x2: 0, y1: padTop, y2: padTop + innerH,
+    stroke: "rgba(255,255,255,0.28)", "stroke-width": 1,
+    "stroke-dasharray": "3 3", "pointer-events": "none",
+    style: "opacity:0",
+  }));
+
   for (const s of series) {
     const path = pathFor(s.values, xForIdx, yForVal);
     if (path) {
@@ -693,9 +711,11 @@ function buildChartSvg(byDate, state) {
       const v = s.values[i];
       if (!Number.isFinite(v)) return;
       svgChildren.push(svg("circle", {
+        class: "rd-tc-dot",
+        "data-idx": String(i),
         cx: xForIdx(i), cy: yForVal(v), r: 3.5, fill: s.color,
         "aria-label": `${s.name} ${fmtDateShort(k)}: ${v}`,
-      }, [svg("title", {}, [textNode(`${s.name} · ${fmtDateShort(k)}: ${fmtNum(v)}`)])]));
+      }));
     });
   }
 
@@ -706,6 +726,121 @@ function buildChartSvg(byDate, state) {
     role: "img",
     "aria-label": "Reads over time",
   }, svgChildren);
+}
+
+function createChartTooltip() {
+  return el("div", { className: "rd-tc-tooltip", attrs: { "aria-hidden": "true" } });
+}
+
+// Snap-to-nearest hover: reads mouse position → converts to viewBox coords →
+// picks the nearest date index → moves crosshair, enlarges that column's
+// dots, and renders a compact tooltip with each series' value.
+function installChartHover(host, svgEl, tooltip, model) {
+  const { keys, series, xForIdx, width, height, padX, padTop, padBottom, innerH } = model;
+  if (!keys.length) return;
+  const guide = svgEl.querySelector(".rd-tc-guide");
+  const dots = svgEl.querySelectorAll(".rd-tc-dot");
+
+  function pointerXInViewBox(evt) {
+    const rect = svgEl.getBoundingClientRect();
+    if (!rect.width) return null;
+    const xClient = evt.clientX - rect.left;
+    return (xClient / rect.width) * width;
+  }
+  function nearestIndex(vbX) {
+    if (vbX == null) return -1;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < keys.length; i++) {
+      const dx = Math.abs(xForIdx(i) - vbX);
+      if (dx < bestDist) { bestDist = dx; bestIdx = i; }
+    }
+    return bestIdx;
+  }
+  function hide() {
+    guide.style.opacity = "0";
+    tooltip.classList.remove("rd-tc-tooltip-on");
+    tooltip.setAttribute("aria-hidden", "true");
+    dots.forEach((d) => d.removeAttribute("data-focus"));
+  }
+  function show(idx, evt) {
+    const gx = xForIdx(idx);
+    guide.setAttribute("x1", String(gx));
+    guide.setAttribute("x2", String(gx));
+    guide.style.opacity = "1";
+    dots.forEach((d) => {
+      if (d.getAttribute("data-idx") === String(idx)) d.setAttribute("data-focus", "true");
+      else d.removeAttribute("data-focus");
+    });
+
+    // Build tooltip body: date header + one row per series with a value.
+    // Series with no data on that day are dropped so the card stays compact.
+    tooltip.innerHTML = "";
+    const doc = getDoc();
+    const head = doc.createElement("div");
+    head.className = "rd-tc-tt-head";
+    head.textContent = fmtDateShort(keys[idx]);
+    tooltip.appendChild(head);
+    const list = doc.createElement("div");
+    list.className = "rd-tc-tt-list";
+    const rows = series
+      .map((s) => ({ name: s.name, color: s.color, value: s.values[idx] }))
+      .filter((r) => Number.isFinite(r.value))
+      .sort((a, b) => (b.value || 0) - (a.value || 0));
+    if (rows.length === 0) {
+      const empty = doc.createElement("div");
+      empty.className = "rd-tc-tt-empty";
+      empty.textContent = "No data";
+      list.appendChild(empty);
+    } else {
+      for (const r of rows) {
+        const row = doc.createElement("div");
+        row.className = "rd-tc-tt-row";
+        const swatch = doc.createElement("span");
+        swatch.className = "rd-tc-tt-swatch";
+        swatch.style.background = r.color;
+        const name = doc.createElement("span");
+        name.className = "rd-tc-tt-name";
+        name.textContent = r.name;
+        const val = doc.createElement("span");
+        val.className = "rd-tc-tt-val";
+        val.textContent = fmtNum(r.value);
+        row.appendChild(swatch);
+        row.appendChild(name);
+        row.appendChild(val);
+        list.appendChild(row);
+      }
+    }
+    tooltip.appendChild(list);
+
+    // Position the tooltip in host-relative coords. Flip left/right of the
+    // crosshair so it never covers the mouse. Clamp inside the host.
+    const rect = svgEl.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const pxPerVb = rect.width / width;
+    const crosshairPx = (rect.left - hostRect.left) + gx * pxPerVb;
+    const yPx = evt.clientY - hostRect.top;
+    tooltip.classList.add("rd-tc-tooltip-on");
+    tooltip.setAttribute("aria-hidden", "false");
+    // Measure after content set.
+    const ttW = tooltip.offsetWidth || 160;
+    const ttH = tooltip.offsetHeight || 60;
+    let left = crosshairPx + 14;
+    if (left + ttW > hostRect.width - 6) left = crosshairPx - ttW - 14;
+    if (left < 4) left = 4;
+    let top = yPx - ttH - 12;
+    if (top < 4) top = yPx + 16;
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+  }
+
+  svgEl.addEventListener("mousemove", (evt) => {
+    const idx = nearestIndex(pointerXInViewBox(evt));
+    if (idx < 0) { hide(); return; }
+    show(idx, evt);
+  });
+  svgEl.addEventListener("mouseleave", hide);
+  svgEl.addEventListener("touchend", hide);
 }
 
 function seriesBySource(byDate, keys) {
