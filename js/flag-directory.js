@@ -122,6 +122,10 @@ export class FlagDirectory {
     this.storage = storage;
     // Preserves insertion order so recent additions stay at the top of the picker.
     this.entries = new Map(); // url -> { label: string | null, custom: boolean }
+    // Persistent "don't show me this URL" list. Without this, deleting a flag
+    // would only stick until the next registerRows call pulled the same URL
+    // back off a player row.
+    this.hidden = new Set();
     this.watchers = new Set();
     this.load();
   }
@@ -137,6 +141,11 @@ export class FlagDirectory {
             label: typeof raw.label === "string" ? raw.label : null,
             custom: Boolean(raw.custom),
           });
+        }
+        if (Array.isArray(v2.hidden)) {
+          for (const url of v2.hidden) {
+            if (typeof url === "string" && url) this.hidden.add(url);
+          }
         }
         return;
       }
@@ -159,6 +168,7 @@ export class FlagDirectory {
     try {
       const payload = {
         entries: [...this.entries.entries()].map(([url, meta]) => ({ url, ...meta })),
+        hidden: [...this.hidden],
       };
       this.storage.setItem(STORAGE_KEY_V2, JSON.stringify(payload));
     } catch {
@@ -180,13 +190,22 @@ export class FlagDirectory {
   hasCountry(country) {
     if (typeof country !== "string" || !country) return false;
     const target = country.trim().toLowerCase();
-    for (const label of KNOWN_FLAG_URLS.values()) {
+    // Skip built-ins that the admin has explicitly hidden — otherwise
+    // the picker would block them from re-adding a country they just
+    // deleted (e.g. replacing the big built-in Canada with a smaller one).
+    for (const [url, label] of KNOWN_FLAG_URLS) {
+      if (this.hidden.has(url)) continue;
       if (label.toLowerCase() === target) return true;
     }
-    for (const [, label] of KNOWN_FLAG_DATA_PREFIXES) {
+    for (const [prefix, label] of KNOWN_FLAG_DATA_PREFIXES) {
+      // hidden may store the full data URI (which is what a player row
+      // carries) rather than the short prefix — accept either.
+      const hiddenViaFullUri = [...this.hidden].some((u) => u.startsWith(prefix));
+      if (this.hidden.has(prefix) || hiddenViaFullUri) continue;
       if (label.toLowerCase() === target) return true;
     }
-    for (const meta of this.entries.values()) {
+    for (const [url, meta] of this.entries) {
+      if (this.hidden.has(url)) continue;
       if (meta.label && meta.label.toLowerCase() === target) return true;
     }
     return false;
@@ -224,7 +243,20 @@ export class FlagDirectory {
   }
 
   remove(url) {
-    if (!this.entries.delete(url)) return false;
+    const hadEntry = this.entries.delete(url);
+    const alreadyHidden = this.hidden.has(url);
+    // Always mark hidden — even if the entry wasn't in memory yet, this
+    // stops registerRows() from resurrecting it on the next player refresh.
+    this.hidden.add(url);
+    if (!hadEntry && alreadyHidden) return false;
+    this.persist();
+    this.emit();
+    return true;
+  }
+
+  // Escape hatch if the admin wants a previously deleted flag back.
+  unhide(url) {
+    if (!this.hidden.delete(url)) return false;
     this.persist();
     this.emit();
     return true;
@@ -248,7 +280,7 @@ export class FlagDirectory {
     let touched = false;
     for (const row of rows ?? []) {
       const url = typeof row?.flag === "string" ? row.flag.trim() : "";
-      if (!url || this.entries.has(url)) continue;
+      if (!url || this.entries.has(url) || this.hidden.has(url)) continue;
       this.trimIfFull();
       this.entries.set(url, { label: null, custom: false });
       touched = true;
@@ -261,11 +293,13 @@ export class FlagDirectory {
   }
 
   list() {
-    return [...this.entries].map(([url, meta]) => ({
-      url,
-      label: meta.label || labelForFlagUrl(url),
-      custom: meta.custom,
-    }));
+    return [...this.entries]
+      .filter(([url]) => !this.hidden.has(url))
+      .map(([url, meta]) => ({
+        url,
+        label: meta.label || labelForFlagUrl(url),
+        custom: meta.custom,
+      }));
   }
 
   subscribe(watcher) {
