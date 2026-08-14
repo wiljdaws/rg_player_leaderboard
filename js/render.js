@@ -667,17 +667,101 @@ export function renderVersionBreakdown(host, rows) {
   }
 }
 
-export function renderPlayerDialog(dialog, player, rank) {
+const RANKED_PLAYLISTS_FOR_CARD = ["1v1", "2v2", "3v3"];
+
+export function renderPlayerDialog(dialog, player, rank, options = {}) {
   const panel = node("div", { className: "dialog-panel" });
   const heading = node("h2", { className: "dialog-title", text: player.name });
   heading.id = "playerDialogTitle";
   dialog.setAttribute("aria-labelledby", heading.id);
 
+  const isRanked = RANKED_PLAYLISTS_FOR_CARD.includes(player.playlist);
+  if (!isRanked) {
+    renderLegacyPlayerDialog(dialog, panel, heading, player, rank);
+    return;
+  }
+
+  const summary = node("p", { className: "dialog-summary" });
+  summary.append(
+    document.createTextNode("Currently viewing · "),
+    node("span", { className: "dialog-summary-current",
+      text: `${PLAYLIST_LABELS[player.playlist]} · Rank #${rank}` }),
+  );
+
+  const chipGrid = node("div", { className: "pc-chips" });
+  const chipByPlaylist = new Map();
+  for (const pl of RANKED_PLAYLISTS_FOR_CARD) {
+    const chip = buildRankedChip(pl, pl === player.playlist);
+    if (pl === player.playlist) {
+      setChipData(chip, { rank, mmr: player.mmr });
+    }
+    chipByPlaylist.set(pl, chip);
+    chipGrid.append(chip);
+  }
+
+  const total = node("div", { className: "pc-total" });
+  const totalLabel = node("span", { className: "pc-total-label", text: "Total MMR" });
+  const totalValue = node("span", { className: "pc-total-value", text: "—" });
+  total.append(totalLabel, totalValue);
+
+  const source = node("div", { className: "pc-source" });
+  source.append(
+    node("span", { className: "pc-source-dot" }),
+    node("span", { className: "pc-source-label", text: "Source" }),
+    node("span", { className: "pc-source-value", text: player.provenance.kind }),
+  );
+
+  const close = node("button", { className: "admin-primary", text: "Close", type: "button" });
+  close.addEventListener("click", () => dialog.close());
+
+  const actions = node("div", { className: "pc-actions" });
+  actions.append(close);
+
+  panel.append(heading, summary, chipGrid, total, source, actions);
+  dialog.replaceChildren(panel);
+  if (!dialog.open) {
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+  close.focus();
+
+  updateTotal(totalValue, chipByPlaylist, player.mmr, player.playlist);
+
+  const lookup = typeof options.otherPlaylistLookup === "function" ? options.otherPlaylistLookup : null;
+  const uid = player.sourceUserId;
+  if (lookup && uid) {
+    for (const pl of RANKED_PLAYLISTS_FOR_CARD) {
+      if (pl === player.playlist) continue;
+      const chip = chipByPlaylist.get(pl);
+      Promise.resolve(lookup(uid, pl)).then((row) => {
+        if (dialog.dataset.playerId !== player.id) return;
+        if (row && Number.isFinite(row.mmr)) {
+          setChipData(chip, { rank: row.rank, mmr: row.mmr });
+        } else {
+          setChipData(chip, { rank: null, mmr: null });
+        }
+        updateTotal(totalValue, chipByPlaylist, player.mmr, player.playlist);
+      }).catch(() => {
+        if (dialog.dataset.playerId !== player.id) return;
+        setChipData(chip, { rank: null, mmr: null });
+        updateTotal(totalValue, chipByPlaylist, player.mmr, player.playlist);
+      });
+    }
+  } else {
+    for (const pl of RANKED_PLAYLISTS_FOR_CARD) {
+      if (pl === player.playlist) continue;
+      setChipData(chipByPlaylist.get(pl), { rank: null, mmr: null });
+    }
+  }
+}
+
+// Wins + tournament rows keep the old detail-list layout — those aren't
+// ranked-MMR playlists so the chip grid doesn't apply.
+function renderLegacyPlayerDialog(dialog, panel, heading, player, rank) {
   const summary = node("p", {
     className: "dialog-summary",
     text: `${PLAYLIST_LABELS[player.playlist]} · Rank #${rank}`,
   });
-
   const details = node("dl", { className: "detail-list" });
   const scoreLabel = player.playlist === "wins" ? "Record"
     : player.playlist === "tournament" ? "Score"
@@ -693,7 +777,6 @@ export function renderPlayerDialog(dialog, player, rank) {
     detailRow("ATLAS version", player.provenance.version || "Not recorded"),
     detailRow("Last updated", formatUpdatedAt(player.provenance.updatedAt)),
   );
-
   const close = node("button", { className: "admin-primary", text: "Close", type: "button" });
   close.addEventListener("click", () => dialog.close());
   panel.append(heading, summary, details, close);
@@ -703,6 +786,48 @@ export function renderPlayerDialog(dialog, player, rank) {
     else dialog.setAttribute("open", "");
   }
   close.focus();
+}
+
+function buildRankedChip(playlist, isCurrent) {
+  const chip = node("div", { className: `pc-chip${isCurrent ? " pc-chip-current" : ""}` });
+  chip.dataset.playlist = playlist;
+  const mode = node("div", { className: "pc-chip-mode", text: playlist });
+  const rank = node("div", { className: "pc-chip-rank", text: "—" });
+  const mmr = node("div", { className: "pc-chip-mmr", text: "—" });
+  chip.append(mode, rank, mmr);
+  return chip;
+}
+
+function setChipData(chip, { rank, mmr }) {
+  const rankEl = chip.querySelector(".pc-chip-rank");
+  const mmrEl = chip.querySelector(".pc-chip-mmr");
+  if (Number.isFinite(rank) && rank > 0) {
+    rankEl.textContent = `#${rank}`;
+    chip.dataset.rank = rank <= 3 ? "podium" : rank <= 10 ? "top10" : "ranked";
+  } else {
+    rankEl.textContent = "—";
+    chip.dataset.rank = "none";
+  }
+  mmrEl.textContent = Number.isFinite(mmr)
+    ? Number(mmr).toLocaleString("en-US")
+    : "—";
+  if (Number.isFinite(mmr)) chip.dataset.mmr = String(mmr);
+}
+
+function updateTotal(totalValueEl, chipByPlaylist, ownMmr, ownPlaylist) {
+  let sum = 0;
+  let hasAll = true;
+  for (const [pl, chip] of chipByPlaylist) {
+    if (pl === ownPlaylist) {
+      sum += Number(ownMmr) || 0;
+      continue;
+    }
+    const raw = chip.dataset.mmr;
+    if (raw == null || raw === "") { hasAll = false; continue; }
+    const n = Number(raw);
+    if (Number.isFinite(n)) sum += n;
+  }
+  totalValueEl.textContent = sum.toLocaleString("en-US") + (hasAll ? "" : " …");
 }
 
 // A visual flag combobox: native <select> can't render thumbnails, so this

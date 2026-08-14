@@ -4,7 +4,7 @@ import {
   setFormValue,
   togglePlaylistFields,
 } from "./admin.js";
-import { PLAYLIST_LABELS, isAdminUser, isPlaylist } from "./config.js";
+import { PLAYLIST_LABELS, STATIC_JSON_URL_TEMPLATE, isAdminUser, isPlaylist } from "./config.js";
 import { createFirebaseGateway } from "./firebase.js";
 import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
@@ -304,7 +304,51 @@ function syncPlayerDialog() {
   if (index < 0) return;
   if (dialog.dataset.playerId === state.playerId) return;
   dialog.dataset.playerId = state.playerId;
-  renderPlayerDialog(dialog, state.rows[index], index + 1);
+  renderPlayerDialog(dialog, state.rows[index], index + 1, {
+    otherPlaylistLookup: lookupPlayerInPlaylist,
+  });
+}
+
+// Session-cached lookup of a player's rank + MMR in another playlist.
+// Reads the same CDN JSON blob the site is already publishing, so no
+// Firestore reads. First call for a playlist fetches once (~100-300 KB
+// gzipped), then all subsequent lookups are in-memory.
+const _playlistRowCache = new Map(); // playlist -> Map<sourceUserId, { rank, mmr }>
+const _playlistRowPromises = new Map();
+
+async function lookupPlayerInPlaylist(sourceUserId, playlist) {
+  if (!sourceUserId || !playlist) return null;
+  const index = await ensurePlaylistIndex(playlist);
+  return index?.get(sourceUserId) || null;
+}
+
+function ensurePlaylistIndex(playlist) {
+  if (_playlistRowCache.has(playlist)) return Promise.resolve(_playlistRowCache.get(playlist));
+  if (_playlistRowPromises.has(playlist)) return _playlistRowPromises.get(playlist);
+  const url = STATIC_JSON_URL_TEMPLATE.replace("{playlist}", playlist);
+  const promise = fetch(url, { cache: "default" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      const rows = Array.isArray(data?.rows) ? data.rows
+        : Array.isArray(data) ? data : [];
+      const map = new Map();
+      for (const row of rows) {
+        const uid = typeof row?.sourceUserId === "string" ? row.sourceUserId : null;
+        if (!uid) continue;
+        const rank = Number.isFinite(row?.rank) ? Math.trunc(row.rank) : null;
+        const mmr = Number.isFinite(row?.mmr) ? Number(row.mmr) : null;
+        map.set(uid, { rank, mmr });
+      }
+      _playlistRowCache.set(playlist, map);
+      _playlistRowPromises.delete(playlist);
+      return map;
+    })
+    .catch(() => {
+      _playlistRowPromises.delete(playlist);
+      return null;
+    });
+  _playlistRowPromises.set(playlist, promise);
+  return promise;
 }
 
 function render() {

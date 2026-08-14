@@ -922,6 +922,57 @@ h1{
 }
 .detail-list dd{color:var(--ink);font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
 
+/* Player card — chip grid + total MMR (renders for ranked playlists) */
+.dialog-summary-current{color:var(--gold);font-weight:700}
+.pc-chips{
+  margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+}
+.pc-chip{
+  background:linear-gradient(180deg, rgba(168,85,247,.06), rgba(168,85,247,.02));
+  border:1px solid var(--line);border-radius:14px;
+  padding:12px 10px 14px;display:flex;flex-direction:column;align-items:center;gap:4px;
+  transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.pc-chip:hover{transform:translateY(-2px);border-color:var(--line-strong)}
+.pc-chip-current{
+  background:linear-gradient(180deg, rgba(255,210,74,.13), rgba(255,210,74,.03));
+  border-color:rgba(255,210,74,.55);
+  box-shadow:0 0 22px rgba(255,210,74,.18), 0 0 0 1px rgba(255,210,74,.25) inset;
+}
+.pc-chip-mode{
+  font:700 10.5px var(--display);letter-spacing:.24em;text-transform:uppercase;color:var(--ink-dim);
+}
+.pc-chip-rank{
+  font:700 22px var(--display);letter-spacing:.02em;color:var(--grad-a);line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.pc-chip[data-rank="podium"] .pc-chip-rank{color:var(--gold);text-shadow:0 0 12px rgba(255,210,74,.35)}
+.pc-chip[data-rank="top10"] .pc-chip-rank{color:var(--top10-a)}
+.pc-chip[data-rank="none"] .pc-chip-rank{color:var(--ink-dim)}
+.pc-chip-mmr{
+  font:700 15px var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;
+  letter-spacing:.01em;margin-top:2px;
+}
+.pc-total{
+  margin-top:16px;padding:14px 18px;border-radius:14px;
+  background:linear-gradient(90deg, rgba(168,85,247,.14), rgba(228,75,224,.10));
+  border:1px solid var(--line-strong);
+  display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+}
+.pc-total-label{font:700 11px var(--display);letter-spacing:.28em;text-transform:uppercase;color:var(--ink-dim)}
+.pc-total-value{
+  font:700 28px var(--display);font-variant-numeric:tabular-nums;letter-spacing:.01em;line-height:1;
+  background:linear-gradient(90deg, #fff 0%, var(--grad-b) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.pc-source{
+  margin-top:14px;display:flex;align-items:center;gap:10px;
+  font:600 12px var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);
+}
+.pc-source-dot{width:8px;height:8px;border-radius:50%;background:var(--gain);box-shadow:0 0 10px rgba(74,222,128,.7)}
+.pc-source-value{color:var(--ink);letter-spacing:.06em}
+.pc-actions{margin-top:18px;display:flex;justify-content:flex-start}
+
 /* ---------- Footer ---------- */
 footer{
   text-align:center;margin-top:32px;color:var(--ink-dim);font-size:13px;
