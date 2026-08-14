@@ -301,6 +301,14 @@ export function renderReadDashboard(container, data, options = {}) {
     onExport,
   }));
 
+  // Defense-in-depth: when the Firestore-fallback rate limiter refuses a
+  // fetch, the query layer flags the payload with `rateLimited: true` and
+  // returns the last cached data. Surface that state as a small chip so
+  // the operator knows why numbers might be stale.
+  if (safeData?.rateLimited === true) {
+    container.appendChild(renderRateLimitPill(safeData.rateLimitMsUntilRefill));
+  }
+
   if (isEmpty(aggregate)) {
     container.appendChild(renderEmpty());
     return;
@@ -343,6 +351,17 @@ function renderEmpty() {
     el("div", {
       className: "rd-empty-sub",
       text: "Pick a wider window or wait for HUD + site telemetry to arrive.",
+    }),
+  ]);
+}
+
+function renderRateLimitPill(msUntilRefill) {
+  const minutes = Math.max(1, Math.ceil(Number(msUntilRefill || 0) / 60_000));
+  return el("div", { className: "rd-rate-limit-pill", attrs: { role: "status" } }, [
+    el("span", { className: "rd-rate-limit-dot", attrs: { "aria-hidden": "true" } }),
+    el("span", {
+      className: "rd-rate-limit-text",
+      text: `Rate limited — showing cached data. Refill in ${minutes} min.`,
     }),
   ]);
 }

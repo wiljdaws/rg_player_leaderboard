@@ -1142,6 +1142,24 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 .rd-btn-ghost:hover{color:var(--ink)}
 .rd-export-group{display:inline-flex;gap:6px}
 
+/* Rate-limit chip — surfaces the Firestore-fallback rate-limit state
+   returned by read-stats-query.js. Amber accent to match the "warning
+   but not fatal" tone; dashboard stays fully readable behind it. */
+.rd-rate-limit-pill{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 12px;border-radius:999px;
+  background:rgba(255,210,74,.12);
+  border:1px solid rgba(255,210,74,.45);
+  color:var(--gold);
+  font:600 11px var(--display);letter-spacing:.14em;text-transform:uppercase;
+  align-self:flex-start;
+}
+.rd-rate-limit-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--gold);box-shadow:0 0 8px rgba(255,210,74,.6);
+}
+.rd-rate-limit-text{letter-spacing:.06em;text-transform:none;font-weight:600}
+
 /* Big-number chips */
 .rd-chips-row{
   display:grid;grid-template-columns:repeat(4,minmax(0,1fr));

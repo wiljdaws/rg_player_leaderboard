@@ -20,6 +20,8 @@
 // the actual cost can be audited in DevTools. Turn off with the browser
 // devtools log filter if it gets noisy.
 
+import { createTokenBucket } from "./read-stats-rate-limit.js";
+
 // 60 min — dashboard is backward-looking. Refresh clears this, then
 // still tries the CDN snapshot before falling back to Firestore.
 const DEFAULT_TTL_MS = 60 * 60 * 1000;
@@ -344,12 +346,29 @@ function clearCache(storage, storageKey) {
   } catch {}
 }
 
+// Ignores TTL — used by the rate-limit fallback to hand back the last
+// good payload rather than a blank dashboard when the token bucket is
+// empty. Returns null when there's nothing to serve.
+function readCacheAny(storage, storageKey, cacheKey) {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const entry = parsed?.[cacheKey];
+    return entry && typeof entry === "object" ? entry : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createReadStatsQuery({
   gateway,
   cache = { ttlMs: DEFAULT_TTL_MS, storageKey: DEFAULT_STORAGE_KEY },
   storage = safeStorage(),
   now = () => Date.now(),
   logger = typeof console !== "undefined" ? console : null,
+  rateLimiter,
 } = {}) {
   if (!gateway || typeof gateway.fetchAdminReadStats !== "function" || typeof gateway.fetchHudReadStats !== "function") {
     throw new Error("createReadStatsQuery requires a gateway with fetchAdminReadStats and fetchHudReadStats.");
@@ -359,6 +378,11 @@ export function createReadStatsQuery({
   const storageKey = typeof cache?.storageKey === "string" && cache.storageKey
     ? cache.storageKey
     : DEFAULT_STORAGE_KEY;
+
+  // Defense-in-depth: cap the Firestore-fallback branch to N fetches/hour.
+  // The snapshot path (~99% of loads) is unaffected. Injected for tests;
+  // production wires the default bucket in read-stats-rate-limit.js.
+  const bucket = rateLimiter || createTokenBucket({ storage, now });
 
   // Returns null if the snapshot can't serve the range — caller falls
   // through to Firestore.
@@ -439,6 +463,39 @@ export function createReadStatsQuery({
     }
 
     if (source === "firestore") {
+      // Rate-limit guard on the Firestore-fallback branch only. If the
+      // bucket is empty, hand back the last cached payload (TTL-ignoring)
+      // or a synthetic empty aggregate flagged rateLimited so the UI can
+      // render a banner instead of a blank dashboard.
+      const gate = bucket.tryConsume();
+      if (!gate.ok) {
+        logger?.warn?.(
+          "[RG SITE] read-stats fallback rate-limited",
+          { msUntilRefill: gate.msUntilRefill },
+        );
+        const stale = readCacheAny(storage, storageKey, cacheKey);
+        if (stale?.payload) {
+          const payload = {
+            ...stale.payload,
+            rateLimited: true,
+            rateLimitMsUntilRefill: gate.msUntilRefill,
+          };
+          return payload;
+        }
+        const emptyAggregate = aggregate({ siteDocs: [], hudDocs: [], totalDocs: [] });
+        return {
+          range: { from, to },
+          site: [],
+          hud: [],
+          totals: [],
+          visitors: [],
+          aggregate: emptyAggregate,
+          fetchedAt: now(),
+          source: "rate-limited",
+          rateLimited: true,
+          rateLimitMsUntilRefill: gate.msUntilRefill,
+        };
+      }
       const totalsFetcher = typeof gateway.fetchReadStatsTotal === "function"
         ? gateway.fetchReadStatsTotal(from, to)
         : Promise.resolve([]);

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createReadStatsQuery } from "../js/read-stats-query.js";
+import { createTokenBucket } from "../js/read-stats-rate-limit.js";
 
 // ------ helpers ------
 
@@ -868,3 +869,144 @@ test("bySource: mixed docs aggregate correctly across all buckets", async () => 
   assert.equal(result.aggregate.bySource.unknown, 2);
   assert.equal(result.aggregate.totalReads, 10 + 20 + 5 + 4 + 3 + 2);
 });
+
+// ------ rate-limit tests (defense-in-depth on Firestore fallback) ------
+
+test("rate limit: token bucket refuses Firestore fallback when empty; returns rateLimited: true", async () => {
+  // No snapshot gateway → every call hits the Firestore branch. With a
+  // pre-drained bucket, the first call should be refused.
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "s1", total: 5, perLabel: {} }],
+    hudDocs: [],
+  });
+  const storage = makeStorage();
+  const clock = makeClock();
+  const bucket = createTokenBucket({
+    capacity: 2,
+    refillMs: 60 * 60_000,
+    storage,
+    now: clock.now,
+    storageKey: "rgLB:rl:test",
+  });
+  // Drain the bucket manually.
+  bucket.tryConsume();
+  bucket.tryConsume();
+  const { logger, calls } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage,
+    now: clock.now,
+    logger,
+    rateLimiter: bucket,
+  });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(gateway.calls.site, 0, "Firestore fallback must NOT fire when bucket is empty");
+  assert.equal(gateway.calls.hud, 0);
+  assert.equal(result.rateLimited, true);
+  assert.equal(result.source, "rate-limited");
+  assert.ok(result.rateLimitMsUntilRefill > 0, "rateLimitMsUntilRefill exposed for UI countdown");
+  // Empty aggregate — no last-cached payload available.
+  assert.equal(result.aggregate.totalReads, 0);
+  assert.ok(calls.warn.some(([msg]) => String(msg).includes("rate-limited")), "warning is logged");
+});
+
+test("rate limit: refuses Firestore fallback but returns LAST cached payload when available", async () => {
+  // Prime the cache with a successful fetch, then drain the bucket, then
+  // ask for the same range and confirm we get the cached payload back.
+  const gateway = makeGateway({
+    siteDocs: [{ date: "2026-08-01", sessionId: "cached", total: 42, perLabel: {} }],
+    hudDocs: [],
+  });
+  const storage = makeStorage();
+  const clock = makeClock();
+  const bucket = createTokenBucket({
+    capacity: 5,
+    refillMs: 60 * 60_000,
+    storage,
+    now: clock.now,
+    storageKey: "rgLB:rl:cached",
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    cache: { ttlMs: 5 * 60_000, storageKey: "rgLB:readStatsCache:rl-cached" },
+    storage,
+    now: clock.now,
+    logger,
+    rateLimiter: bucket,
+  });
+  // First call: consumes 1 token, populates cache.
+  await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(gateway.calls.site, 1);
+  // Drain remaining tokens.
+  bucket.tryConsume(); bucket.tryConsume(); bucket.tryConsume(); bucket.tryConsume();
+  // Expire TTL so the normal cache path is skipped.
+  clock.advance(10 * 60_000);
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-01" });
+  assert.equal(gateway.calls.site, 1, "no new Firestore fetch — bucket is empty");
+  assert.equal(result.rateLimited, true);
+  assert.equal(result.aggregate.totalReads, 42, "last-cached payload is returned intact");
+});
+
+test("rate limit: token bucket refills after refillMs elapses", async () => {
+  const storage = makeStorage();
+  const clock = makeClock();
+  const bucket = createTokenBucket({
+    capacity: 2,
+    refillMs: 60 * 60_000,
+    storage,
+    now: clock.now,
+    storageKey: "rgLB:rl:refill",
+  });
+  // Drain.
+  assert.equal(bucket.tryConsume().ok, true);
+  assert.equal(bucket.tryConsume().ok, true);
+  const empty = bucket.tryConsume();
+  assert.equal(empty.ok, false);
+  assert.ok(empty.msUntilRefill > 0);
+  // Advance time past refillMs — the whole bucket should reset.
+  clock.advance(60 * 60_000 + 1);
+  assert.equal(bucket.peek().tokens, 2, "bucket is full after refillMs");
+  assert.equal(bucket.tryConsume().ok, true);
+  assert.equal(bucket.tryConsume().ok, true);
+  assert.equal(bucket.tryConsume().ok, false, "and re-empties after 2 more consumes");
+});
+
+test("rate limit: snapshot-served requests do NOT consume tokens (regression guard)", async () => {
+  // The whole point of the rate limiter is to protect the Firestore
+  // fallback — the snapshot path is CDN-served and essentially free, so
+  // it must never touch the bucket.
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-12",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({ snapshot });
+  const storage = makeStorage();
+  const clock = makeClock();
+  const bucket = createTokenBucket({
+    capacity: 3,
+    refillMs: 60 * 60_000,
+    storage,
+    now: clock.now,
+    storageKey: "rgLB:rl:snap",
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage,
+    now: clock.now,
+    logger,
+    rateLimiter: bucket,
+  });
+  // 10 snapshot-served fetches (bypass local cache with distinct ranges) —
+  // bucket should remain full because no Firestore fallback occurred.
+  for (let i = 1; i <= 10; i++) {
+    const to = `2026-08-${String(i).padStart(2, "0")}`;
+    await q.fetchRange({ from: "2026-08-01", to });
+  }
+  assert.equal(gateway.calls.site, 0, "snapshot path never hits Firestore");
+  assert.equal(bucket.peek().tokens, 3, "bucket is untouched by snapshot-served fetches");
+});
+
