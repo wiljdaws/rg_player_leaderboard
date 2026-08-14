@@ -795,7 +795,10 @@ export async function createFirebaseGateway() {
     // Preferred by createReadStatsQuery; the chargedGetDocs paths above
     // stay as the fallback.
     fetchReadStatsSnapshot: async () => {
-      const response = await fetch(READ_STATS_SNAPSHOT_URL, { cache: "no-store" });
+      // cache: "default" (not "no-store") so the Service Worker's
+      // stale-while-revalidate layer (sw.js) can intercept and serve the
+      // cached snapshot. The SW handles freshness; no-store would bypass it.
+      const response = await fetch(READ_STATS_SNAPSHOT_URL, { cache: "default" });
       if (!response.ok) throw new Error(`read-stats snapshot fetch ${response.status}`);
       return response.json();
     },
