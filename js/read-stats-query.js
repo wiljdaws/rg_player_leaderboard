@@ -362,6 +362,17 @@ export function createReadStatsQuery({
 
   // Returns null if the snapshot can't serve the range — caller falls
   // through to Firestore.
+  //
+  // The dashboard's default range is `isoDaysAgo(6) → todayIso()`, but the
+  // snapshot's windowEnd is up to 15 min stale (rebuilt every :00/:15/:30/:45).
+  // The old guard `to > end → null` rejected the snapshot wholesale on
+  // basically every default-range open, burning ~1,140 Firestore reads per
+  // dashboard load. Fix: if `to` slightly exceeds `windowEnd`, clip `to`
+  // to `windowEnd` and serve the snapshot anyway; only fall through to
+  // Firestore when `from` predates the snapshot window (a real gap).
+  //
+  // When we clip, the returned bundle carries `dataAsOf: windowEnd` so the
+  // UI can show a "data as of X" pill.
   async function tryFetchSnapshot(from, to) {
     if (typeof gateway.fetchReadStatsSnapshot !== "function") return null;
     let snapshot;
@@ -375,13 +386,23 @@ export function createReadStatsQuery({
     const start = snapshot.windowStart;
     const end = snapshot.windowEnd;
     if (typeof start !== "string" || typeof end !== "string") return null;
-    // Range must fit inside the snapshot window.
-    if (from < start || to > end) return null;
+    // A `from` older than the snapshot window is a real gap — fall through
+    // to Firestore so the missing days aren't silently dropped.
+    if (from < start) return null;
+    // If `to` extends past the snapshot's freshness horizon (typical: the
+    // default range asks for "today" and the snapshot is 15 min stale),
+    // clip the effective `to` and record the staleness for the UI.
+    const effectiveTo = to > end ? end : to;
+    const dataAsOf = to > end ? end : null;
     const site = (Array.isArray(snapshot.site) ? snapshot.site : [])
-      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= to);
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
     const hud = (Array.isArray(snapshot.hud) ? snapshot.hud : [])
-      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= to);
-    return { site, hud };
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+    const totals = (Array.isArray(snapshot.total) ? snapshot.total : [])
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+    const visitors = (Array.isArray(snapshot.visitors) ? snapshot.visitors : [])
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+    return { site, hud, totals, visitors, dataAsOf };
   }
 
   async function fetchRange({ from, to, force = false } = {}) {
@@ -398,6 +419,9 @@ export function createReadStatsQuery({
 
     let site = [];
     let hud = [];
+    let snapTotals = [];
+    let snapVisitors = [];
+    let dataAsOf = null;
     let source = "firestore";
     let docs = 0;
     // Snapshot is always tried first when the range fits — it's fresher
@@ -408,6 +432,9 @@ export function createReadStatsQuery({
     if (snap) {
       site = snap.site;
       hud = snap.hud;
+      snapTotals = snap.totals || [];
+      snapVisitors = snap.visitors || [];
+      dataAsOf = snap.dataAsOf || null;
       source = "snapshot";
     }
 
@@ -453,13 +480,37 @@ export function createReadStatsQuery({
       return payload;
     }
 
-    // No monitoring totals in the snapshot yet — pass empty.
-    const aggregateResult = aggregate({ siteDocs: site, hudDocs: hud, totalDocs: [] });
+    // Snapshot now carries totals + visitors alongside site + hud, so we
+    // aggregate the full set here without ever touching Firestore. Visitor
+    // docs share the site-doc shape; tag with source="visitor" so they
+    // route through bucketForDoc into the clanVisitor bucket.
+    const visitorsTagged = snapVisitors.map((v) => ({ ...v, source: "visitor" }));
+    const aggregateResult = aggregate({
+      siteDocs: [...site, ...visitorsTagged],
+      hudDocs: hud,
+      totalDocs: snapTotals,
+    });
     const fetchedAt = now();
-    const payload = { range: { from, to }, site, hud, totals: [], aggregate: aggregateResult, fetchedAt, source };
+    const payload = {
+      range: { from, to },
+      site,
+      hud,
+      totals: snapTotals,
+      visitors: snapVisitors,
+      aggregate: aggregateResult,
+      fetchedAt,
+      source,
+      dataAsOf,
+    };
     writeCache(storage, storageKey, cacheKey, { payload, fetchedAt });
     try {
-      logger?.info?.("[RG SITE] read-stats fetched", { source, docs: site.length + hud.length, ms: fetchedAt - startedAt, cost: 0 });
+      const cost = snapTotals.length === 0 && snapVisitors.length === 0 ? 0 : 0; // snapshot is free
+      logger?.info?.("[RG SITE] read-stats fetched", {
+        source,
+        docs: site.length + hud.length + snapTotals.length + snapVisitors.length,
+        ms: fetchedAt - startedAt,
+        cost,
+      });
     } catch {}
     return payload;
   }

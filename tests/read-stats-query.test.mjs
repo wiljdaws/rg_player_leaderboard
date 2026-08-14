@@ -734,6 +734,112 @@ test("snapshot path: force=true still clears the local cache", async () => {
   assert.equal(gateway.calls.snapshot, 2);
 });
 
+test("snapshot path: clips `to` to windowEnd when caller asks past it (default range vs 15-min stale snapshot)", async () => {
+  // Pins the fix for the "default range → all 4 collections hit Firestore
+  // live" regression. Dashboard default is `isoDaysAgo(6) → todayIso()`,
+  // but the snapshot is rebuilt every :15 min so `to` (today) almost
+  // always exceeds `windowEnd` by a few hours. Old guard rejected the
+  // snapshot wholesale; new guard clips `to` and serves the snapshot,
+  // tagging `dataAsOf` so the UI knows.
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-12", // yesterday
+    site: [
+      { id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" },
+      { id: "s2", date: "2026-08-12", sessionId: "s2", total: 20, perLabel: {}, source: "player" },
+    ],
+    hud: [
+      { id: "h1", date: "2026-08-12", sourceUserId: "u1", readTotal: 5, perLabel: {} },
+    ],
+  };
+  const gateway = makeSnapshotGateway({ snapshot });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  // Ask for "today" (2026-08-13) — one day past windowEnd.
+  const result = await q.fetchRange({ from: "2026-08-07", to: "2026-08-13" });
+  assert.equal(gateway.calls.snapshot, 1);
+  assert.equal(gateway.calls.site, 0, "no Firestore admin_read_stats fallback");
+  assert.equal(gateway.calls.hud, 0, "no Firestore hud_read_stats fallback");
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.dataAsOf, "2026-08-12", "dataAsOf carries the clipped windowEnd");
+  // Both site docs (2026-08-05 + 2026-08-12) fall inside effective range 2026-08-07..2026-08-12.
+  // Actually only 2026-08-12 does — 2026-08-05 is before `from`.
+  assert.equal(result.site.length, 1);
+  assert.equal(result.site[0].id, "s2");
+  assert.equal(result.aggregate.totalReads, 20 + 5);
+});
+
+test("snapshot path: dataAsOf is null when range fits fully inside window", async () => {
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-09",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({ snapshot });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-08" });
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.dataAsOf, null, "no clipping needed → dataAsOf is null");
+});
+
+test("snapshot path: totals + visitors from snapshot are aggregated without Firestore", async () => {
+  // Pins the fix for the "read_stats_total + visitor_read_stats always
+  // fall through to Firestore" leak. When the snapshot carries them we
+  // must aggregate them locally and skip Firestore entirely.
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-12",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+    total: [
+      { id: "2026-08-05", date: "2026-08-05", reads: 100, writes: 20, deletes: 3 },
+      { id: "2026-08-06", date: "2026-08-06", reads: 200, writes: 30, deletes: 0 },
+      { id: "2026-06-01", date: "2026-06-01", reads: 9999, writes: 0, deletes: 0 }, // out of range
+    ],
+    visitors: [
+      { id: "v1", date: "2026-08-05", sessionId: "v1", total: 7, perLabel: {} },
+    ],
+  };
+  const gateway = makeSnapshotGateway({ snapshot });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-12" });
+  assert.equal(gateway.calls.site, 0, "no Firestore admin_read_stats fallback");
+  assert.equal(gateway.calls.hud, 0, "no Firestore hud_read_stats fallback");
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.totals.length, 2, "monitoring totals scoped to range");
+  assert.equal(result.visitors.length, 1, "visitor docs available on payload");
+  assert.equal(result.aggregate.monitoring.available, true);
+  assert.equal(result.aggregate.monitoring.totalReads, 100 + 200);
+  // Visitor doc gets tagged with source="visitor" → clanVisitor bucket.
+  assert.equal(result.aggregate.bySource.clanVisitor, 7);
+  assert.equal(result.aggregate.bySource.site, 10);
+  assert.equal(result.aggregate.totalReads, 10 + 7);
+});
+
+test("snapshot path: still falls back to Firestore when `from` predates snapshot window", async () => {
+  // The clip trick applies only to the leading edge (`to > end`). If
+  // `from < start` there's a real gap — snapshot must decline.
+  const snapshot = {
+    windowStart: "2026-07-10",
+    windowEnd: "2026-08-12",
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    hud: [],
+  };
+  const gateway = makeSnapshotGateway({
+    snapshot,
+    siteDocs: [{ id: "old", date: "2026-06-01", sessionId: "old", total: 42, perLabel: {}, source: "player" }],
+    hudDocs: [],
+  });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
+  const result = await q.fetchRange({ from: "2026-06-01", to: "2026-08-13" });
+  assert.equal(gateway.calls.site, 1, "Firestore fallback fired");
+  assert.equal(result.source, "firestore");
+});
+
 test("bySource: mixed docs aggregate correctly across all buckets", async () => {
   const gateway = makeGateway({
     siteDocs: [
