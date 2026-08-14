@@ -1281,13 +1281,24 @@ function renderRecentDenies(agg, nameByUid) {
       codeBadge,
       el("span", { className: "rd-deny-msg-text", text: messageText, attrs: { title: messageText } }),
     ].filter(Boolean));
+    // If the HUD sent client-side reasons (v19.5+), show each on its own
+    // line under the subject so admins can see exactly what failed.
+    const reasons = Array.isArray(event.reasons) ? event.reasons : [];
+    const subjectCell = el("div", { className: "rd-deny-subject-cell" }, [
+      el("div", { className: "rd-deny-subject", text: event.subject || "—", attrs: { title: event.subject || "" } }),
+      reasons.length
+        ? el("ul", { className: "rd-deny-reasons" },
+            reasons.slice(0, 6).map((r) =>
+              el("li", { className: "rd-deny-reason", text: r, attrs: { title: r } })))
+        : null,
+    ].filter(Boolean));
     return el("div", { className: "rd-tr rd-deny-row" }, [
       el("div", { className: "rd-td rd-deny-when", text: relativeTime(event.at, nowMs), attrs: { title: event.at || "" } }),
       el("div", { className: "rd-td rd-deny-user", text: userLabel, attrs: { title: event.uid || "" } }),
       el("div", { className: "rd-td rd-deny-rule" }, [renderRuleChip(event.rule)]),
       el("div", { className: "rd-td" }, [bucketCell]),
       el("div", { className: "rd-td rd-deny-op", text: event.op || "—" }),
-      el("div", { className: "rd-td rd-deny-subject", text: event.subject || "—", attrs: { title: event.subject || "" } }),
+      el("div", { className: "rd-td" }, [subjectCell]),
       el("div", { className: "rd-td" }, [msgCell]),
     ]);
   });

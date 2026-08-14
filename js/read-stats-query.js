@@ -184,6 +184,9 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
       const uid = typeof doc.sourceUserId === "string" ? doc.sourceUserId : (doc.id || "");
       for (const event of doc.deniesRecent) {
         if (!event || typeof event !== "object") continue;
+        const reasons = Array.isArray(event.reasons)
+          ? event.reasons.filter((r) => typeof r === "string" && r.length > 0)
+          : [];
         hudDenyEvents.push({
           at: typeof event.at === "string" ? event.at : "",
           date,
@@ -195,6 +198,7 @@ function aggregate({ siteDocs, hudDocs, totalDocs }) {
           msg: typeof event.msg === "string" ? event.msg : "",
           subject: typeof event.subject === "string" ? event.subject : "",
           rule: typeof event.rule === "string" ? event.rule : "",
+          reasons,
         });
       }
     }

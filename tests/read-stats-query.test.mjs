@@ -134,6 +134,55 @@ test("hudDenyEvents + hudDenyRulesByBucket carry rule / subject context", async 
   );
 });
 
+test("hudDenyEvents carry the client-side reasons array (HUD 19.5+)", async () => {
+  const hudDocs = [
+    {
+      date: "2026-08-14",
+      sourceUserId: "u1",
+      readTotal: 5,
+      writeTotal: 0,
+      perLabelDenies: { "match_snapshots": 1 },
+      deniesRecent: [
+        { at: "2026-08-14T10:00:00.000Z", bucket: "match_snapshots",
+          path: "match_snapshots/u1_abc", op: "write", code: "permission-denied",
+          msg: "Missing or insufficient permissions.", subject: "matchId=abc",
+          rule: "unknown",
+          reasons: [
+            "mode must be one of [Competitive3v3, ...] (got \"1v1\")",
+            "outcome must be one of [W, L, T] (got null)",
+          ] },
+      ],
+    },
+    {
+      date: "2026-08-14",
+      sourceUserId: "u2",
+      readTotal: 2,
+      writeTotal: 0,
+      perLabelDenies: {},
+      // old HUD, no reasons — should degrade to []
+      deniesRecent: [
+        { at: "2026-08-14T11:00:00.000Z", bucket: "script_submissions",
+          op: "write", code: "permission-denied", msg: "denied", rule: "unknown" },
+      ],
+    },
+  ];
+  const gateway = makeGateway({ siteDocs: [], hudDocs });
+  const { logger } = silentLogger();
+  const q = createReadStatsQuery({
+    gateway,
+    storage: makeStorage(),
+    now: () => 1_000_000,
+    logger,
+  });
+  const result = await q.fetchRange({ from: "2026-08-14", to: "2026-08-14" });
+  const events = result.aggregate.hudDenyEvents;
+  assert.equal(events.length, 2);
+  // Newest first — u2 event is newer.
+  assert.deepEqual(events[0].reasons, []);
+  assert.equal(events[1].reasons.length, 2);
+  assert.match(events[1].reasons[0], /^mode must be/);
+});
+
 test("aggregate tolerates hud docs without deniesRecent (old schema)", async () => {
   const hudDocs = [
     {
