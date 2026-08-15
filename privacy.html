@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — Rocket Goal Leaderboard</title>
+<meta name="description" content="How the community Rocket Goal leaderboard collects and uses player data.">
+<meta name="theme-color" content="#0C1230">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://i.imgur.com; object-src 'none'; base-uri 'self'">
+<link rel="icon" type="image/png" href="assets/icon.png?v=fc22c3eb">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/leaderboard.css?v=legal15">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-block">
+      <span class="title-kicker">Rocket Goal</span>
+      <h1>Privacy Policy</h1>
+    </div>
+    <p class="sub">Community rankings run by Pal and JesusDied4U. Not the official game.</p>
+  </header>
+
+  <article class="legal">
+    <a class="legal-back" href="index.html">← Back to rankings</a>
+    <p>This page covers the public player board, the Clan Clash Cup site, and the ATLAS HUD that writes scores. We do not sell your data. We do not run ads. We keep what we need to show a leaderboard and stop spam.</p>
+
+    <h2>What we store</h2>
+    <ul>
+      <li>In-game name, playlist, MMR, wins, matches, optional flag and icons.</li>
+      <li>A Firebase auth id from the HUD (anonymous sign-in) so a row belongs to one player.</li>
+      <li>A device id the HUD or clan page creates in this browser, used to rate-limit abuse and count page use.</li>
+      <li>Clan name, tag, membership, and event scores if you join a tracked clan.</li>
+      <li>Admin Google account email if Pal or JesusDied4U sign in to manage the board.</li>
+    </ul>
+    <p>Public names and scores are published as JSON on GitHub so the site can load without hitting the live database on every visit.</p>
+
+    <h2>Who can see it</h2>
+    <p>Anyone can see the public leaderboard. Hosting and the database run on GitHub and Google Firebase, so those companies process the same records as part of providing those services. Admins can see extra ops data (for example read counts and ban lists) that is not shown on the public board.</p>
+
+    <h2>What we do not do</h2>
+    <ul>
+      <li>We do not sell, rent, or trade player lists.</li>
+      <li>We do not ask for your Rocket Goal password.</li>
+      <li>We do not collect payment cards, government ids, or biometrics.</li>
+      <li>These pages are not directed at children under 13. If a parent thinks we listed a child, ping us and we will remove the row.</li>
+    </ul>
+
+    <h2>How long it stays</h2>
+    <p>A listed player stays on the board until an admin removes them or the project is shut down. Browser-only bits (pinned clans, a visitor device id) stay on your device until you clear site data.</p>
+
+    <h2>Ask us to take you off</h2>
+    <p>Post in the <a href="https://discord.gg/nFe5xpGnEk" target="_blank" rel="noopener noreferrer">Rocket Goal Championship Discord</a> and ask Pal or JesusDied4U to delete your row. Say the in-game name and, if you have it, the Firebase id from HUD settings. We will drop you from the public board. Cached copies on GitHub or in other people’s browsers can take a little time to expire.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes in a material way, we will update this page and the date below. Using the site or HUD after that means you are looking at the new version.</p>
+    <p>This is a volunteer community project, not legal advice.</p>
+    <p class="legal-updated">Last updated August 15, 2026 · <a href="terms.html">Terms of use</a></p>
+  </article>
+</div>
+</body>
+</html>

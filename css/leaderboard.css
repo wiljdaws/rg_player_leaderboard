@@ -994,6 +994,28 @@ footer a{
   border-bottom:1px solid rgba(255,210,74,.4);padding-bottom:1px;
 }
 footer a:hover{color:var(--ink);border-color:var(--ink)}
+.footer-legal{
+  display:flex;justify-content:center;align-items:center;gap:10px;
+  margin-top:12px;font:700 12px var(--display);letter-spacing:.18em;text-transform:uppercase;
+}
+.footer-legal span{color:var(--ink-dim);border:0;padding:0}
+
+.legal{max-width:720px;margin:8px auto 48px;text-align:left}
+.legal-back{
+  display:inline-block;margin-bottom:18px;
+  font:700 12px var(--display);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(255,210,74,.4);padding-bottom:1px;
+}
+.legal-back:hover{color:var(--ink);border-color:var(--ink)}
+.legal h2{
+  font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink);margin:28px 0 10px;
+}
+.legal p,.legal li{color:var(--ink-dim);font-size:16px;font-weight:600;line-height:1.65}
+.legal p + p{margin-top:12px}
+.legal ul{margin:10px 0 0 1.2em;display:grid;gap:8px}
+.legal a{color:var(--gold);font-weight:700}
+.legal-updated{margin-top:28px;color:var(--ink-dim);font-size:13px;letter-spacing:.04em}
 
 /* ---------- Responsive ---------- */
 @media (max-width:820px){
