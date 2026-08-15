@@ -7,6 +7,7 @@ import {
   normalizePlayerDocument,
   normalizePlaylistRows,
   sanitizeHttpUrl,
+  sanitizePublicImageUrl,
   winRate,
 } from "../js/model.js";
 
@@ -210,4 +211,43 @@ test("sanitizeHttpUrl rejects SVG data URIs (XSS vector)", () => {
 test("sanitizeHttpUrl still rejects arbitrary schemes", () => {
   assert.equal(sanitizeHttpUrl("javascript:alert(1)"), "");
   assert.equal(sanitizeHttpUrl("file:///etc/passwd"), "");
+});
+
+test("sanitizePublicImageUrl drops Discord and GitHub CDNs", () => {
+  assert.equal(
+    sanitizePublicImageUrl("https://cdn.discordapp.com/attachments/1/2/flag.png"),
+    "",
+  );
+  assert.equal(
+    sanitizePublicImageUrl("https://raw.githubusercontent.com/foo/bar/flag.png"),
+    "",
+  );
+  assert.equal(
+    sanitizePublicImageUrl("https://cdn.jsdelivr.net/gh/foo/bar/flag.png"),
+    "",
+  );
+});
+
+test("normalizePlayerDocument drops Discord flag URLs", () => {
+  const result = normalizePlayerDocument(
+    {
+      id: "abc",
+      playlist: "1v1",
+      name: "Player",
+      mmr: 1234,
+      flag: "https://cdn.discordapp.com/attachments/1/2/flag.png",
+    },
+    "1v1",
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.player.flag, "");
+});
+
+test("sanitizePublicImageUrl keeps country-flag hosts and data URIs", () => {
+  const imgur = "https://i.imgur.com/saBa4s8.png";
+  const wiki = "https://upload.wikimedia.org/wikipedia/commons/0/0a/Flag_of_Jamaica.svg";
+  const png = "data:image/png;base64,iVBORw0KGgoAAAA";
+  assert.equal(sanitizePublicImageUrl(imgur), imgur);
+  assert.equal(sanitizePublicImageUrl(wiki), wiki);
+  assert.equal(sanitizePublicImageUrl(png), png);
 });

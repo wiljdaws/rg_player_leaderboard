@@ -47,13 +47,45 @@ export function sanitizeHttpUrl(value) {
   }
 }
 
+// Discord / GitHub / jsDelivr file links were used as flags and icons.
+// The public board only shows inline country flags and a couple of
+// known country-flag hosts. Everything else is dropped.
+const PUBLIC_IMAGE_HOSTS = new Set([
+  "i.imgur.com",
+  "imgur.com",
+  "upload.wikimedia.org",
+]);
+
+function isBlockedImageHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  if (!host) return true;
+  if (host.endsWith(".discordapp.com") || host.endsWith(".discordapp.net")) return true;
+  if (host.endsWith(".githubusercontent.com") || host === "github.com" || host === "www.github.com") return true;
+  if (host.endsWith(".jsdelivr.net")) return true;
+  return false;
+}
+
+export function sanitizePublicImageUrl(value) {
+  const safe = sanitizeHttpUrl(value);
+  if (!safe) return "";
+  if (safe.startsWith("data:")) return safe;
+  try {
+    const parsed = new URL(safe);
+    if (isBlockedImageHost(parsed.hostname)) return "";
+    if (!PUBLIC_IMAGE_HOSTS.has(parsed.hostname.toLowerCase())) return "";
+    return safe;
+  } catch {
+    return "";
+  }
+}
+
 function normalizeIcons(value) {
   const candidates = Array.isArray(value)
     ? value
     : typeof value === "string"
       ? value.split(",")
       : [];
-  return candidates.slice(0, 12).map(sanitizeHttpUrl).filter(Boolean);
+  return candidates.slice(0, 12).map(sanitizePublicImageUrl).filter(Boolean);
 }
 
 function normalizeUpdatedAt(value) {
@@ -160,7 +192,7 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
       sourceUserId: sourceUserId || null,
       rank,
       ...score,
-      flag: sanitizeHttpUrl(raw.flag),
+      flag: sanitizePublicImageUrl(raw.flag),
       icons: normalizeIcons(raw.icons),
       provenance: {
         kind: sourceUserId ? "ATLAS synced" : "Manual admin entry",
@@ -230,7 +262,7 @@ export function normalizeIconKeyRows(rawRows) {
   for (const raw of Array.isArray(rawRows) ? rawRows : []) {
     const id = typeof raw?.id === "string" ? raw.id.trim() : "";
     const label = typeof raw?.label === "string" ? raw.label.trim() : "";
-    const icon = sanitizeHttpUrl(raw?.icon);
+    const icon = sanitizePublicImageUrl(raw?.icon);
     if (!id || !label || label.length > 100 || !icon) {
       quarantined.push(id || "unknown");
       continue;
