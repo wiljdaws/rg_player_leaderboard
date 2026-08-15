@@ -422,10 +422,16 @@ test("renderReadDashboard: onRangeChange fires when date input changes", async (
     });
     const inputs = container.querySelectorAll(".rd-date-input");
     assert.equal(inputs.length, 2, "two date inputs");
-    inputs[0].value = "2026-07-01";
+    const min = inputs[0].getAttribute("min");
+    const max = inputs[0].getAttribute("max");
+    assert.ok(min, "from input is locked to the 7-day window");
+    assert.ok(max, "from input has a max");
+    inputs[0].value = "2020-01-01";
     inputs[0].dispatch("change");
     assert.equal(calls.length, 1, "range change fired");
-    assert.equal(calls[0][0], "2026-07-01", "from value forwarded");
+    assert.equal(calls[0][0], min, "a 30-day pick snaps back to the window min");
+    assert.ok(calls[0][0] >= min, "forwarded from is not older than min");
+    assert.ok(calls[0][1] <= max, "forwarded to is not past max");
   } finally {
     cleanupDom();
   }

@@ -9,6 +9,8 @@
 // surfaced through the options object so the caller wires them however it
 // likes (e.g. app.js glue).
 
+import { READ_STATS_WINDOW_DAYS, clampRangeToWindowDays } from "./read-stats-query.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 // "Current release" is derived from the live userscript header on GitHub
@@ -349,7 +351,7 @@ function renderEmpty() {
     el("div", { className: "rd-empty-title", text: "No reads in this range" }),
     el("div", {
       className: "rd-empty-sub",
-      text: "Pick a wider window or wait for HUD + site telemetry to arrive.",
+      text: "Last 7 days only. Wait for HUD + site telemetry to arrive.",
     }),
   ]);
 }
@@ -386,8 +388,10 @@ function renderSkeleton() {
 // ------------------------------------------------------------
 
 function renderHeader({ range, onRefresh, onRangeChange, onExport }) {
-  const from = range?.from || isoDaysAgo(6);
-  const to = range?.to || todayIso();
+  const min = isoDaysAgo(READ_STATS_WINDOW_DAYS - 1);
+  const max = todayIso();
+  const from = range?.from || min;
+  const to = range?.to || max;
 
   const fromInput = el("input", {
     className: "rd-date-input",
@@ -395,6 +399,8 @@ function renderHeader({ range, onRefresh, onRangeChange, onExport }) {
       type: "date",
       id: "rd-range-from",
       value: from,
+      min,
+      max,
       "aria-label": "Range start date",
     },
   });
@@ -404,13 +410,22 @@ function renderHeader({ range, onRefresh, onRangeChange, onExport }) {
       type: "date",
       id: "rd-range-to",
       value: to,
+      min,
+      max,
       "aria-label": "Range end date",
     },
   });
 
   const handleRange = () => {
+    const clamped = clampRangeToWindowDays(fromInput.value, toInput.value);
+    let nextFrom = clamped.from < min ? min : clamped.from;
+    let nextTo = clamped.to > max ? max : clamped.to;
+    if (nextTo < min) nextTo = min;
+    if (nextFrom > nextTo) nextFrom = nextTo;
+    fromInput.value = nextFrom;
+    toInput.value = nextTo;
     if (typeof onRangeChange === "function") {
-      onRangeChange(fromInput.value, toInput.value);
+      onRangeChange(nextFrom, nextTo);
     }
   };
   fromInput.addEventListener("change", handleRange);

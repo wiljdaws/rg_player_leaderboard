@@ -27,6 +27,25 @@ import { createTokenBucket } from "./read-stats-rate-limit.js";
 const DEFAULT_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_STORAGE_KEY = "rgLB:readStatsCache:v1";
 
+// Same window the daily snapshot job writes. A 30-day pick must not
+// fall through to a live collection scan.
+export const READ_STATS_WINDOW_DAYS = 7;
+
+export function clampRangeToWindowDays(from, to, windowDays = READ_STATS_WINDOW_DAYS) {
+  if (typeof from !== "string" || typeof to !== "string") return { from, to };
+  let start = from;
+  let end = to;
+  if (start > end) [start, end] = [end, start];
+  const days = Number(windowDays);
+  if (!Number.isFinite(days) || days < 1) return { from: start, to: end };
+  const endDate = new Date(`${end}T00:00:00Z`);
+  if (Number.isNaN(endDate.getTime())) return { from: start, to: end };
+  endDate.setUTCDate(endDate.getUTCDate() - (days - 1));
+  const minFrom = endDate.toISOString().slice(0, 10);
+  if (start < minFrom) start = minFrom;
+  return { from: start, to: end };
+}
+
 // Source attribution for admin_read_stats docs. Every writer now stamps an
 // explicit `source` field ("player" from the leaderboard site, "clan" from
 // the clan site). We prefer that field; the userAgent regex is only a
@@ -388,19 +407,15 @@ export function createReadStatsQuery({
   // production wires the default bucket in read-stats-rate-limit.js.
   const bucket = rateLimiter || createTokenBucket({ storage, now });
 
-  // Returns null if the snapshot can't serve the range — caller falls
-  // through to Firestore.
+  // Returns null only when the CDN blob is missing or unreadable.
+  // A range that sticks out past the snapshot window is clipped to the
+  // window — never a live Firestore scan. That 30-day fallback is what
+  // used to dump ~400 docs per Reads-tab open.
   //
-  // The dashboard's default range is `isoDaysAgo(6) → todayIso()`, but the
-  // snapshot's windowEnd is up to 15 min stale (rebuilt every :00/:15/:30/:45).
-  // The old guard `to > end → null` rejected the snapshot wholesale on
-  // basically every default-range open, burning ~1,140 Firestore reads per
-  // dashboard load. Fix: if `to` slightly exceeds `windowEnd`, clip `to`
-  // to `windowEnd` and serve the snapshot anyway; only fall through to
-  // Firestore when `from` predates the snapshot window (a real gap).
-  //
-  // When we clip, the returned bundle carries `dataAsOf: windowEnd` so the
-  // UI can show a "data as of X" pill.
+  // The dashboard's default range is `isoDaysAgo(6) → todayIso()`, but a
+  // daily snapshot's windowEnd can be yesterday until the 10:13 UTC job.
+  // Clip `to` to `windowEnd` and `from` to `windowStart`, then serve.
+  // `dataAsOf` is set when `to` was clipped so the UI can show staleness.
   async function tryFetchSnapshot(from, to) {
     if (typeof gateway.fetchReadStatsSnapshot !== "function") return null;
     let snapshot;
@@ -414,22 +429,20 @@ export function createReadStatsQuery({
     const start = snapshot.windowStart;
     const end = snapshot.windowEnd;
     if (typeof start !== "string" || typeof end !== "string") return null;
-    // A `from` older than the snapshot window is a real gap — fall through
-    // to Firestore so the missing days aren't silently dropped.
-    if (from < start) return null;
-    // If `to` extends past the snapshot's freshness horizon (typical: the
-    // default range asks for "today" and the snapshot is 15 min stale),
-    // clip the effective `to` and record the staleness for the UI.
+    const effectiveFrom = from < start ? start : from;
     const effectiveTo = to > end ? end : to;
     const dataAsOf = to > end ? end : null;
+    if (effectiveFrom > effectiveTo) {
+      return { site: [], hud: [], totals: [], visitors: [], dataAsOf: dataAsOf || end };
+    }
     const site = (Array.isArray(snapshot.site) ? snapshot.site : [])
-      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= effectiveFrom && doc.date <= effectiveTo);
     const hud = (Array.isArray(snapshot.hud) ? snapshot.hud : [])
-      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= effectiveFrom && doc.date <= effectiveTo);
     const totals = (Array.isArray(snapshot.total) ? snapshot.total : [])
-      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= effectiveFrom && doc.date <= effectiveTo);
     const visitors = (Array.isArray(snapshot.visitors) ? snapshot.visitors : [])
-      .filter((doc) => typeof doc?.date === "string" && doc.date >= from && doc.date <= effectiveTo);
+      .filter((doc) => typeof doc?.date === "string" && doc.date >= effectiveFrom && doc.date <= effectiveTo);
     return { site, hud, totals, visitors, dataAsOf };
   }
 
@@ -437,6 +450,7 @@ export function createReadStatsQuery({
     if (typeof from !== "string" || typeof to !== "string") {
       throw new Error("fetchRange requires from and to as YYYY-MM-DD strings.");
     }
+    ({ from, to } = clampRangeToWindowDays(from, to));
     const cacheKey = `${from}:${to}`;
     if (!force) {
       const cached = readCache(storage, storageKey, cacheKey, ttlMs, now);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createReadStatsQuery } from "../js/read-stats-query.js";
+import { createReadStatsQuery, clampRangeToWindowDays, READ_STATS_WINDOW_DAYS } from "../js/read-stats-query.js";
 import { createTokenBucket } from "../js/read-stats-rate-limit.js";
 
 // ------ helpers ------
@@ -677,7 +677,7 @@ test("snapshot path: uses CDN blob and skips Firestore when range fits window", 
   assert.equal(result.aggregate.totalReads, 10 + 5);
 });
 
-test("snapshot path: falls back to Firestore when range extends before window", async () => {
+test("snapshot path: clips `from` to windowStart instead of scanning Firestore", async () => {
   const snapshot = {
     windowStart: "2026-07-10",
     windowEnd: "2026-08-09",
@@ -693,10 +693,10 @@ test("snapshot path: falls back to Firestore when range extends before window", 
   const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
   const result = await q.fetchRange({ from: "2026-06-01", to: "2026-08-09" });
   assert.equal(gateway.calls.snapshot, 1);
-  assert.equal(gateway.calls.site, 1, "Firestore fallback fired");
-  assert.equal(gateway.calls.hud, 1);
-  assert.equal(result.source, "firestore");
-  assert.equal(result.aggregate.totalReads, 42);
+  assert.equal(gateway.calls.site, 0, "30-day pick must not hit Firestore");
+  assert.equal(gateway.calls.hud, 0);
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.aggregate.totalReads, 10);
 });
 
 test("snapshot path: falls back to Firestore when CDN fetch throws", async () => {
@@ -738,11 +738,11 @@ test("snapshot path: force=true still hits CDN when snapshot covers range", asyn
   assert.equal(result.aggregate.totalReads, 10);
 });
 
-test("snapshot path: force=true still falls back to Firestore when snapshot can't serve", async () => {
+test("snapshot path: force=true still stays on snapshot when range predates window", async () => {
   const snapshot = {
     windowStart: "2026-07-10",
     windowEnd: "2026-08-09",
-    site: [],
+    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
     hud: [],
   };
   const gateway = makeSnapshotGateway({
@@ -752,13 +752,11 @@ test("snapshot path: force=true still falls back to Firestore when snapshot can'
   });
   const { logger } = silentLogger();
   const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
-  // Range starts before snapshot window → snapshot must decline and we
-  // fall through to Firestore even when force=true.
   const result = await q.fetchRange({ from: "2026-06-01", to: "2026-08-09", force: true });
   assert.equal(gateway.calls.snapshot, 1);
-  assert.equal(gateway.calls.site, 1);
-  assert.equal(result.source, "firestore");
-  assert.equal(result.aggregate.totalReads, 42);
+  assert.equal(gateway.calls.site, 0, "Refresh must not unlock a Firestore scan");
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.aggregate.totalReads, 10);
 });
 
 test("snapshot path: force=true still clears the local cache", async () => {
@@ -841,21 +839,21 @@ test("snapshot path: totals + visitors from snapshot are aggregated without Fire
   const snapshot = {
     windowStart: "2026-07-10",
     windowEnd: "2026-08-12",
-    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    site: [{ id: "s1", date: "2026-08-06", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
     hud: [],
     total: [
-      { id: "2026-08-05", date: "2026-08-05", reads: 100, writes: 20, deletes: 3 },
-      { id: "2026-08-06", date: "2026-08-06", reads: 200, writes: 30, deletes: 0 },
+      { id: "2026-08-06", date: "2026-08-06", reads: 100, writes: 20, deletes: 3 },
+      { id: "2026-08-07", date: "2026-08-07", reads: 200, writes: 30, deletes: 0 },
       { id: "2026-06-01", date: "2026-06-01", reads: 9999, writes: 0, deletes: 0 }, // out of range
     ],
     visitors: [
-      { id: "v1", date: "2026-08-05", sessionId: "v1", total: 7, perLabel: {} },
+      { id: "v1", date: "2026-08-06", sessionId: "v1", total: 7, perLabel: {} },
     ],
   };
   const gateway = makeSnapshotGateway({ snapshot });
   const { logger } = silentLogger();
   const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
-  const result = await q.fetchRange({ from: "2026-08-01", to: "2026-08-12" });
+  const result = await q.fetchRange({ from: "2026-08-06", to: "2026-08-12" });
   assert.equal(gateway.calls.site, 0, "no Firestore admin_read_stats fallback");
   assert.equal(gateway.calls.hud, 0, "no Firestore hud_read_stats fallback");
   assert.equal(result.source, "snapshot");
@@ -869,13 +867,11 @@ test("snapshot path: totals + visitors from snapshot are aggregated without Fire
   assert.equal(result.aggregate.totalReads, 10 + 7);
 });
 
-test("snapshot path: still falls back to Firestore when `from` predates snapshot window", async () => {
-  // The clip trick applies only to the leading edge (`to > end`). If
-  // `from < start` there's a real gap — snapshot must decline.
+test("snapshot path: a 30-day pick stays on the snapshot even when `from` predates it", async () => {
   const snapshot = {
     windowStart: "2026-07-10",
     windowEnd: "2026-08-12",
-    site: [{ id: "s1", date: "2026-08-05", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
+    site: [{ id: "s1", date: "2026-08-10", sessionId: "s1", total: 10, perLabel: {}, source: "player" }],
     hud: [],
   };
   const gateway = makeSnapshotGateway({
@@ -886,8 +882,16 @@ test("snapshot path: still falls back to Firestore when `from` predates snapshot
   const { logger } = silentLogger();
   const q = createReadStatsQuery({ gateway, storage: makeStorage(), now: () => 1_000_000, logger });
   const result = await q.fetchRange({ from: "2026-06-01", to: "2026-08-13" });
-  assert.equal(gateway.calls.site, 1, "Firestore fallback fired");
-  assert.equal(result.source, "firestore");
+  assert.equal(gateway.calls.site, 0, "Firestore fallback must not fire");
+  assert.equal(result.source, "snapshot");
+  assert.equal(result.aggregate.totalReads, 10);
+});
+
+test("clampRangeToWindowDays: a 30-day span collapses to 7 days ending at `to`", () => {
+  assert.equal(READ_STATS_WINDOW_DAYS, 7);
+  const clamped = clampRangeToWindowDays("2026-06-01", "2026-08-09");
+  assert.equal(clamped.from, "2026-08-03");
+  assert.equal(clamped.to, "2026-08-09");
 });
 
 test("bySource: mixed docs aggregate correctly across all buckets", async () => {

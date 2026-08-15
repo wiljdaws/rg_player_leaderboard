@@ -11,7 +11,7 @@
 // the #boardSection ↔ #readsView containers. That keeps the tabs list a
 // single source of truth (no separate route table).
 
-import { createReadStatsQuery } from "./read-stats-query.js";
+import { createReadStatsQuery, clampRangeToWindowDays, READ_STATS_WINDOW_DAYS } from "./read-stats-query.js";
 import { renderReadDashboard } from "./read-dashboard.js";
 import {
   exportReadStatsAsJson,
@@ -38,7 +38,7 @@ export function createReadsView({ gateway }) {
   if (!container) return { activate() {}, deactivate() {} };
 
   // Persist the selected range across activations so refresh doesn't reset it.
-  let range = { from: isoDaysAgo(6), to: todayIso() };
+  let range = { from: isoDaysAgo(READ_STATS_WINDOW_DAYS - 1), to: todayIso() };
   let latestData = null;
   let latestFetchAt = 0;
   let activeFetchToken = 0;
@@ -73,11 +73,8 @@ export function createReadsView({ gateway }) {
       nameByUid,
       onRefresh,
       onRangeChange: (from, to) => {
-        // Basic range sanity — the picker enforces ISO date strings but
-        // guard here anyway so a malformed input doesn't wedge the fetch.
         if (typeof from !== "string" || typeof to !== "string") return;
-        if (from > to) [from, to] = [to, from];
-        range = { from, to };
+        range = clampRangeToWindowDays(from, to);
         fetchAndRender();
       },
       onExport,
