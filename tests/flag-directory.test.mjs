@@ -5,9 +5,13 @@ import {
   COUNTRIES,
   FlagDirectory,
   canonicalCountry,
+  canonicalFlagUrl,
   isRealCountry,
   labelForFlagUrl,
 } from "../js/flag-directory.js";
+
+const US_FLAG = "https://upload.wikimedia.org/wikipedia/commons/a/a4/Flag_of_the_United_States.svg";
+const US_DATA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAxCAMAAABgWz7uAAAAnFBMVEX///+xIzOwHS6w<truncated payload>";
 
 function makeStorage() {
   const map = new Map();
@@ -43,8 +47,20 @@ test("labelForFlagUrl resolves known imgur codes to country names", () => {
 });
 
 test("labelForFlagUrl resolves known base64 flags by prefix", () => {
-  const us = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAxCAMAAABgWz7uAAAAnFBMVEX///+xIzOwHS6w<truncated payload>";
-  assert.equal(labelForFlagUrl(us), "United States");
+  assert.equal(labelForFlagUrl(US_DATA), "United States");
+});
+
+test("canonicalFlagUrl rewrites the leftover US data URI to Wikimedia", () => {
+  assert.equal(canonicalFlagUrl(US_DATA), US_FLAG);
+  assert.equal(canonicalFlagUrl(US_FLAG), US_FLAG);
+  assert.equal(canonicalFlagUrl(""), "");
+});
+
+test("picker always offers United States as an https flag", () => {
+  const dir = new FlagDirectory({ storage: makeStorage() });
+  const us = dir.list().find((entry) => entry.label === "United States");
+  assert.ok(us);
+  assert.equal(us.url, US_FLAG);
 });
 
 test("labelForFlagUrl returns 'flag' for unknown data URIs", () => {
@@ -61,10 +77,10 @@ test("registerRows adds unique flag URLs from player rows", () => {
     { flag: "" },
     { flag: null },
   ]);
-  assert.deepEqual(
-    dir.list().map((entry) => entry.url),
-    ["https://flagcdn.com/us.svg", "https://flagcdn.com/gb.svg"],
-  );
+  const urls = dir.list().map((entry) => entry.url);
+  assert.ok(urls.includes("https://flagcdn.com/us.svg"));
+  assert.ok(urls.includes("https://flagcdn.com/gb.svg"));
+  assert.ok(urls.includes(US_FLAG));
 });
 
 test("directory persists across instances", () => {
@@ -73,10 +89,9 @@ test("directory persists across instances", () => {
   first.add("https://flagcdn.com/us.svg");
 
   const second = new FlagDirectory({ storage });
-  assert.deepEqual(
-    second.list().map((entry) => entry.url),
-    ["https://flagcdn.com/us.svg"],
-  );
+  const urls = second.list().map((entry) => entry.url);
+  assert.ok(urls.includes("https://flagcdn.com/us.svg"));
+  assert.ok(urls.includes(US_FLAG));
 });
 
 test("subscribe fires when a new URL is registered", () => {
@@ -129,9 +144,9 @@ test("addWithCountry rejects made-up country names", () => {
 test("remove drops the entry from the picker", () => {
   const dir = new FlagDirectory({ storage: makeStorage() });
   dir.addWithCountry("https://example.com/pl.png", "Poland");
-  assert.equal(dir.list().length, 1);
+  assert.ok(dir.list().some((entry) => entry.url === "https://example.com/pl.png"));
   assert.equal(dir.remove("https://example.com/pl.png"), true);
-  assert.equal(dir.list().length, 0);
+  assert.ok(!dir.list().some((entry) => entry.url === "https://example.com/pl.png"));
   assert.ok(!dir.hasCountry("Poland"));
 });
 
@@ -142,10 +157,10 @@ test("v1 URL array migrates into v2 entries on load", () => {
     JSON.stringify(["https://flagcdn.com/br.svg", "https://flagcdn.com/jp.svg"]),
   );
   const dir = new FlagDirectory({ storage });
-  assert.deepEqual(
-    dir.list().map((e) => e.url),
-    ["https://flagcdn.com/br.svg", "https://flagcdn.com/jp.svg"],
-  );
+  const urls = dir.list().map((e) => e.url);
+  assert.ok(urls.includes("https://flagcdn.com/br.svg"));
+  assert.ok(urls.includes("https://flagcdn.com/jp.svg"));
+  assert.ok(urls.includes(US_FLAG));
   // v1 key is removed after migration.
   assert.equal(storage.getItem("rgPlayerLb:flagDirectory:v1"), null);
 });

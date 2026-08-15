@@ -33,6 +33,16 @@ const KNOWN_FLAG_URLS = new Map([
   ["https://i.imgur.com/GhWQkxX.png", "Saudi Arabia"],
   ["https://i.imgur.com/TsLtfjT.jpeg", "Mexico"],
   ["https://i.imgur.com/sFwhqF5.png", "South Africa"],
+  // These five used to exist only as inline data-URI PNGs. Those blobs
+  // are bigger than Firestore's non-admin flag cap and get chopped by
+  // the publisher, so the picker offered "United States" with no
+  // selectable https URL — Save looked dead. Wikimedia stand-ins are
+  // short, allowed on the public board, and always in the picker.
+  ["https://upload.wikimedia.org/wikipedia/commons/a/a4/Flag_of_the_United_States.svg", "United States"],
+  ["https://upload.wikimedia.org/wikipedia/commons/8/83/Flag_of_the_United_Kingdom_%283-5%29.svg", "United Kingdom"],
+  ["https://upload.wikimedia.org/wikipedia/commons/d/d9/Flag_of_Canada_%28Pantone%29.svg", "Canada"],
+  ["https://upload.wikimedia.org/wikipedia/commons/2/20/Flag_of_the_Netherlands.svg", "Netherlands"],
+  ["https://upload.wikimedia.org/wikipedia/commons/d/dd/Flag_of_Azerbaijan.svg", "Azerbaijan"],
 ]);
 
 // Base64 flags carried over from the old leaderboard. Match on the first
@@ -115,6 +125,21 @@ export function labelForFlagUrl(url) {
   }
 }
 
+// Swap a leftover inline PNG for the https country flag we actually
+// want on the board. Unknown URLs pass through unchanged.
+export function canonicalFlagUrl(url) {
+  if (typeof url !== "string" || !url) return "";
+  const clean = url.trim();
+  if (!clean.startsWith("data:")) return clean;
+  for (const [prefix, label] of KNOWN_FLAG_DATA_PREFIXES) {
+    if (!clean.startsWith(prefix)) continue;
+    for (const [httpsUrl, httpsLabel] of KNOWN_FLAG_URLS) {
+      if (httpsLabel === label) return httpsUrl;
+    }
+  }
+  return clean;
+}
+
 export class FlagDirectory {
   constructor({
     storage = typeof localStorage === "undefined" ? fallbackStorage() : localStorage,
@@ -128,6 +153,16 @@ export class FlagDirectory {
     this.hidden = new Set();
     this.watchers = new Set();
     this.load();
+    this.seedBuiltins();
+  }
+
+  // Built-in https flags should always be pickable, even on a fresh
+  // browser that has never seen a player row with that country.
+  seedBuiltins() {
+    for (const [url, label] of KNOWN_FLAG_URLS) {
+      if (this.entries.has(url) || this.hidden.has(url)) continue;
+      this.entries.set(url, { label, custom: false });
+    }
   }
 
   load() {
@@ -198,11 +233,15 @@ export class FlagDirectory {
       if (label.toLowerCase() === target) return true;
     }
     for (const [prefix, label] of KNOWN_FLAG_DATA_PREFIXES) {
-      // hidden may store the full data URI (which is what a player row
-      // carries) rather than the short prefix — accept either.
-      const hiddenViaFullUri = [...this.hidden].some((u) => u.startsWith(prefix));
-      if (this.hidden.has(prefix) || hiddenViaFullUri) continue;
-      if (label.toLowerCase() === target) return true;
+      if (label.toLowerCase() !== target) continue;
+      // Only count a leftover data-URI country when that exact image is
+      // still a visible picker entry. The prefix constant alone used to
+      // block adding a real https US/UK/CA flag even when the picker
+      // had nothing selectable for that country.
+      const visible = [...this.entries.keys()].some(
+        (u) => u.startsWith(prefix) && !this.hidden.has(u),
+      );
+      if (visible) return true;
     }
     for (const [url, meta] of this.entries) {
       if (this.hidden.has(url)) continue;

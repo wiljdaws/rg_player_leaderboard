@@ -196,6 +196,19 @@ test("buildPlayerPayload rejects invalid flag URL", () => {
   );
 });
 
+test("buildPlayerPayload rewrites the leftover US data URI to Wikimedia", () => {
+  const payload = buildPlayerPayload({
+    playlist: "1v1",
+    name: "A",
+    mmr: 1000,
+    flag: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAxCAMAAABgWz7uAAAAnFBMVEX///+xIzOwHS6w<truncated payload>",
+  });
+  assert.equal(
+    payload.flag,
+    "https://upload.wikimedia.org/wikipedia/commons/a/a4/Flag_of_the_United_States.svg",
+  );
+});
+
 test("sanitizeHttpUrl accepts base64 raster data URIs (legacy flags)", () => {
   const png = "data:image/png;base64,iVBORw0KGgoAAAA";
   assert.equal(sanitizeHttpUrl(png), png);
@@ -250,4 +263,11 @@ test("sanitizePublicImageUrl keeps country-flag hosts and data URIs", () => {
   assert.equal(sanitizePublicImageUrl(imgur), imgur);
   assert.equal(sanitizePublicImageUrl(wiki), wiki);
   assert.equal(sanitizePublicImageUrl(png), png);
+});
+
+test("sanitizePublicImageUrl rewrites the leftover US data URI to Wikimedia", () => {
+  assert.equal(
+    sanitizePublicImageUrl("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFwAAAAxCAMAAABgWz7uAAAAnFBMVEX///+xIzOwHS6w<truncated payload>"),
+    "https://upload.wikimedia.org/wikipedia/commons/a/a4/Flag_of_the_United_States.svg",
+  );
 });

@@ -51,6 +51,9 @@ function describeError(error) {
   if (code.includes("permission-denied")) {
     return "Firebase denied this request. Sign in with an approved admin account.";
   }
+  if (code.includes("popup-blocked")) {
+    return "The sign-in popup was blocked. Allow popups for this page and try again.";
+  }
   if (code.includes("failed-precondition")) {
     return "This leaderboard index is not ready yet. Showing a one-time fallback when available.";
   }

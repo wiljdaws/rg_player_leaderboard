@@ -917,8 +917,11 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   const customInput = document.createElement("input");
   customInput.type = "url";
   customInput.placeholder = "https://…/flag.svg";
+  // Hidden url inputs still fail native form submit. Keep this disabled
+  // until the admin actually opens "+ Add new flag URL…".
   customInput.autocomplete = "off";
   customInput.className = "flag-custom-input";
+  customInput.disabled = true;
   // Country autocomplete via native <datalist>. Admins must pick a real
   // country so the picker keeps its meaning and can dedupe by country.
   const countryInput = document.createElement("input");
@@ -926,6 +929,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   countryInput.placeholder = "Country (e.g. Brazil)";
   countryInput.autocomplete = "off";
   countryInput.className = "flag-custom-country";
+  countryInput.disabled = true;
   countryInput.setAttribute("list", "rgFlagCountries");
   if (!document.getElementById("rgFlagCountries")) {
     const dl = document.createElement("datalist");
@@ -1016,7 +1020,10 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
       const item = document.createElement("div");
       item.className = "flag-option";
       item.setAttribute("role", "option");
-      item.dataset.value = entry.url;
+      // Keep the URL off data-* attributes. A leftover country PNG is a
+      // multi-KB data URI; stuffing that into dataset can truncate, and
+      // Enter-to-select would then save a broken flag.
+      item._flagUrl = entry.url;
       const selected = entry.url === desired;
       item.setAttribute("aria-selected", String(selected));
       if (selected) {
@@ -1068,9 +1075,19 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     if (!menu.hidden) drawOptions();
   }
 
+  function setCustomRowOpen(open) {
+    customRow.hidden = !open;
+    customInput.disabled = !open;
+    countryInput.disabled = !open;
+    if (!open) {
+      customInput.value = "";
+      countryInput.value = "";
+    }
+  }
+
   function openMenu() {
     menu.hidden = false;
-    customRow.hidden = true;
+    setCustomRowOpen(false);
     trigger.setAttribute("aria-expanded", "true");
     root.classList.add("open");
     drawOptions();
@@ -1147,9 +1164,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
       return;
     }
     onNewFlag?.(url);
-    customRow.hidden = true;
-    customInput.value = "";
-    countryInput.value = "";
+    setCustomRowOpen(false);
     choose(url);
   }
 
@@ -1176,7 +1191,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
     } else if (event.key === "Enter") {
       event.preventDefault();
       const focused = list.querySelector(".kb-focus, .selected");
-      if (focused) choose(focused.dataset.value);
+      if (focused) choose(focused._flagUrl ?? "");
     } else if (event.key === "Escape") {
       event.preventDefault();
       closeMenu();
@@ -1186,16 +1201,14 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
 
   addBtn.addEventListener("click", () => {
     menu.hidden = true;
-    customRow.hidden = false;
-    customInput.value = "";
-    countryInput.value = "";
+    setCustomRowOpen(true);
     clearCustomError();
     customInput.focus();
   });
 
   customAdd.addEventListener("click", commitCustomUrl);
   customCancel.addEventListener("click", () => {
-    customRow.hidden = true;
+    setCustomRowOpen(false);
     openMenu();
   });
   customInput.addEventListener("keydown", (event) => {
@@ -1204,7 +1217,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
       commitCustomUrl();
     } else if (event.key === "Escape") {
       event.preventDefault();
-      customRow.hidden = true;
+      setCustomRowOpen(false);
     }
   });
   countryInput.addEventListener("keydown", (event) => {
@@ -1213,7 +1226,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
       commitCustomUrl();
     } else if (event.key === "Escape") {
       event.preventDefault();
-      customRow.hidden = true;
+      setCustomRowOpen(false);
     }
   });
 
@@ -1245,14 +1258,25 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
 
 export function setWriteStatus(status) {
   const el = $("writeStatus");
-  if (!el) return;
   const kind = status?.kind || "idle";
-  el.dataset.state = kind;
-  el.hidden = !status?.message;
-  el.replaceChildren();
-  if (!status?.message) return;
-  el.append(node("span", { className: "write-status-msg", text: status.message }));
-  if (status.hint) {
-    el.append(node("span", { className: "write-status-hint", text: status.hint }));
+  if (el) {
+    el.dataset.state = kind;
+    el.hidden = !status?.message;
+    el.replaceChildren();
+    if (status?.message) {
+      el.append(node("span", { className: "write-status-msg", text: status.message }));
+      if (status.hint) {
+        el.append(node("span", { className: "write-status-hint", text: status.hint }));
+      }
+    }
+  }
+  // Native <dialog> sits on the top layer, so the page toast is hidden
+  // while Edit player is open. Mirror errors into the form itself.
+  const editError = $("editFormError");
+  const editDialog = $("editDialog");
+  if (editError && editDialog?.open) {
+    const show = kind === "error" && Boolean(status?.message);
+    editError.hidden = !show;
+    editError.textContent = show ? status.message : "";
   }
 }

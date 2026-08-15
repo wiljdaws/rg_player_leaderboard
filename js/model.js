@@ -1,4 +1,5 @@
 import { isPlaylist } from "./config.js";
+import { canonicalFlagUrl } from "./flag-directory.js";
 
 const MAX_NAME_LENGTH = 80;
 const MAX_URL_LENGTH = 2_048;
@@ -66,7 +67,7 @@ function isBlockedImageHost(hostname) {
 }
 
 export function sanitizePublicImageUrl(value) {
-  const safe = sanitizeHttpUrl(value);
+  const safe = sanitizeHttpUrl(canonicalFlagUrl(typeof value === "string" ? value : ""));
   if (!safe) return "";
   if (safe.startsWith("data:")) return safe;
   try {
@@ -301,7 +302,7 @@ export function buildPlayerPayload(input, includePlaylist = true) {
 
   const icons = normalizeIcons(input.icons).join(",");
   const rawFlag = typeof input.flag === "string" ? input.flag.trim() : "";
-  const flag = sanitizeHttpUrl(rawFlag);
+  const flag = sanitizeHttpUrl(canonicalFlagUrl(rawFlag));
   if (rawFlag && !flag) throw new Error("Flag URL must use http or https.");
 
   // Optional — links a manual row back to a HUD account so future ATLAS

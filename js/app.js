@@ -465,6 +465,11 @@ function openPlayerDetails(player) {
 function openEdit(player) {
   state.editingPlayer = player;
   const form = $("editForm");
+  const editError = $("editFormError");
+  if (editError) {
+    editError.hidden = true;
+    editError.textContent = "";
+  }
   setFormValue(form, "playlist", player.playlist);
   setFormValue(form, "name", player.name);
   setFormValue(form, "sourceUserId", player.sourceUserId ?? "");
@@ -1128,6 +1133,13 @@ function wireEvents() {
     event.preventDefault();
     if (!state.editingPlayer) return;
     try {
+      if (!writes) {
+        setWriteStatus({
+          kind: "error",
+          message: "Firebase is still loading. Try Save again in a second.",
+        });
+        return;
+      }
       const rawValues = readFormValues($("editForm"));
       const player = state.editingPlayer;
       // Tournament edits hide the Appearance section, and disabled inputs
@@ -1239,7 +1251,14 @@ function wireEvents() {
 
   $("loginButton").addEventListener("click", async () => {
     try {
-      await gateway?.signIn();
+      if (!gateway) {
+        setWriteStatus({
+          kind: "error",
+          message: "Firebase is still loading. Wait a second, then click Admin sign in again.",
+        });
+        return;
+      }
+      await gateway.signIn();
     } catch (error) {
       setWriteStatus({ kind: "error", message: error?.message || "Admin login failed." });
     }
@@ -1284,6 +1303,11 @@ async function boot() {
   });
   wireEvents();
   render();
+  const loginButton = $("loginButton");
+  if (loginButton && !loginButton.hidden) {
+    loginButton.disabled = true;
+    loginButton.textContent = "Loading sign-in…";
+  }
 
   // Ranked tabs only need the published JSON. Don't wait on Firebase /
   // reCAPTCHA for the first paint — that was making the board sit on
@@ -1302,12 +1326,20 @@ async function boot() {
   try {
     gateway = await createFirebaseGateway();
     log.info("boot", "firebase gateway ready");
+    if (loginButton) {
+      loginButton.disabled = false;
+      loginButton.textContent = "Admin sign in";
+    }
   } catch (error) {
     log.error("boot", "firebase gateway failed to load", error);
     state.status = {
       kind: "error",
       message: error?.message || "Firebase could not be loaded. Cached rankings will stay visible if available.",
     };
+    if (loginButton) {
+      loginButton.disabled = false;
+      loginButton.textContent = "Admin sign in";
+    }
     render();
     return;
   }
