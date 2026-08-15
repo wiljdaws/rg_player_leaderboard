@@ -377,6 +377,8 @@ export async function createFirebaseGateway() {
     serverTimestamp,
     setDoc,
     updateDoc,
+    arrayUnion,
+    arrayRemove,
     where,
   } = firestoreMod;
 
@@ -688,6 +690,15 @@ export async function createFirebaseGateway() {
         return false;
       }
     },
+    loadAllowlist: async () => {
+      const snap = await getDoc(doc(db, "admin", "blacklist"));
+      const ids = snap.data()?.allowedUserIds;
+      return Array.isArray(ids) ? ids.map(String) : [];
+    },
+    addAllowedUserId: (uid) => chargedWrite("addAllowedUserId", () =>
+      setDoc(doc(db, "admin", "blacklist"), { allowedUserIds: arrayUnion(uid) }, { merge: true })),
+    removeAllowedUserId: (uid) => chargedWrite("removeAllowedUserId", () =>
+      setDoc(doc(db, "admin", "blacklist"), { allowedUserIds: arrayRemove(uid) }, { merge: true })),
     addPlayer: (payload) => chargedWrite("addPlayer", () => {
       const stamped = { ...payload, lastWriteAt: serverTimestamp() };
       // When the admin provided an RG user id, write to the deterministic

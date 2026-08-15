@@ -492,6 +492,8 @@ h1{
 }
 .v-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v-last{color:var(--ink-dim);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
+#whitelistList .version-row{align-items:center}
+#whitelistList .admin-secondary{padding:4px 10px;font-size:12px}
 
 /* Read-budget widget — compact chip pinned near the top of the admin panel.
    Colors follow the traffic-light convention: green ok, yellow warn (soft

@@ -22,15 +22,15 @@
 <meta property="og:description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
 <meta name="twitter:card" content="summary">
 
-<link rel="icon" type="image/png" href="assets/icon.png?v=0bec59b9">
-<link rel="apple-touch-icon" href="assets/icon.png?v=0bec59b9">
+<link rel="icon" type="image/png" href="assets/icon.png?v=cd9433c5">
+<link rel="apple-touch-icon" href="assets/icon.png?v=cd9433c5">
 <link rel="manifest" href="site.webmanifest">
 
 <link rel="preconnect" href="https://raw.githubusercontent.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/leaderboard.css?v=0bec59b9">
+<link rel="stylesheet" href="css/leaderboard.css?v=cd9433c5">
 </head>
 <body>
 <div class="wrap">
@@ -229,6 +229,23 @@
 
     <hr>
 
+    <form id="whitelistForm" class="admin-form">
+      <h3>HUD allow list</h3>
+      <p class="dialog-hint">Only these Firebase uids can read or write the live board. Everyone else stays off until you add them here or upload a row by hand.</p>
+      <div class="field-grid">
+        <label class="field field-wide">
+          <span class="field-label">Add Firebase uid</span>
+          <input id="whitelistUid" name="uid" type="text" maxlength="128" autocomplete="off" placeholder="QQOCAgdfAkgkL22MEkVmXzIZJBk2" required>
+        </label>
+      </div>
+      <div class="admin-actions">
+        <button class="admin-primary" type="submit">Allow this uid</button>
+      </div>
+      <ul id="whitelistList" class="version-list"></ul>
+    </form>
+
+    <hr>
+
     <section class="version-breakdown" aria-labelledby="versionBreakdownTitle">
       <div class="admin-panel-head">
         <div>
@@ -315,7 +332,7 @@
     <div class="footer-title">Rocket Goal Leaderboard Hub</div>
     <p>Made by <span class="accent">JesusDied4U</span> and <span class="accent">Pal</span></p>
     <p>Want your stats added or need a rank update?</p>
-    <a href="https://discord.gg/nFe5xpGnEk" target="_blank" rel="noopener noreferrer">Join the Rocket Goal Championship Discord</a>
+    <a href="https://discord.gg/MDz7hsrh9m" target="_blank" rel="noopener noreferrer">Join the Rocket Goal Championship Discord</a>
     <nav class="footer-legal" aria-label="Legal">
       <a href="privacy.html">Privacy</a>
       <span aria-hidden="true">·</span>
@@ -332,30 +349,30 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/admin.js":                 "./js/admin.js?v=0bec59b9",
-    "./js/config.js":                "./js/config.js?v=0bec59b9",
-    "./js/firebase.js":              "./js/firebase.js?v=0bec59b9",
-    "./js/flag-directory.js":        "./js/flag-directory.js?v=0bec59b9",
-    "./js/history.js":               "./js/history.js?v=0bec59b9",
-    "./js/listener-manager.js":      "./js/listener-manager.js?v=0bec59b9",
-    "./js/local-cache.js":           "./js/local-cache.js?v=0bec59b9",
-    "./js/log.js":                   "./js/log.js?v=0bec59b9",
-    "./js/model.js":                 "./js/model.js?v=0bec59b9",
-    "./js/momentum.js":              "./js/momentum.js?v=0bec59b9",
-    "./js/publish-pipeline.js":      "./js/publish-pipeline.js?v=0bec59b9",
-    "./js/read-budget.js":           "./js/read-budget.js?v=0bec59b9",
-    "./js/read-dashboard.js":        "./js/read-dashboard.js?v=0bec59b9",
-    "./js/read-stats-export.js":     "./js/read-stats-export.js?v=0bec59b9",
-    "./js/read-stats-query.js":      "./js/read-stats-query.js?v=0bec59b9",
-    "./js/read-stats-rate-limit.js": "./js/read-stats-rate-limit.js?v=0bec59b9",
-    "./js/read-telemetry.js":        "./js/read-telemetry.js?v=0bec59b9",
-    "./js/reads-view.js":            "./js/reads-view.js?v=0bec59b9",
-    "./js/render.js":                "./js/render.js?v=0bec59b9",
-    "./js/url-state.js":             "./js/url-state.js?v=0bec59b9"
+    "./js/admin.js":                 "./js/admin.js?v=cd9433c5",
+    "./js/config.js":                "./js/config.js?v=cd9433c5",
+    "./js/firebase.js":              "./js/firebase.js?v=cd9433c5",
+    "./js/flag-directory.js":        "./js/flag-directory.js?v=cd9433c5",
+    "./js/history.js":               "./js/history.js?v=cd9433c5",
+    "./js/listener-manager.js":      "./js/listener-manager.js?v=cd9433c5",
+    "./js/local-cache.js":           "./js/local-cache.js?v=cd9433c5",
+    "./js/log.js":                   "./js/log.js?v=cd9433c5",
+    "./js/model.js":                 "./js/model.js?v=cd9433c5",
+    "./js/momentum.js":              "./js/momentum.js?v=cd9433c5",
+    "./js/publish-pipeline.js":      "./js/publish-pipeline.js?v=cd9433c5",
+    "./js/read-budget.js":           "./js/read-budget.js?v=cd9433c5",
+    "./js/read-dashboard.js":        "./js/read-dashboard.js?v=cd9433c5",
+    "./js/read-stats-export.js":     "./js/read-stats-export.js?v=cd9433c5",
+    "./js/read-stats-query.js":      "./js/read-stats-query.js?v=cd9433c5",
+    "./js/read-stats-rate-limit.js": "./js/read-stats-rate-limit.js?v=cd9433c5",
+    "./js/read-telemetry.js":        "./js/read-telemetry.js?v=cd9433c5",
+    "./js/reads-view.js":            "./js/reads-view.js?v=cd9433c5",
+    "./js/render.js":                "./js/render.js?v=cd9433c5",
+    "./js/url-state.js":             "./js/url-state.js?v=cd9433c5"
   }
 }
 </script>
-<script type="module" src="js/app.js?v=0bec59b9" data-asset-version="0bec59b9"></script>
+<script type="module" src="js/app.js?v=cd9433c5" data-asset-version="cd9433c5"></script>
 <script>
   // Register the read-stats snapshot Service Worker. Failure is silent —
   // a broken SW registration must never break the site. See sw.js for

@@ -1030,6 +1030,40 @@ function handleValidationError(error) {
   setWriteStatus({ kind: "error", message: error?.message || "Check the form and try again." });
 }
 
+async function refreshAllowlist() {
+  const list = $("whitelistList");
+  if (!list || !gateway?.loadAllowlist) return;
+  try {
+    const ids = await gateway.loadAllowlist();
+    list.replaceChildren();
+    for (const uid of ids.slice().sort((a, b) => a.localeCompare(b))) {
+      const item = document.createElement("li");
+      item.className = "version-row";
+      const name = document.createElement("span");
+      name.className = "v-name";
+      name.textContent = uid;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "admin-secondary";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", async () => {
+        const ok = await writes?.removeAllowedUserId(uid);
+        if (ok) refreshAllowlist();
+      });
+      item.append(name, remove);
+      list.append(item);
+    }
+    if (!ids.length) {
+      const empty = document.createElement("li");
+      empty.className = "version-row";
+      empty.textContent = "No HUD uids allowed yet.";
+      list.append(empty);
+    }
+  } catch (error) {
+    list.textContent = error?.message || "Allow list could not be loaded.";
+  }
+}
+
 async function refreshIcons(force = false) {
   if (!gateway) return state.icons;
   state.iconLoading = true;
@@ -1100,10 +1134,13 @@ function wireEvents() {
       if (payload.flag) flagDirectory.add(payload.flag);
       const saved = await writes?.addPlayer(payload);
       if (saved) {
+        const uid = typeof payload.sourceUserId === "string" ? payload.sourceUserId.trim() : "";
+        if (uid) await writes?.addAllowedUserId(uid);
         clearAdminRosterCache();
         $("adminForm").reset();
         flagPickers.add?.setValue("");
         togglePlaylistFields($("adminForm"), $("playlist").value);
+        refreshAllowlist();
       }
     } catch (error) {
       handleValidationError(error);
@@ -1111,6 +1148,17 @@ function wireEvents() {
   });
 
   wireTournamentQuickAdd();
+
+  $("whitelistForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const uid = String($("whitelistUid")?.value || "").trim();
+    if (!uid) return;
+    const saved = await writes?.addAllowedUserId(uid);
+    if (saved) {
+      $("whitelistForm").reset();
+      refreshAllowlist();
+    }
+  });
 
   $("iconForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1422,6 +1470,7 @@ async function boot() {
     render();
     if (state.admin) {
       loadVersionBreakdown();
+      refreshAllowlist();
       readTelemetry.start();
     } else {
       readTelemetry.stop();

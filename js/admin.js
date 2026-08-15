@@ -76,6 +76,14 @@ export class AdminWriteService {
     );
   }
 
+  addAllowedUserId(uid) {
+    return this.run("Allowing HUD uid", () => this.gateway.addAllowedUserId(uid));
+  }
+
+  removeAllowedUserId(uid) {
+    return this.run("Removing HUD uid", () => this.gateway.removeAllowedUserId(uid));
+  }
+
   addIcon(payload) {
     return this.run("Adding icon", async () => {
       await this.gateway.addIcon(payload);
