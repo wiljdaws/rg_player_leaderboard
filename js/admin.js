@@ -7,14 +7,16 @@ import { setWriteStatus } from "./render.js";
 const PUBLISH_LAG_HINT = "Public site refreshes within ~15 min.";
 
 export class AdminWriteService {
-  constructor({ gateway, isAdmin, refreshIcons }) {
+  constructor({ gateway, isAdmin, isAdminAccount = isAdmin, refreshIcons }) {
     this.gateway = gateway;
     this.isAdmin = isAdmin;
+    this.isAdminAccount = isAdminAccount;
     this.refreshIcons = refreshIcons;
   }
 
-  async run(label, operation, { hint = "" } = {}) {
-    if (!this.isAdmin()) {
+  async run(label, operation, { hint = "", allowWhenPaused = false } = {}) {
+    const allowed = allowWhenPaused ? this.isAdminAccount() : this.isAdmin();
+    if (!allowed) {
       setWriteStatus({ kind: "error", message: "Admin access is required for that change." });
       return false;
     }
@@ -77,11 +79,27 @@ export class AdminWriteService {
   }
 
   addAllowedUserId(uid) {
-    return this.run("Allowing HUD uid", () => this.gateway.addAllowedUserId(uid));
+    return this.run("Allowing HUD uid", () => this.gateway.addAllowedUserId(uid), { allowWhenPaused: true });
   }
 
   removeAllowedUserId(uid) {
-    return this.run("Removing HUD uid", () => this.gateway.removeAllowedUserId(uid));
+    return this.run("Removing HUD uid", () => this.gateway.removeAllowedUserId(uid), { allowWhenPaused: true });
+  }
+
+  addBannedUserId(uid) {
+    return this.run("Banning HUD uid", () => this.gateway.addBannedUserId(uid), { allowWhenPaused: true });
+  }
+
+  removeBannedUserId(uid) {
+    return this.run("Unbanning HUD uid", () => this.gateway.removeBannedUserId(uid), { allowWhenPaused: true });
+  }
+
+  addBannedDeviceId(id) {
+    return this.run("Banning device", () => this.gateway.addBannedDeviceId(id), { allowWhenPaused: true });
+  }
+
+  removeBannedDeviceId(id) {
+    return this.run("Unbanning device", () => this.gateway.removeBannedDeviceId(id), { allowWhenPaused: true });
   }
 
   addIcon(payload) {

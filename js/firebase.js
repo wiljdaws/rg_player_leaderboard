@@ -674,6 +674,17 @@ export async function createFirebaseGateway() {
     return iconKeyCache;
   }
 
+  async function loadAccessControlDoc() {
+    const snap = await getDoc(doc(db, "admin", "blacklist"));
+    const data = snap.data() || {};
+    const asIds = (value) => (Array.isArray(value) ? value.map(String) : []);
+    return {
+      allowedUserIds: asIds(data.allowedUserIds),
+      userIds: asIds(data.userIds),
+      deviceIds: asIds(data.deviceIds),
+    };
+  }
+
   return {
     // Dispatched at call-time based on resolveReadSource(). The historical
     // Firestore path is preserved as the fallback and rollback route.
@@ -691,14 +702,28 @@ export async function createFirebaseGateway() {
       }
     },
     loadAllowlist: async () => {
-      const snap = await getDoc(doc(db, "admin", "blacklist"));
-      const ids = snap.data()?.allowedUserIds;
-      return Array.isArray(ids) ? ids.map(String) : [];
+      const control = await loadAccessControlDoc();
+      return control.allowedUserIds;
     },
+    loadAccessControl: () => loadAccessControlDoc(),
     addAllowedUserId: (uid) => chargedWrite("addAllowedUserId", () =>
-      setDoc(doc(db, "admin", "blacklist"), { allowedUserIds: arrayUnion(uid) }, { merge: true })),
+      setDoc(doc(db, "admin", "blacklist"), {
+        allowedUserIds: arrayUnion(uid),
+        userIds: arrayRemove(uid),
+      }, { merge: true })),
     removeAllowedUserId: (uid) => chargedWrite("removeAllowedUserId", () =>
       setDoc(doc(db, "admin", "blacklist"), { allowedUserIds: arrayRemove(uid) }, { merge: true })),
+    addBannedUserId: (uid) => chargedWrite("addBannedUserId", () =>
+      setDoc(doc(db, "admin", "blacklist"), {
+        userIds: arrayUnion(uid),
+        allowedUserIds: arrayRemove(uid),
+      }, { merge: true })),
+    removeBannedUserId: (uid) => chargedWrite("removeBannedUserId", () =>
+      setDoc(doc(db, "admin", "blacklist"), { userIds: arrayRemove(uid) }, { merge: true })),
+    addBannedDeviceId: (id) => chargedWrite("addBannedDeviceId", () =>
+      setDoc(doc(db, "admin", "blacklist"), { deviceIds: arrayUnion(id) }, { merge: true })),
+    removeBannedDeviceId: (id) => chargedWrite("removeBannedDeviceId", () =>
+      setDoc(doc(db, "admin", "blacklist"), { deviceIds: arrayRemove(id) }, { merge: true })),
     addPlayer: (payload) => chargedWrite("addPlayer", () => {
       const stamped = { ...payload, lastWriteAt: serverTimestamp() };
       // When the admin provided an RG user id, write to the deterministic

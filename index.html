@@ -12,7 +12,7 @@
      published-state JSON on raw.githubusercontent.com. Flags and icons
      only load from inline data URIs, imgur, or Wikimedia — not Discord
      or GitHub CDNs. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://raw.githubusercontent.com https://firebasestorage.googleapis.com; script-src 'self' https://www.gstatic.com https://apis.google.com 'sha256-wlU2Z6c2OgwFVlmPu+eaoIAkCDiKC5ve9z5QAFOlaWw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://i.imgur.com https://imgur.com https://upload.wikimedia.org; object-src 'none'; base-uri 'self'; frame-src https://accounts.google.com https://rgleaderboard.firebaseapp.com; form-action 'self'; connect-src 'self' https://raw.githubusercontent.com https://*.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://www.gstatic.com https://apis.google.com https://accounts.google.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://raw.githubusercontent.com https://firebasestorage.googleapis.com; script-src 'self' https://www.gstatic.com https://apis.google.com 'sha256-y/exGyr34SW+c3TpJAxZ8WuzNseuKjwW2pl7saxMJew='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://i.imgur.com https://imgur.com https://upload.wikimedia.org; object-src 'none'; base-uri 'self'; frame-src https://accounts.google.com https://rgleaderboard.firebaseapp.com; form-action 'self'; connect-src 'self' https://raw.githubusercontent.com https://*.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://www.gstatic.com https://apis.google.com https://accounts.google.com;">
 <title>Rocket Goal — Competitive Rankings</title>
 <meta name="description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
 <meta name="theme-color" content="#0C1230">
@@ -23,15 +23,15 @@
 <meta property="og:description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
 <meta name="twitter:card" content="summary">
 
-<link rel="icon" type="image/png" href="assets/icon.png?v=79ce5031">
-<link rel="apple-touch-icon" href="assets/icon.png?v=79ce5031">
+<link rel="icon" type="image/png" href="assets/icon.png?v=5b40481f">
+<link rel="apple-touch-icon" href="assets/icon.png?v=5b40481f">
 <link rel="manifest" href="site.webmanifest">
 
 <link rel="preconnect" href="https://raw.githubusercontent.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/leaderboard.css?v=79ce5031">
+<link rel="stylesheet" href="css/leaderboard.css?v=5b40481f">
 </head>
 <body>
 <div class="wrap">
@@ -61,6 +61,7 @@
       <button class="tab" role="tab" data-playlist="tournament" aria-selected="false" tabindex="-1">Tournament</button>
       <button class="tab tab-admin" id="readsTab" role="tab" data-playlist="reads" aria-selected="false" tabindex="-1" hidden>Reads</button>
       <button class="tab tab-admin" id="publishTab" role="tab" data-playlist="publish" aria-selected="false" tabindex="-1" hidden>Sync</button>
+      <button class="tab tab-admin" id="accessTab" role="tab" data-playlist="access" aria-selected="false" tabindex="-1" hidden>Access</button>
     </div>
     <button class="share-btn" id="shareView" type="button" title="Copy shareable link" aria-label="Share view">↗</button>
   </div>
@@ -129,6 +130,8 @@
   <section class="reads-view" id="readsView" aria-label="Read insights" hidden></section>
 
   <section class="publish-view" id="publishView" aria-label="Publish pipeline" hidden></section>
+
+  <section class="access-view" id="accessView" aria-label="Allow and ban lists" hidden></section>
 
   <section class="admin-panel" id="adminBox" aria-labelledby="adminPanelTitle" hidden>
     <div class="admin-panel-head">
@@ -226,23 +229,6 @@
       <div class="admin-actions">
         <button class="admin-secondary" type="submit">Add icon</button>
       </div>
-    </form>
-
-    <hr>
-
-    <form id="whitelistForm" class="admin-form">
-      <h3>HUD allow list</h3>
-      <p class="dialog-hint">Only these Firebase uids can read or write the live board. Everyone else stays off until you add them here or upload a row by hand.</p>
-      <div class="field-grid">
-        <label class="field field-wide">
-          <span class="field-label">Add Firebase uid</span>
-          <input id="whitelistUid" name="uid" type="text" maxlength="128" autocomplete="off" placeholder="QQOCAgdfAkgkL22MEkVmXzIZJBk2" required>
-        </label>
-      </div>
-      <div class="admin-actions">
-        <button class="admin-primary" type="submit">Allow this uid</button>
-      </div>
-      <ul id="whitelistList" class="version-list"></ul>
     </form>
 
     <hr>
@@ -350,30 +336,31 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/admin.js":                 "./js/admin.js?v=79ce5031",
-    "./js/config.js":                "./js/config.js?v=79ce5031",
-    "./js/firebase.js":              "./js/firebase.js?v=79ce5031",
-    "./js/flag-directory.js":        "./js/flag-directory.js?v=79ce5031",
-    "./js/history.js":               "./js/history.js?v=79ce5031",
-    "./js/listener-manager.js":      "./js/listener-manager.js?v=79ce5031",
-    "./js/local-cache.js":           "./js/local-cache.js?v=79ce5031",
-    "./js/log.js":                   "./js/log.js?v=79ce5031",
-    "./js/model.js":                 "./js/model.js?v=79ce5031",
-    "./js/momentum.js":              "./js/momentum.js?v=79ce5031",
-    "./js/publish-pipeline.js":      "./js/publish-pipeline.js?v=79ce5031",
-    "./js/read-budget.js":           "./js/read-budget.js?v=79ce5031",
-    "./js/read-dashboard.js":        "./js/read-dashboard.js?v=79ce5031",
-    "./js/read-stats-export.js":     "./js/read-stats-export.js?v=79ce5031",
-    "./js/read-stats-query.js":      "./js/read-stats-query.js?v=79ce5031",
-    "./js/read-stats-rate-limit.js": "./js/read-stats-rate-limit.js?v=79ce5031",
-    "./js/read-telemetry.js":        "./js/read-telemetry.js?v=79ce5031",
-    "./js/reads-view.js":            "./js/reads-view.js?v=79ce5031",
-    "./js/render.js":                "./js/render.js?v=79ce5031",
-    "./js/url-state.js":             "./js/url-state.js?v=79ce5031"
+    "./js/access-view.js":           "./js/access-view.js?v=5b40481f",
+    "./js/admin.js":                 "./js/admin.js?v=5b40481f",
+    "./js/config.js":                "./js/config.js?v=5b40481f",
+    "./js/firebase.js":              "./js/firebase.js?v=5b40481f",
+    "./js/flag-directory.js":        "./js/flag-directory.js?v=5b40481f",
+    "./js/history.js":               "./js/history.js?v=5b40481f",
+    "./js/listener-manager.js":      "./js/listener-manager.js?v=5b40481f",
+    "./js/local-cache.js":           "./js/local-cache.js?v=5b40481f",
+    "./js/log.js":                   "./js/log.js?v=5b40481f",
+    "./js/model.js":                 "./js/model.js?v=5b40481f",
+    "./js/momentum.js":              "./js/momentum.js?v=5b40481f",
+    "./js/publish-pipeline.js":      "./js/publish-pipeline.js?v=5b40481f",
+    "./js/read-budget.js":           "./js/read-budget.js?v=5b40481f",
+    "./js/read-dashboard.js":        "./js/read-dashboard.js?v=5b40481f",
+    "./js/read-stats-export.js":     "./js/read-stats-export.js?v=5b40481f",
+    "./js/read-stats-query.js":      "./js/read-stats-query.js?v=5b40481f",
+    "./js/read-stats-rate-limit.js": "./js/read-stats-rate-limit.js?v=5b40481f",
+    "./js/read-telemetry.js":        "./js/read-telemetry.js?v=5b40481f",
+    "./js/reads-view.js":            "./js/reads-view.js?v=5b40481f",
+    "./js/render.js":                "./js/render.js?v=5b40481f",
+    "./js/url-state.js":             "./js/url-state.js?v=5b40481f"
   }
 }
 </script>
-<script type="module" src="js/app.js?v=79ce5031" data-asset-version="79ce5031"></script>
-<script src="js/register-sw.js?v=79ce5031"></script>
+<script type="module" src="js/app.js?v=5b40481f" data-asset-version="5b40481f"></script>
+<script src="js/register-sw.js?v=5b40481f"></script>
 </body>
 </html>

@@ -492,8 +492,6 @@ h1{
 }
 .v-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v-last{color:var(--ink-dim);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
-#whitelistList .version-row{align-items:center}
-#whitelistList .admin-secondary{padding:4px 10px;font-size:12px}
 
 /* Read-budget widget — compact chip pinned near the top of the admin panel.
    Colors follow the traffic-light convention: green ok, yellow warn (soft
@@ -1159,6 +1157,7 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
    display:none when the container has both. Make sure hidden wins. */
 .reads-view[hidden],
 .publish-view[hidden],
+.access-view[hidden],
 .read-dashboard[hidden]{display:none}
 .read-dashboard .rd-panel{
   padding:22px 24px;border-radius:18px;
@@ -1736,4 +1735,106 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
   .pp-table-head,
   .pp-table-row{grid-template-columns:60px 78px 56px 72px 60px}
   .pp-table-row > :last-child{display:none}
+}
+
+/* ---------- Access tab (allow + ban) ---------- */
+.access-view{margin-top:22px}
+.access-shell{display:flex;flex-direction:column;gap:22px}
+.access-hero{
+  display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;
+  padding:26px 28px 24px;
+  border-radius:20px;
+  background:
+    radial-gradient(520px 220px at 100% -30%,rgba(255,210,74,.10),transparent 60%),
+    radial-gradient(420px 200px at 0% 120%,rgba(251,113,133,.10),transparent 55%),
+    linear-gradient(180deg,rgba(19,27,68,.88),rgba(12,18,48,.94));
+  border:1px solid var(--line-strong);
+  box-shadow:0 22px 56px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.access-kicker{
+  display:block;font:600 11px var(--display);letter-spacing:.32em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;
+}
+.access-title{
+  font:700 32px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase;
+}
+.access-lede{
+  max-width:52ch;margin-top:10px;color:var(--ink-dim);font-size:16px;line-height:1.5;
+}
+.access-meters{display:flex;gap:12px}
+.access-meter{
+  min-width:108px;padding:14px 16px 12px;border-radius:14px;text-align:right;
+  background:rgba(6,10,24,.45);border:1px solid var(--line);
+}
+.access-meter-count{
+  display:block;font:700 32px/1 var(--display);font-variant-numeric:tabular-nums;
+}
+.access-meter-label{
+  display:block;margin-top:4px;font:600 11px var(--display);letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-dim);
+}
+.access-meter-allow{box-shadow:inset 3px 0 0 var(--gain)}
+.access-meter-allow .access-meter-count{color:var(--gain)}
+.access-meter-ban{box-shadow:inset 3px 0 0 var(--loss)}
+.access-meter-ban .access-meter-count{color:var(--loss)}
+
+.access-toolbar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.access-search{flex:1;min-width:min(100%,280px);display:flex;flex-direction:column;gap:6px}
+.access-search-label,
+.access-gate-hint{
+  font:600 11px var(--display);letter-spacing:.22em;text-transform:uppercase;color:var(--ink-dim);
+}
+.access-search-input,
+.access-uid-input{
+  width:100%;min-height:42px;padding:10px 14px;border-radius:12px;
+  border:1px solid var(--line);background:rgba(6,10,24,.55);color:var(--ink);
+  font:500 15px var(--mono);
+}
+.access-search-input:focus,
+.access-uid-input:focus{outline:2px solid var(--grad-a);outline-offset:2px;border-color:transparent}
+.access-error{color:var(--loss);font-size:15px}
+.access-empty{color:var(--ink-dim);font-size:15px;line-height:1.5;padding:8px 2px 4px}
+
+.access-gates{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.access-gate{
+  display:flex;flex-direction:column;gap:14px;padding:22px 22px 18px;border-radius:18px;
+  background:linear-gradient(180deg,rgba(19,27,68,.82),rgba(12,18,48,.92));
+  border:1px solid var(--line);
+  box-shadow:0 18px 40px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.04);
+}
+.access-gate-allow{box-shadow:0 18px 40px rgba(0,0,0,.32),inset 3px 0 0 var(--gain)}
+.access-gate-ban{box-shadow:0 18px 40px rgba(0,0,0,.32),inset 3px 0 0 var(--loss)}
+.access-gate-title{font:700 20px/1.15 var(--display);letter-spacing:.06em;text-transform:uppercase}
+.access-gate-hint{margin-top:6px;letter-spacing:.04em;text-transform:none;font:400 14px var(--body);color:var(--ink-dim)}
+.access-add{display:flex;gap:8px;flex-wrap:wrap}
+.access-add .access-uid-input{flex:1;min-width:180px}
+.access-list,
+.access-device-list{list-style:none;display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto}
+.access-row,
+.access-device-row{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:10px 12px;border-radius:12px;background:rgba(6,10,24,.4);
+}
+.access-row-id{min-width:0}
+.access-row-name{display:block;font:600 16px var(--display);letter-spacing:.02em}
+.access-row-uid{display:block;margin-top:2px;color:var(--ink-dim);font:500 12px var(--mono)}
+.access-row-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
+.access-icon-btn,
+.access-refresh{
+  padding:6px 10px;font-size:12px;
+}
+.access-icon-btn-danger{color:var(--loss);border-color:rgba(251,113,133,.35)}
+
+.access-devices{
+  padding:20px 22px;border-radius:18px;
+  background:rgba(12,18,48,.72);border:1px solid var(--line);
+}
+.access-devices-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.access-devices-title{font:700 16px var(--display);letter-spacing:.08em;text-transform:uppercase}
+.access-device-row code{font:500 13px var(--mono);color:var(--ink);word-break:break-all}
+
+@media (max-width:820px){
+  .access-gates{grid-template-columns:1fr}
+  .access-title{font-size:24px}
+  .access-hero{padding:20px}
 }

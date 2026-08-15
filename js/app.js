@@ -12,6 +12,7 @@ import { PlaylistListenerManager } from "./listener-manager.js";
 import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache, clearPlaylistCache } from "./local-cache.js";
 import { log } from "./log.js";
 import { createReadTelemetryUploader } from "./read-telemetry.js";
+import { createAccessView } from "./access-view.js";
 import { createReadsView } from "./reads-view.js";
 import { createPublishView } from "./publish-pipeline.js";
 import {
@@ -356,7 +357,7 @@ function ensurePlaylistIndex(playlist) {
 function render() {
   setActiveTab(state.playlist);
   setDataStatus(effectiveStatus());
-  const isAdminView = state.playlist === "reads" || state.playlist === "publish";
+  const isAdminView = isAdminViewPlaylist(state.playlist);
   // Admin tabs don't have a per-playlist row count — swap the subline for
   // something contextual so the header doesn't try to pluralize a
   // playlist that isn't a real one.
@@ -364,6 +365,8 @@ function render() {
     setSubLine("Admin read insights.");
   } else if (state.playlist === "publish") {
     setSubLine("Firestore → CDN sync health.");
+  } else if (state.playlist === "access") {
+    setSubLine("Allow and ban HUD accounts.");
   } else {
     setSubLine(
       state.rows.length
@@ -491,18 +494,26 @@ function openEdit(player) {
   else dialog.setAttribute("open", "");
 }
 
-// "reads" is an admin-only pseudo-playlist that swaps the board for the
-// read-insights dashboard. Skip the usual listener + rows plumbing so
-// activating it doesn't spin up a Firestore subscription.
+function isAdminViewPlaylist(playlist) {
+  return playlist === "reads" || playlist === "publish" || playlist === "access";
+}
+
+function deactivateAdminViews() {
+  readsView?.deactivate();
+  publishView?.deactivate();
+  accessView?.deactivate();
+}
+
+// Admin-only pseudo-playlists swap the board for a dashboard. Skip the
+// usual listener + rows plumbing so activating them doesn't spin up a
+// Firestore subscription.
 function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
-  if (playlist === "reads" || playlist === "publish") {
+  if (isAdminViewPlaylist(playlist)) {
     if (!state.admin) return;               // never accept without admin
     if (state.playlist === playlist) return;
     listenerManager?.disconnect();          // stop burning reads on the previous playlist
     const prev = state.playlist;
-    // Swap between the two admin views if we're moving reads <-> publish.
-    if (prev === "reads") readsView?.deactivate();
-    if (prev === "publish") publishView?.deactivate();
+    deactivateAdminViews();
     log.info("playlist", "switching", { from: prev, to: playlist });
     state.playlist = playlist;
     state.rows = [];
@@ -518,13 +529,14 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
     if (adminBoxHost) adminBoxHost.hidden = true;
     if (playlist === "reads") readsView?.activate();
     if (playlist === "publish") publishView?.activate();
+    if (playlist === "access") accessView?.activate();
     if (updateUrl) urlState(push);
     // Preserve the last real playlist so switching back defaults there.
     lastRealPlaylist = isPlaylist(prev) ? prev : lastRealPlaylist;
     return;
   }
   if (!isPlaylist(playlist)) return;
-  const leavingAdminView = state.playlist === "reads" || state.playlist === "publish";
+  const leavingAdminView = isAdminViewPlaylist(state.playlist);
   if (playlist === state.playlist) return;
   state.playlist = playlist;
   state.rows = [];
@@ -540,8 +552,7 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
   if (adminPlaylist) adminPlaylist.value = playlist;
   togglePlaylistFields($("adminForm"), playlist);
   if (leavingAdminView) {
-    readsView?.deactivate();
-    publishView?.deactivate();
+    deactivateAdminViews();
     $("boardSection").hidden = false;
     // Admin panel returns for admins; the icon-key legend re-shows on the
     // next renderIconKey() (fired below via render()).
@@ -1007,6 +1018,7 @@ function wireTournamentQuickAdd() {
 
 let readsView = null;
 let publishView = null;
+let accessView = null;
 let lastRealPlaylist = "1v1";
 
 async function copyText(value) {
@@ -1030,38 +1042,8 @@ function handleValidationError(error) {
   setWriteStatus({ kind: "error", message: error?.message || "Check the form and try again." });
 }
 
-async function refreshAllowlist() {
-  const list = $("whitelistList");
-  if (!list || !gateway?.loadAllowlist) return;
-  try {
-    const ids = await gateway.loadAllowlist();
-    list.replaceChildren();
-    for (const uid of ids.slice().sort((a, b) => a.localeCompare(b))) {
-      const item = document.createElement("li");
-      item.className = "version-row";
-      const name = document.createElement("span");
-      name.className = "v-name";
-      name.textContent = uid;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "admin-secondary";
-      remove.textContent = "Remove";
-      remove.addEventListener("click", async () => {
-        const ok = await writes?.removeAllowedUserId(uid);
-        if (ok) refreshAllowlist();
-      });
-      item.append(name, remove);
-      list.append(item);
-    }
-    if (!ids.length) {
-      const empty = document.createElement("li");
-      empty.className = "version-row";
-      empty.textContent = "No HUD uids allowed yet.";
-      list.append(empty);
-    }
-  } catch (error) {
-    list.textContent = error?.message || "Allow list could not be loaded.";
-  }
+function refreshAllowlist() {
+  accessView?.refresh();
 }
 
 async function refreshIcons(force = false) {
@@ -1148,17 +1130,6 @@ function wireEvents() {
   });
 
   wireTournamentQuickAdd();
-
-  $("whitelistForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const uid = String($("whitelistUid")?.value || "").trim();
-    if (!uid) return;
-    const saved = await writes?.addAllowedUserId(uid);
-    if (saved) {
-      $("whitelistForm").reset();
-      refreshAllowlist();
-    }
-  });
 
   $("iconForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1399,14 +1370,15 @@ async function boot() {
     listenerManager.activate("tournament");
   }
 
-  readsView = createReadsView({ gateway });
-  publishView = createPublishView();
-
   writes = new AdminWriteService({
     gateway,
     isAdmin: () => state.admin && !state.writesPaused,
+    isAdminAccount: () => state.admin,
     refreshIcons,
   });
+  readsView = createReadsView({ gateway });
+  publishView = createPublishView();
+  accessView = createAccessView({ gateway, writes });
 
   try {
     state.writesPaused = await gateway.writesPaused();
@@ -1448,7 +1420,9 @@ async function boot() {
     }
     // In debug mode we force the admin panel visible so the widget renders
     // for any user. Otherwise the panel follows real admin state.
-    $("adminBox").hidden = state.writesPaused || (!state.admin && !READ_BUDGET_DEBUG);
+    $("adminBox").hidden = state.writesPaused
+      || (!state.admin && !READ_BUDGET_DEBUG)
+      || isAdminViewPlaylist(state.playlist);
     syncTournamentAdmin();
     $("loginButton").hidden = Boolean(user);
     $("logoutButton").hidden = !user;
@@ -1457,14 +1431,16 @@ async function boot() {
       : user
         ? "Signed in without admin access"
         : "";
-    // Reveal the admin-only Reads + Publish tabs; hide + kick the user
-    // back to a real playlist if they were viewing one while their admin
-    // session ended.
+    // Reveal the admin-only Reads / Sync / Access tabs; hide + kick the
+    // user back to a real playlist if they were viewing one while their
+    // admin session ended.
     const readsTabEl = $("readsTab");
     if (readsTabEl) readsTabEl.hidden = !state.admin;
     const publishTabEl = $("publishTab");
     if (publishTabEl) publishTabEl.hidden = !state.admin || state.writesPaused;
-    if (!state.admin && (state.playlist === "reads" || state.playlist === "publish")) {
+    const accessTabEl = $("accessTab");
+    if (accessTabEl) accessTabEl.hidden = !state.admin;
+    if (!state.admin && isAdminViewPlaylist(state.playlist)) {
       activatePlaylist(lastRealPlaylist || "1v1", { push: false });
     }
     render();
