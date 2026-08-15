@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Defense-in-depth CSP. Player names flow through the admin quick-add
+     autocomplete, so a bad payload in the name field must never be able
+     to load an attacker-controlled script or exfiltrate over an off-list
+     origin. `connect-src` covers Firebase (googleapis.com family +
+     securetoken + identitytoolkit + firebaseio websockets) and the
+     published-state JSON on raw.githubusercontent.com. `img-src *` stays
+     open because admins paste flag/icon URLs from arbitrary CDNs. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://raw.githubusercontent.com https://firebasestorage.googleapis.com; script-src 'self' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src * data:; connect-src 'self' https://raw.githubusercontent.com https://*.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com;">
 <title>Rocket Goal — Competitive Rankings</title>
 <meta name="description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
 <meta name="theme-color" content="#0C1230">
@@ -13,14 +21,14 @@
 <meta property="og:description" content="Live Rocket Goal competitive rankings for 1v1, 2v2, 3v3, and wins.">
 <meta name="twitter:card" content="summary">
 
-<link rel="icon" type="image/png" href="assets/icon.png?v=f521b51d">
-<link rel="apple-touch-icon" href="assets/icon.png?v=f521b51d">
+<link rel="icon" type="image/png" href="assets/icon.png?v=ef0064ef">
+<link rel="apple-touch-icon" href="assets/icon.png?v=ef0064ef">
 <link rel="manifest" href="site.webmanifest">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,600;1,700&family=Rajdhani:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="css/leaderboard.css?v=f521b51d">
+<link rel="stylesheet" href="css/leaderboard.css?v=ef0064ef">
 </head>
 <body>
 <div class="wrap">
@@ -315,30 +323,30 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/admin.js":                 "./js/admin.js?v=f521b51d",
-    "./js/config.js":                "./js/config.js?v=f521b51d",
-    "./js/firebase.js":              "./js/firebase.js?v=f521b51d",
-    "./js/flag-directory.js":        "./js/flag-directory.js?v=f521b51d",
-    "./js/history.js":               "./js/history.js?v=f521b51d",
-    "./js/listener-manager.js":      "./js/listener-manager.js?v=f521b51d",
-    "./js/local-cache.js":           "./js/local-cache.js?v=f521b51d",
-    "./js/log.js":                   "./js/log.js?v=f521b51d",
-    "./js/model.js":                 "./js/model.js?v=f521b51d",
-    "./js/momentum.js":              "./js/momentum.js?v=f521b51d",
-    "./js/publish-pipeline.js":      "./js/publish-pipeline.js?v=f521b51d",
-    "./js/read-budget.js":           "./js/read-budget.js?v=f521b51d",
-    "./js/read-dashboard.js":        "./js/read-dashboard.js?v=f521b51d",
-    "./js/read-stats-export.js":     "./js/read-stats-export.js?v=f521b51d",
-    "./js/read-stats-query.js":      "./js/read-stats-query.js?v=f521b51d",
-    "./js/read-stats-rate-limit.js": "./js/read-stats-rate-limit.js?v=f521b51d",
-    "./js/read-telemetry.js":        "./js/read-telemetry.js?v=f521b51d",
-    "./js/reads-view.js":            "./js/reads-view.js?v=f521b51d",
-    "./js/render.js":                "./js/render.js?v=f521b51d",
-    "./js/url-state.js":             "./js/url-state.js?v=f521b51d"
+    "./js/admin.js":                 "./js/admin.js?v=ef0064ef",
+    "./js/config.js":                "./js/config.js?v=ef0064ef",
+    "./js/firebase.js":              "./js/firebase.js?v=ef0064ef",
+    "./js/flag-directory.js":        "./js/flag-directory.js?v=ef0064ef",
+    "./js/history.js":               "./js/history.js?v=ef0064ef",
+    "./js/listener-manager.js":      "./js/listener-manager.js?v=ef0064ef",
+    "./js/local-cache.js":           "./js/local-cache.js?v=ef0064ef",
+    "./js/log.js":                   "./js/log.js?v=ef0064ef",
+    "./js/model.js":                 "./js/model.js?v=ef0064ef",
+    "./js/momentum.js":              "./js/momentum.js?v=ef0064ef",
+    "./js/publish-pipeline.js":      "./js/publish-pipeline.js?v=ef0064ef",
+    "./js/read-budget.js":           "./js/read-budget.js?v=ef0064ef",
+    "./js/read-dashboard.js":        "./js/read-dashboard.js?v=ef0064ef",
+    "./js/read-stats-export.js":     "./js/read-stats-export.js?v=ef0064ef",
+    "./js/read-stats-query.js":      "./js/read-stats-query.js?v=ef0064ef",
+    "./js/read-stats-rate-limit.js": "./js/read-stats-rate-limit.js?v=ef0064ef",
+    "./js/read-telemetry.js":        "./js/read-telemetry.js?v=ef0064ef",
+    "./js/reads-view.js":            "./js/reads-view.js?v=ef0064ef",
+    "./js/render.js":                "./js/render.js?v=ef0064ef",
+    "./js/url-state.js":             "./js/url-state.js?v=ef0064ef"
   }
 }
 </script>
-<script type="module" src="js/app.js?v=f521b51d" data-asset-version="f521b51d"></script>
+<script type="module" src="js/app.js?v=ef0064ef" data-asset-version="ef0064ef"></script>
 <script>
   // Register the read-stats snapshot Service Worker. Failure is silent —
   // a broken SW registration must never break the site. See sw.js for

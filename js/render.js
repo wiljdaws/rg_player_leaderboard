@@ -113,6 +113,39 @@ function safeImage(url, className, alt = "", onFail) {
   return image;
 }
 
+// Build a highlighted suggestion label as an array of Text + <mark> DOM
+// nodes so player-supplied names — which may contain `<`, `>`, quotes, or
+// full HTML fragments — can never reach the DOM as parsed HTML. Callers
+// append the returned nodes to their <li> instead of assigning innerHTML.
+//
+// Regression this guards against: names like `a<img src=x onerror=1>`
+// used to flow into innerHTML through the tournament quick-add autocomplete
+// so the browser parsed the `<img>` tag and fired onerror → stored XSS
+// against every admin viewing the suggestion list.
+export function highlightSuggestion(name, needle) {
+  const nodes = [];
+  const safeName = String(name || "");
+  const rawNeedle = String(needle || "");
+  if (!rawNeedle) {
+    nodes.push(document.createTextNode(safeName));
+    return nodes;
+  }
+  const idx = safeName.toLowerCase().indexOf(rawNeedle.toLowerCase());
+  if (idx < 0) {
+    nodes.push(document.createTextNode(safeName));
+    return nodes;
+  }
+  if (idx > 0) nodes.push(document.createTextNode(safeName.slice(0, idx)));
+  const mark = document.createElement("mark");
+  mark.textContent = safeName.slice(idx, idx + rawNeedle.length);
+  nodes.push(mark);
+  const tailStart = idx + rawNeedle.length;
+  if (tailStart < safeName.length) {
+    nodes.push(document.createTextNode(safeName.slice(tailStart)));
+  }
+  return nodes;
+}
+
 // Skip a clan-tag prefix like "[XYZ] " so a broken flag falls back to the
 // player's real initial, not a bracket. "[XYZ] Bob" → "B", "★ Sky" → "S".
 export function initials(name) {

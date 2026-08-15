@@ -23,6 +23,7 @@ import {
 } from "./model.js";
 import {
   handleTabKeydown,
+  highlightSuggestion,
   hydrateFlagPicker,
   renderBoard,
   renderIconKey,
@@ -723,12 +724,6 @@ function wireNameSuggest(input) {
     input.setAttribute("aria-expanded", "false");
   };
 
-  const highlight = (name, needle) => {
-    const idx = name.toLowerCase().indexOf(needle);
-    if (idx < 0) return name;
-    return `${name.slice(0, idx)}<mark>${name.slice(idx, idx + needle.length)}</mark>${name.slice(idx + needle.length)}`;
-  };
-
   const render = () => {
     if (!matches.length) return close();
     list.hidden = false;
@@ -739,7 +734,10 @@ function wireNameSuggest(input) {
       const li = document.createElement("li");
       li.setAttribute("role", "option");
       li.dataset.name = entry.name;
-      li.innerHTML = highlight(entry.name, needle);
+      // highlightSuggestion returns DOM nodes (Text + <mark>) rather than
+      // an HTML string so player names containing `<img>` / `<script>` /
+      // etc. cannot inject markup. See render.js for the XSS regression.
+      for (const node of highlightSuggestion(entry.name, needle)) li.append(node);
       if (i === activeIndex) li.setAttribute("aria-selected", "true");
       // mousedown fires before input's blur so the click lands.
       li.addEventListener("mousedown", (e) => {
