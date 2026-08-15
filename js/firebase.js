@@ -7,7 +7,10 @@ import {
   STATIC_JSON_MAX_CONSECUTIVE_FAILURES,
   STATIC_JSON_POLL_MS,
   STATIC_JSON_URL_TEMPLATE,
+  isAdminUser,
   isPlaylist,
+  publicPlaylistAllowsFirestoreFallback,
+  publicPlaylistUsesLiveFirestore,
   resolveReadSource,
 } from "./config.js";
 import {
@@ -367,6 +370,7 @@ export async function createFirebaseGateway() {
     collection,
     deleteDoc,
     doc,
+    getDoc,
     getDocs,
     getFirestore,
     limit,
@@ -415,6 +419,10 @@ export async function createFirebaseGateway() {
   const readStatsTotal = collection(db, "read_stats_total");
   const visitorReadStats = collection(db, "visitor_read_stats");
   let iconKeyCache = null;
+  let signedInAdmin = false;
+  onAuthStateChanged(auth, (user) => {
+    signedInAdmin = isAdminUser(user);
+  });
 
   // --- Read budget ---------------------------------------------------------
   //
@@ -646,18 +654,19 @@ export async function createFirebaseGateway() {
   // Anything unrecognized is treated as "firestore" so a corrupt config can't
   // strand the site on a broken path.
   function subscribePlaylistDispatch(playlist, handlers) {
-    // Tournament is small (~20 rows), admin-only writes, and needs
-    // instant feedback. Skip the CDN JSON path and read straight from
-    // Firestore so writes show up in real time without an optimistic
-    // overlay. Ranked playlists still cache via the JSON path.
-    if (playlist === "tournament") return subscribePlaylist(playlist, handlers);
+    // Tournament stays on Firestore so admin edits show up right away.
+    // Ranked tabs use the published JSON. Live Firestore (or a fallback
+    // after CDN failures) is admin-only — listing the board now needs
+    // a signed-in user, and a public tab shouldn't keep retrying that.
     const source = resolveReadSource();
-    if (source === "static") {
-      return subscribePlaylistJson(playlist, handlers, {
-        firestoreFallback: subscribePlaylist,
-      });
+    if (publicPlaylistUsesLiveFirestore({ playlist, source, isAdmin: signedInAdmin })) {
+      return subscribePlaylist(playlist, handlers);
     }
-    return subscribePlaylist(playlist, handlers);
+    return subscribePlaylistJson(playlist, handlers, {
+      firestoreFallback: publicPlaylistAllowsFirestoreFallback(signedInAdmin)
+        ? subscribePlaylist
+        : null,
+    });
   }
 
   // Announce the initial mode so it's obvious in DevTools which path a
@@ -688,6 +697,14 @@ export async function createFirebaseGateway() {
     signIn: () => signInWithPopup(auth, provider),
     signOut: () => signOut(auth),
     loadIconKey,
+    writesPaused: async () => {
+      try {
+        const snap = await getDoc(doc(db, "admin", "blacklist"));
+        return snap.data()?.pauseWrites === true;
+      } catch {
+        return false;
+      }
+    },
     addPlayer: (payload) => chargedWrite("addPlayer", () => {
       const stamped = { ...payload, lastWriteAt: serverTimestamp() };
       // When the admin provided an RG user id, write to the deterministic

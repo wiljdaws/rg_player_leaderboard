@@ -25,7 +25,6 @@ function el(tag, options = {}, children = []) {
   if (options.text !== undefined && options.text !== null) {
     element.textContent = String(options.text);
   }
-  if (options.html !== undefined) element.innerHTML = options.html;
   if (options.attrs) {
     for (const [key, value] of Object.entries(options.attrs)) {
       if (value === false || value === null || value === undefined) continue;

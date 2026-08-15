@@ -109,6 +109,17 @@ export function isAdminUser(user) {
   return Boolean(user?.email && ADMIN_EMAILS.includes(user.email));
 }
 
+// Visitors stay on the published JSON. Live Firestore reads are for
+// the tournament tab (small, public) and for signed-in admins.
+export function publicPlaylistUsesLiveFirestore({ playlist, source, isAdmin } = {}) {
+  if (playlist === "tournament") return true;
+  return Boolean(isAdmin) && source === "firestore";
+}
+
+export function publicPlaylistAllowsFirestoreFallback(isAdmin) {
+  return Boolean(isAdmin);
+}
+
 export function isRankedPlaylist(playlist) {
   return playlist === "1v1" || playlist === "2v2" || playlist === "3v3";
 }

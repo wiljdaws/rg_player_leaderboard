@@ -244,6 +244,7 @@ const state = {
   quarantined: [],
   status: { kind: "loading", message: `Loading ${initial.playlist} rankings…` },
   admin: false,
+  writesPaused: false,
   user: null,
   icons: [],
   iconLoading: true,
@@ -1279,9 +1280,19 @@ async function boot() {
 
   writes = new AdminWriteService({
     gateway,
-    isAdmin: () => state.admin,
+    isAdmin: () => state.admin && !state.writesPaused,
     refreshIcons,
   });
+
+  try {
+    state.writesPaused = await gateway.writesPaused();
+  } catch {
+    state.writesPaused = false;
+  }
+  if (state.writesPaused) {
+    const haltBanner = $("haltBanner");
+    if (haltBanner) haltBanner.hidden = false;
+  }
 
   // Cross-session telemetry: every admin session pushes its read-budget
   // snapshot to admin_read_stats/. Disabled with ?telemetry=off. Only starts
@@ -1313,7 +1324,7 @@ async function boot() {
     }
     // In debug mode we force the admin panel visible so the widget renders
     // for any user. Otherwise the panel follows real admin state.
-    $("adminBox").hidden = !state.admin && !READ_BUDGET_DEBUG;
+    $("adminBox").hidden = state.writesPaused || (!state.admin && !READ_BUDGET_DEBUG);
     syncTournamentAdmin();
     $("loginButton").hidden = Boolean(user);
     $("logoutButton").hidden = !user;
@@ -1328,7 +1339,7 @@ async function boot() {
     const readsTabEl = $("readsTab");
     if (readsTabEl) readsTabEl.hidden = !state.admin;
     const publishTabEl = $("publishTab");
-    if (publishTabEl) publishTabEl.hidden = !state.admin;
+    if (publishTabEl) publishTabEl.hidden = !state.admin || state.writesPaused;
     if (!state.admin && (state.playlist === "reads" || state.playlist === "publish")) {
       activatePlaylist(lastRealPlaylist || "1v1", { push: false });
     }

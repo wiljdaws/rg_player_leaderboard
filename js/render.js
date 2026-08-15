@@ -1,6 +1,6 @@
 import { PLAYLIST_LABELS, PLAYLISTS } from "./config.js";
 import { COUNTRIES, canonicalCountry, labelForFlagUrl } from "./flag-directory.js";
-import { playerGlow, winRate } from "./model.js";
+import { playerGlow, sanitizeHttpUrl, winRate } from "./model.js";
 import { momentumChip } from "./momentum.js";
 
 const $ = (id) => document.getElementById(id);
@@ -97,8 +97,13 @@ if (typeof window !== "undefined") {
 }
 
 function safeImage(url, className, alt = "", onFail) {
+  const safe = sanitizeHttpUrl(url);
+  if (!safe) {
+    onFail?.();
+    return node("span", { className });
+  }
   const image = node("img", { className });
-  image.src = url;
+  image.src = safe;
   image.alt = alt;
   image.loading = "lazy";
   image.referrerPolicy = "no-referrer";
@@ -956,8 +961,14 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
       wrap.textContent = "—";
       return wrap;
     }
+    const safe = sanitizeHttpUrl(url);
+    if (!safe) {
+      wrap.classList.add("empty");
+      wrap.textContent = "—";
+      return wrap;
+    }
     const img = document.createElement("img");
-    img.src = url;
+    img.src = safe;
     img.alt = "";
     img.loading = "lazy";
     img.referrerPolicy = "no-referrer";

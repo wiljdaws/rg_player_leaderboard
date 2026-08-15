@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { READ_SOURCE_DEFAULT, resolveReadSource } from "../js/config.js";
+import {
+  READ_SOURCE_DEFAULT,
+  publicPlaylistAllowsFirestoreFallback,
+  publicPlaylistUsesLiveFirestore,
+  resolveReadSource,
+} from "../js/config.js";
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial));
@@ -93,4 +98,27 @@ test("resolveReadSource is safe when storage is missing", () => {
 test("resolveReadSource is safe when both URL and storage are missing", () => {
   const result = resolveReadSource({ url: null, storage: null });
   assert.equal(result, READ_SOURCE_DEFAULT);
+});
+
+test("visitors stay on published JSON even if readSource=firestore", () => {
+  assert.equal(
+    publicPlaylistUsesLiveFirestore({ playlist: "1v1", source: "firestore", isAdmin: false }),
+    false,
+  );
+  assert.equal(publicPlaylistAllowsFirestoreFallback(false), false);
+});
+
+test("admins can still use live Firestore", () => {
+  assert.equal(
+    publicPlaylistUsesLiveFirestore({ playlist: "1v1", source: "firestore", isAdmin: true }),
+    true,
+  );
+  assert.equal(publicPlaylistAllowsFirestoreFallback(true), true);
+});
+
+test("tournament tab stays on Firestore for everyone", () => {
+  assert.equal(
+    publicPlaylistUsesLiveFirestore({ playlist: "tournament", source: "static", isAdmin: false }),
+    true,
+  );
 });
