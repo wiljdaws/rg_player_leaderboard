@@ -35,8 +35,10 @@ build_importmap() {
   local files=()
   for f in js/*.js; do
     [[ -f "$f" ]] || continue
-    # app.js is loaded via <script src="..."> and already carries ?v= there.
-    [[ "$(basename "$f")" == "app.js" ]] && continue
+    # Classic <script src> tags already carry ?v= and are not imported.
+    case "$(basename "$f")" in
+      app.js|register-sw.js) continue ;;
+    esac
     files+=("$f")
   done
   # Longest filename decides the column width so the JSON stays aligned.
@@ -105,6 +107,28 @@ sed -i.bak -E "s/\\?v=[a-z0-9]+/?v=${hash}/g" "$index_file"
 sed -i.bak -E "s/data-asset-version=\"[a-z0-9]+\"/data-asset-version=\"${hash}\"/g" "$index_file"
 rm -f "${index_file}.bak"
 rewrite_importmap_in_file "$index_file" "$hash"
+
+# CSP hashes the exact importmap body. Refresh it so a version bump
+# cannot leave a stale sha256 that blocks every module load.
+python3 - "$index_file" <<'PY'
+import base64, hashlib, pathlib, re, sys
+path = pathlib.Path(sys.argv[1])
+html = path.read_text()
+match = re.search(r'<script type="importmap">(.*?)</script>', html, re.S)
+if not match:
+    raise SystemExit("pre-commit: importmap script not found")
+digest = base64.b64encode(hashlib.sha256(match.group(1).encode()).digest()).decode()
+updated, n = re.subn(
+    r"(script-src 'self' https://www.gstatic.com https://apis.google.com )'sha256-[^']+'",
+    rf"\1'sha256-{digest}'",
+    html,
+    count=1,
+)
+if n != 1:
+    raise SystemExit("pre-commit: could not refresh importmap CSP hash")
+if updated != html:
+    path.write_text(updated)
+PY
 
 if [[ "$current" != "$hash" ]]; then
   echo "pre-commit: assets changed — bumping ?v= from '${current}' to '${hash}'"

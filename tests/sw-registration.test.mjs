@@ -11,7 +11,13 @@ test("sw.js exists at the site root", async () => {
   assert.ok(info.isFile(), "sw.js should be a file");
 });
 
-test("index.html registers /sw.js on load", async () => {
+test("index.html loads the external service-worker registrar", async () => {
   const html = await readFile(join(root, "index.html"), "utf8");
-  assert.match(html, /navigator\.serviceWorker\.register\(["']\/sw\.js["']\)/);
+  assert.match(html, /src="js\/register-sw\.js\?v=[a-z0-9]+"/);
+  assert.doesNotMatch(html, /<script>\s*\/\/ Register the read-stats/);
+});
+
+test("register-sw.js registers /sw.js on load", async () => {
+  const source = await readFile(join(root, "js/register-sw.js"), "utf8");
+  assert.match(source, /navigator\.serviceWorker\.register\(["']\/sw\.js["']\)/);
 });
