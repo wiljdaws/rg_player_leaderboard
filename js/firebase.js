@@ -23,13 +23,8 @@ import { createReadBudget } from "./read-budget.js";
 import { log } from "./log.js";
 
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
-const APP_CHECK_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app-check.js`;
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
 const AUTH_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`;
-
-// reCAPTCHA v3 site key. Public by design, domain-locked to
-// wiljdaws.github.io in the reCAPTCHA admin.
-const RECAPTCHA_SITE_KEY = "6LetM38tAAAAADvHq4SYd05r_DGK2AWJo8M3ZmJK";
 
 // Published by the Tampermonkeys publish workflow every 15 min.
 const READ_STATS_SNAPSHOT_URL = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/state/read-stats.json";
@@ -268,7 +263,7 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
       const response = await fetchImpl(url, {
         method: "GET",
         headers,
-        cache: "no-store",
+        cache: "default",
       });
 
       if (!active || fallbackUnsubscribe) return;
@@ -358,9 +353,8 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
 }
 
 export async function createFirebaseGateway() {
-  const [{ initializeApp }, appCheckMod, firestoreMod, authMod] = await Promise.all([
+  const [{ initializeApp }, firestoreMod, authMod] = await Promise.all([
     import(APP_URL),
-    import(APP_CHECK_URL),
     import(FIRESTORE_URL),
     import(AUTH_URL),
   ]);
@@ -392,20 +386,6 @@ export async function createFirebaseGateway() {
   } = authMod;
 
   const app = initializeApp(FIREBASE_CONFIG);
-
-  // Attach a reCAPTCHA v3 App Check token to every Firestore request.
-  // Init errors are non-fatal so a broken setup doesn't wedge boot.
-  try {
-    const { initializeAppCheck, ReCaptchaV3Provider } = appCheckMod;
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
-      isTokenAutoRefreshEnabled: true,
-    });
-    log.info("appcheck", "initialized with reCAPTCHA v3", { siteKey: RECAPTCHA_SITE_KEY.slice(0, 12) + "…" });
-  } catch (error) {
-    log.error("appcheck", "init failed", error);
-  }
-
   const db = getFirestore(app);
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();

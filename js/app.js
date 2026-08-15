@@ -5,7 +5,7 @@ import {
   togglePlaylistFields,
 } from "./admin.js";
 import { PLAYLIST_LABELS, STATIC_JSON_URL_TEMPLATE, isAdminUser, isPlaylist } from "./config.js";
-import { createFirebaseGateway } from "./firebase.js";
+import { createFirebaseGateway, subscribePlaylistJson } from "./firebase.js";
 import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
@@ -1254,6 +1254,29 @@ function wireEvents() {
   });
 }
 
+function startBoardListener(subscribe) {
+  listenerManager = new PlaylistListenerManager({
+    subscribe,
+    onRows(raw, metadata) {
+      if (metadata.playlist !== state.playlist) return;
+      const normalized = normalizePlaylistRows(raw, state.playlist);
+      state.rows = state.playlist === "tournament"
+        ? normalized.rows
+        : applyRankedTombstones(normalized.rows, state.playlist);
+      state.quarantined = normalized.quarantined;
+      historyStore.record(state.playlist, state.rows);
+      flagDirectory.registerRows(state.rows);
+      render();
+    },
+    onStatus(status) {
+      state.status = status;
+      render();
+    },
+  });
+  listenerManager.setVisible(!document.hidden);
+  listenerManager.activate(state.playlist);
+}
+
 async function boot() {
   log.info("boot", "starting", {
     href: globalThis.location?.href,
@@ -1261,6 +1284,20 @@ async function boot() {
   });
   wireEvents();
   render();
+
+  // Ranked tabs only need the published JSON. Don't wait on Firebase /
+  // reCAPTCHA for the first paint — that was making the board sit on
+  // "Loading rankings…" for a long time.
+  startBoardListener((playlist, handlers) => {
+    if (playlist === "tournament") {
+      if (!gateway) {
+        handlers.next?.({ rows: [], fromCache: false, changes: [] });
+        return () => {};
+      }
+      return gateway.subscribePlaylist(playlist, handlers);
+    }
+    return subscribePlaylistJson(playlist, handlers);
+  });
 
   try {
     gateway = await createFirebaseGateway();
@@ -1273,6 +1310,13 @@ async function boot() {
     };
     render();
     return;
+  }
+
+  if (state.playlist === "tournament") {
+    listenerManager.disconnect();
+    listenerManager.activePlaylist = null;
+    listenerManager.subscribe = gateway.subscribePlaylist;
+    listenerManager.activate("tournament");
   }
 
   readsView = createReadsView({ gateway });
@@ -1353,28 +1397,7 @@ async function boot() {
     syncReadBudgetWidget();
   });
 
-  listenerManager = new PlaylistListenerManager({
-    subscribe: gateway.subscribePlaylist,
-    onRows(raw, metadata) {
-      if (metadata.playlist !== state.playlist) return;
-      const normalized = normalizePlaylistRows(raw, state.playlist);
-      state.rows = state.playlist === "tournament"
-        ? normalized.rows
-        : applyRankedTombstones(normalized.rows, state.playlist);
-      state.quarantined = normalized.quarantined;
-      historyStore.record(state.playlist, state.rows);
-      flagDirectory.registerRows(state.rows);
-      render();
-    },
-    onStatus(status) {
-      state.status = status;
-      render();
-    },
-  });
-
   refreshIcons();
-  listenerManager.setVisible(!document.hidden);
-  listenerManager.activate(state.playlist);
 
   // Debug/ops override — makes the widget visible for any user (still needs
   // adminBox visible for its parent to layout, which the auth block above
