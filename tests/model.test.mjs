@@ -187,6 +187,41 @@ test("normalizePlaylistRows prefers the live session when JSON has no lastWriteA
   assert.deepEqual(rows[0].icons, ["https://i.imgur.com/5VVlaO7.png"]);
 });
 
+test("normalizePlaylistRows keeps Virtualzzs name on the live Romance row", () => {
+  const { rows } = normalizePlaylistRows(
+    [
+      {
+        id: "Ly8RPbr4z4Svd0IyUMJrR9B1wRh1_2v2",
+        playlist: "2v2",
+        name: "[KING] Virtualzzs",
+        sourceUserId: "Ly8RPbr4z4Svd0IyUMJrR9B1wRh1",
+        mmr: 5387,
+        flag: "https://i.imgur.com/B6VOEig.png",
+        icons: "https://i.imgur.com/VopY1JE.png,https://i.imgur.com/5VVlaO7.png",
+      },
+      {
+        id: "5UHW153KADWkCoU5aEDRpc6rrCw2_2v2",
+        playlist: "2v2",
+        name: "Romance anime a",
+        sourceUserId: "5UHW153KADWkCoU5aEDRpc6rrCw2",
+        mmr: 5387,
+        currentStreak: 48,
+        sessionLastSeen: 1786897046982,
+      },
+    ],
+    "2v2",
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].sourceUserId, "5UHW153KADWkCoU5aEDRpc6rrCw2");
+  assert.equal(rows[0].mmr, 5387);
+  assert.equal(rows[0].name, "[KING] Virtualzzs");
+  assert.equal(rows[0].flag, "https://i.imgur.com/B6VOEig.png");
+  assert.deepEqual(rows[0].icons, [
+    "https://i.imgur.com/VopY1JE.png",
+    "https://i.imgur.com/5VVlaO7.png",
+  ]);
+});
+
 test("normalizePlaylistRows collapses tagged and untagged HUD twins", () => {
   const { rows } = normalizePlaylistRows(
     [

@@ -221,6 +221,26 @@ function bareLeaderboardName(name) {
     .replace(/\s+/g, " ");
 }
 
+const IDENTITY_NAME_ALIASES = {
+  "romance anime a": "virtualzzs",
+  virtualzzs: "virtualzzs",
+};
+const IDENTITY_UID_ALIASES = {
+  "5UHW153KADWkCoU5aEDRpc6rrCw2": "virtualzzs",
+  Ly8RPbr4z4Svd0IyUMJrR9B1wRh1: "virtualzzs",
+};
+const IDENTITY_DISPLAY_NAMES = {
+  virtualzzs: "[KING] Virtualzzs",
+};
+
+function identityKey(player) {
+  const uid = String(player?.sourceUserId || player?.id || "").trim();
+  const uidOnly = uid.includes("_") ? uid.slice(0, uid.lastIndexOf("_")) : uid;
+  if (uidOnly && IDENTITY_UID_ALIASES[uidOnly]) return IDENTITY_UID_ALIASES[uidOnly];
+  const name = bareLeaderboardName(player?.name);
+  return IDENTITY_NAME_ALIASES[name] || name;
+}
+
 function playerWriteAt(player) {
   const date = player?.provenance?.updatedAt;
   if (date instanceof Date && !Number.isNaN(date.getTime())) return date.getTime();
@@ -242,11 +262,17 @@ function absorbPlaylistTwin(winner, loser) {
   const out = { ...winner };
   if (!out.flag && loser.flag) out.flag = loser.flag;
   if ((!out.icons || !out.icons.length) && loser.icons?.length) out.icons = loser.icons;
-  const winnerTagged = /^\[[^\]]+\]\s*/.test(String(winner.name || "").trim());
-  const loserTagged = /^\[[^\]]+\]\s*/.test(String(loser.name || "").trim());
-  if (!winnerTagged && loserTagged
-      && bareLeaderboardName(winner.name) === bareLeaderboardName(loser.name)) {
-    out.name = loser.name;
+  const preferred = IDENTITY_DISPLAY_NAMES[identityKey(out)]
+    || IDENTITY_DISPLAY_NAMES[identityKey(loser)];
+  if (preferred) {
+    out.name = preferred;
+  } else {
+    const winnerTagged = /^\[[^\]]+\]\s*/.test(String(winner.name || "").trim());
+    const loserTagged = /^\[[^\]]+\]\s*/.test(String(loser.name || "").trim());
+    if (!winnerTagged && loserTagged
+        && identityKey(winner) === identityKey(loser)) {
+      out.name = loser.name;
+    }
   }
   return out;
 }
@@ -255,7 +281,7 @@ function collapsePlaylistTwins(rows, playlist) {
   const kept = new Map();
   const leftovers = [];
   for (const row of rows) {
-    const key = bareLeaderboardName(row.name);
+    const key = identityKey(row);
     if (!key) {
       leftovers.push(row);
       continue;
@@ -271,7 +297,10 @@ function collapsePlaylistTwins(rows, playlist) {
       kept.set(key, absorbPlaylistTwin(existing, row));
     }
   }
-  return [...kept.values(), ...leftovers];
+  return [...kept.values(), ...leftovers].map((row) => {
+    const preferred = IDENTITY_DISPLAY_NAMES[identityKey(row)];
+    return preferred && row?.name !== preferred ? { ...row, name: preferred } : row;
+  });
 }
 
 export function normalizePlaylistRows(rawRows, playlist) {
