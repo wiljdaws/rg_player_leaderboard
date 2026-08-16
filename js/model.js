@@ -231,6 +231,9 @@ function preferPlaylistTwin(current, candidate, playlist) {
   const currentAt = playerWriteAt(current);
   const candidateAt = playerWriteAt(candidate);
   if (candidateAt !== currentAt) return candidateAt > currentAt;
+  const currentSeen = Number(current?.sessionLastSeen) || 0;
+  const candidateSeen = Number(candidate?.sessionLastSeen) || 0;
+  if (candidateSeen !== currentSeen) return candidateSeen > currentSeen;
   const field = playlist === "wins" ? "wins" : playlist === "tournament" ? "score" : "mmr";
   return Number(candidate[field]) > Number(current[field]);
 }

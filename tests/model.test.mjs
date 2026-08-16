@@ -155,6 +155,38 @@ test("normalizePlaylistRows is stable across shuffled inputs", () => {
   assert.deepEqual(second, first);
 });
 
+test("normalizePlaylistRows prefers the live session when JSON has no lastWriteAt", () => {
+  const { rows } = normalizePlaylistRows(
+    [
+      {
+        id: "cemz_1v1",
+        playlist: "1v1",
+        name: "[KING] JesusDied4U",
+        sourceUserId: "cemz",
+        mmr: 2128,
+        flag: "https://i.imgur.com/saBa4s8.png",
+        icons: "https://i.imgur.com/5VVlaO7.png",
+        sessionLastSeen: 1786723181277,
+      },
+      {
+        id: "szfb_1v1",
+        playlist: "1v1",
+        name: "JesusDied4U",
+        sourceUserId: "szfb",
+        mmr: 2096,
+        sessionLastSeen: 1786896159700,
+      },
+    ],
+    "1v1",
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, "szfb_1v1");
+  assert.equal(rows[0].mmr, 2096);
+  assert.equal(rows[0].name, "[KING] JesusDied4U");
+  assert.equal(rows[0].flag, "https://i.imgur.com/saBa4s8.png");
+  assert.deepEqual(rows[0].icons, ["https://i.imgur.com/5VVlaO7.png"]);
+});
+
 test("normalizePlaylistRows collapses tagged and untagged HUD twins", () => {
   const { rows } = normalizePlaylistRows(
     [
