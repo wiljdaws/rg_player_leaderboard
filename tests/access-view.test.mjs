@@ -7,8 +7,11 @@ import {
   decorateAccessLists,
   fillMissingAccessNames,
   filterAccessEntries,
+  MISSING_NAME_LOOKUP_CAP,
   nameFromSubmission,
+  newAccessUids,
   normalizeAccessUid,
+  pickAccessNameLookups,
   readCachedAccessNames,
   shortUid,
   uniqueAccessUids,
@@ -56,6 +59,57 @@ test("fillMissingAccessNames looks up only nameless uids and caches hits", async
   assert.deepEqual(calls, ["uid-new"]);
   assert.equal(names.get("uid-known"), "Pal");
   assert.equal(names.get("uid-new"), "Croxy");
+});
+
+test("newAccessUids skips the first load and then only returns added uids", () => {
+  const first = ["uid-a", "uid-b", "uid-a"];
+  assert.deepEqual(newAccessUids(first, null), []);
+  assert.deepEqual(newAccessUids(["uid-a", "uid-b", "uid-c"], first), ["uid-c"]);
+  assert.deepEqual(newAccessUids(["uid-a"], first), []);
+});
+
+test("pickAccessNameLookups skips named and already-tried uids and caps the rest", () => {
+  assert.ok(MISSING_NAME_LOOKUP_CAP <= 4);
+  const picked = pickAccessNameLookups({
+    uids: ["named", "miss", "fresh-1", "fresh-2", "fresh-3", "fresh-4", "fresh-5"],
+    names: new Map([["named", "Pal"]]),
+    skip: new Set(["miss"]),
+    limit: MISSING_NAME_LOOKUP_CAP,
+  });
+  assert.deepEqual(picked, ["fresh-1", "fresh-2", "fresh-3", "fresh-4"]);
+});
+
+test("fillMissingAccessNames does not retry a miss or a failed lookup", async () => {
+  const calls = [];
+  const skip = new Set();
+  const lookup = async (uid) => {
+    calls.push(uid);
+    if (uid === "uid-fail") throw new Error("quota");
+    return {};
+  };
+  await fillMissingAccessNames({
+    uids: ["uid-miss", "uid-fail"],
+    names: new Map(),
+    skip,
+    lookup,
+  });
+  await fillMissingAccessNames({
+    uids: ["uid-miss", "uid-fail", "uid-later"],
+    names: new Map(),
+    skip,
+    lookup,
+  });
+  assert.deepEqual(calls, ["uid-miss", "uid-fail", "uid-later"]);
+  assert.ok(skip.has("uid-miss"));
+  assert.ok(skip.has("uid-fail"));
+});
+
+test("access refresh looks up only brand-new uids after JSON and cache", async () => {
+  const src = await readFile(join(root, "js/access-view.js"), "utf8");
+  assert.match(src, /const newcomers = newAccessUids\(current, knownUids\)/);
+  assert.match(src, /uids: newcomers/);
+  assert.match(src, /skip: nameMisses/);
+  assert.doesNotMatch(src, /uids: \[\.\.\.allowed, \.\.\.banned\]/);
 });
 
 test("access name cache round-trips uid to display name", () => {

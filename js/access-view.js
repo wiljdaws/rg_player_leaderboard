@@ -36,7 +36,26 @@ export function nameFromSubmission(data) {
 }
 
 const NAME_CACHE_KEY = "rgLB:accessNames:v1";
-const MISSING_NAME_LOOKUP_CAP = 12;
+// Firestore gets are how Access burns quota. JSON + local cache first;
+// only brand-new allow/ban uids may hit script_submissions, and only a handful.
+export const MISSING_NAME_LOOKUP_CAP = 4;
+
+export function newAccessUids(current, previous) {
+  if (previous == null) return [];
+  const seen = new Set(uniqueAccessUids(previous));
+  return uniqueAccessUids(current).filter((uid) => !seen.has(uid));
+}
+
+export function pickAccessNameLookups({
+  uids = [],
+  names = new Map(),
+  skip = new Set(),
+  limit = MISSING_NAME_LOOKUP_CAP,
+} = {}) {
+  return uniqueAccessUids(uids)
+    .filter((uid) => !names.get(uid) && !skip.has(uid))
+    .slice(0, Math.max(0, Number(limit) || 0));
+}
 
 export function readCachedAccessNames(storage = globalThis.localStorage) {
   try {
@@ -64,19 +83,20 @@ export async function fillMissingAccessNames({
   uids = [],
   names = new Map(),
   lookup,
+  skip = new Set(),
   limit = MISSING_NAME_LOOKUP_CAP,
 } = {}) {
   const next = new Map(names);
   if (typeof lookup !== "function") return next;
-  const missing = [...new Set(uids.map(normalizeAccessUid).filter(Boolean))]
-    .filter((uid) => !next.get(uid))
-    .slice(0, Math.max(0, Number(limit) || 0));
+  const missing = pickAccessNameLookups({ uids, names: next, skip, limit });
   await Promise.all(missing.map(async (uid) => {
     try {
       const name = nameFromSubmission(await lookup(uid));
       if (name) next.set(uid, name);
+      else skip.add(uid);
     } catch {
-      // Quota or a missing submission — row stays on the raw uid.
+      // Quota or a missing submission — do not retry this uid this session.
+      skip.add(uid);
     }
   }));
   return next;
@@ -393,6 +413,8 @@ export function createAccessView({ gateway, writes } = {}) {
   let allowed = [];
   let banned = [];
   let devices = [];
+  let knownUids = null;
+  let nameMisses = new Set();
   let loading = false;
   let error = "";
   let inflight = 0;
@@ -464,10 +486,14 @@ export function createAccessView({ gateway, writes } = {}) {
       allowed = control.allowedUserIds;
       banned = control.userIds;
       devices = control.deviceIds;
-      if (typeof gateway.loadScriptSubmission === "function") {
+      const current = uniqueAccessUids([...allowed, ...banned]);
+      const newcomers = newAccessUids(current, knownUids);
+      knownUids = current;
+      if (newcomers.length && typeof gateway.loadScriptSubmission === "function") {
         names = await fillMissingAccessNames({
-          uids: [...allowed, ...banned],
+          uids: newcomers,
           names,
+          skip: nameMisses,
           lookup: (uid) => gateway.loadScriptSubmission(uid),
         });
         writeCachedAccessNames(names);
