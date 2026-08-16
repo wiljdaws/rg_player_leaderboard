@@ -690,7 +690,17 @@ export async function createFirebaseGateway() {
   async function loadAccessControlDoc() {
     const snap = await getDoc(doc(db, "admin", "blacklist"));
     const data = snap.data() || {};
-    const asIds = (value) => (Array.isArray(value) ? value.map(String) : []);
+    const asIds = (value) => {
+      const seen = new Set();
+      const out = [];
+      for (const raw of Array.isArray(value) ? value : []) {
+        const id = String(raw || "").trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        out.push(id);
+      }
+      return out;
+    };
     return {
       allowedUserIds: asIds(data.allowedUserIds),
       userIds: asIds(data.userIds),

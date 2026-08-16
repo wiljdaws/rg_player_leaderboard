@@ -82,13 +82,27 @@ export async function fillMissingAccessNames({
   return next;
 }
 
+// One Firebase uid covers every playlist. The first seed listed the same
+// person once per board they appeared on; collapse that here.
+export function uniqueAccessUids(ids) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of Array.isArray(ids) ? ids : []) {
+    const uid = normalizeAccessUid(raw);
+    if (!uid || seen.has(uid)) continue;
+    seen.add(uid);
+    out.push(uid);
+  }
+  return out;
+}
+
 export function decorateAccessLists({ allowed = [], banned = [], names = new Map() } = {}) {
   const nameOf = (uid) => names.get(uid) || "";
   return {
-    allowedRows: [...allowed].map(normalizeAccessUid).filter(Boolean)
+    allowedRows: uniqueAccessUids(allowed)
       .sort((a, b) => (nameOf(a) || a).localeCompare(nameOf(b) || b, undefined, { sensitivity: "base" }))
       .map((uid) => ({ uid, name: nameOf(uid), list: "allow" })),
-    bannedRows: [...banned].map(normalizeAccessUid).filter(Boolean)
+    bannedRows: uniqueAccessUids(banned)
       .sort((a, b) => (nameOf(a) || a).localeCompare(nameOf(b) || b, undefined, { sensitivity: "base" }))
       .map((uid) => ({ uid, name: nameOf(uid), list: "ban" })),
   };

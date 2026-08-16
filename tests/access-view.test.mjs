@@ -11,6 +11,7 @@ import {
   normalizeAccessUid,
   readCachedAccessNames,
   shortUid,
+  uniqueAccessUids,
   writeCachedAccessNames,
 } from "../js/access-view.js";
 
@@ -66,6 +67,28 @@ test("access name cache round-trips uid to display name", () => {
   writeCachedAccessNames(new Map([["uid-a", "Croxy"]]), storage);
   const loaded = readCachedAccessNames(storage);
   assert.equal(loaded.get("uid-a"), "Croxy");
+});
+
+test("uniqueAccessUids drops repeats and blank entries", () => {
+  assert.deepEqual(
+    uniqueAccessUids([" uid-a ", "uid-b", "uid-a", "", "uid-b"]),
+    ["uid-a", "uid-b"],
+  );
+});
+
+test("uniqueAccessUids keeps a player who was seeded from every playlist", () => {
+  const uid = "YpbPvklM3pOWp2h7MJFZrAPYM4m2";
+  assert.deepEqual(uniqueAccessUids([uid, uid, uid, uid]), [uid]);
+});
+
+test("decorateAccessLists shows one row per uid when the seed listed them twice", () => {
+  const { allowedRows, bannedRows } = decorateAccessLists({
+    allowed: ["uid-a", "uid-a", "uid-b"],
+    banned: ["uid-z", "uid-z"],
+    names: new Map([["uid-a", "Croxy"]]),
+  });
+  assert.equal(allowedRows.length, 2);
+  assert.equal(bannedRows.length, 1);
 });
 
 test("decorateAccessLists attaches published names and sorts by them", () => {
