@@ -20,6 +20,7 @@ import {
   writePlaylistCache,
 } from "./local-cache.js";
 import { createReadBudget } from "./read-budget.js";
+import { destinationPlayerDocId } from "./model.js";
 import { log } from "./log.js";
 
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
@@ -59,6 +60,9 @@ function describeError(error) {
   }
   if (code.includes("unavailable")) {
     return "Firebase is unreachable. Often this means a browser extension is blocking firestore.googleapis.com. Try an incognito window.";
+  }
+  if (/quota exceeded|resource-exhausted|RESOURCE_EXHAUSTED/i.test(`${code} ${message}`)) {
+    return "Firestore daily quota is used up. The save did not land — try again after it resets.";
   }
   return error?.message || "Firebase request failed.";
 }
@@ -775,8 +779,22 @@ export async function createFirebaseGateway() {
       }
       return addDoc(boardFor(payload?.playlist), stamped);
     }),
-    updatePlayer: (id, payload) => chargedWrite("updatePlayer", () =>
-      updateDoc(doc(db, collectionNameFor(payload?.playlist), id), { ...payload, lastWriteAt: serverTimestamp() })),
+    updatePlayer: (id, payload) => chargedWrite("updatePlayer", async () => {
+      const playlist = payload?.playlist;
+      const destId = destinationPlayerDocId(id, payload);
+      const stamped = { ...payload, lastWriteAt: serverTimestamp() };
+      const destRef = doc(db, collectionNameFor(playlist), destId);
+      if (destId !== id) {
+        await setDoc(destRef, stamped, { merge: true });
+        await setDoc(doc(db, collectionNameFor(playlist), id), {
+          deleted: true,
+          deletedAt: serverTimestamp(),
+          lastWriteAt: serverTimestamp(),
+        }, { merge: true });
+        return destRef;
+      }
+      return updateDoc(destRef, stamped);
+    }),
     // Soft delete: sets deleted:true instead of removing the doc. Uses
     // setDoc(merge:true) instead of updateDoc so a ghost row (previously
     // hard-deleted but still showing in a stale CDN JSON) gets a fresh

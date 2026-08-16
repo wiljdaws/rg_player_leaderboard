@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildPlayerPayload,
+  destinationPlayerDocId,
   filterPlayers,
   normalizePlayerDocument,
   normalizePlaylistRows,
@@ -279,6 +280,20 @@ test("filterPlayers matches case-insensitively", () => {
 test("winRate reports one-decimal percent", () => {
   assert.equal(winRate({ wins: 3, matches: 10 }), "30.0");
   assert.equal(winRate({ wins: 0, matches: 0 }), "0.0");
+});
+
+test("destinationPlayerDocId moves a manual row onto the RG user id slot", () => {
+  assert.equal(
+    destinationPlayerDocId("cS1hsU6H9OCoberjCSJZ", {
+      playlist: "1v1",
+      sourceUserId: "VBAVzD6bbJNyqUjPXiJ2tZHTIRe2",
+    }),
+    "VBAVzD6bbJNyqUjPXiJ2tZHTIRe2_1v1",
+  );
+  assert.equal(
+    destinationPlayerDocId("already_1v1", { playlist: "1v1" }),
+    "already_1v1",
+  );
 });
 
 test("buildPlayerPayload keeps comma-separated imgur icon URLs", () => {

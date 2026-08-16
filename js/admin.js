@@ -17,7 +17,12 @@ export class AdminWriteService {
   async run(label, operation, { hint = "", allowWhenPaused = false } = {}) {
     const allowed = allowWhenPaused ? this.isAdminAccount() : this.isAdmin();
     if (!allowed) {
-      setWriteStatus({ kind: "error", message: "Admin access is required for that change." });
+      setWriteStatus({
+        kind: "error",
+        message: this.isAdminAccount() && !allowWhenPaused
+          ? "Writes are paused. Turn pauseWrites off on admin/blacklist, then try Save again."
+          : "Admin access is required for that change.",
+      });
       return false;
     }
     clearTimeout(this._clearTimer);

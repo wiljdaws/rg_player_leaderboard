@@ -16,6 +16,7 @@ import { createPublishView } from "./publish-pipeline.js";
 import {
   buildIconPayload,
   buildPlayerPayload,
+  destinationPlayerDocId,
   normalizeIconKeyRows,
   normalizePlaylistRows,
   sortPlaylistRows,
@@ -459,6 +460,40 @@ function openPlayerDetails(player) {
   const dialog = $("playerDialog");
   if (dialog) dialog.dataset.playerId = "";
   syncPlayerDialog();
+}
+
+async function migrateUnsourcedNameSiblings({ name, uid, exceptPlaylist }) {
+  const target = String(name || "").trim();
+  if (!target || !uid || !gateway) return;
+  const playlists = ["1v1", "2v2", "3v3", "wins"].filter((playlist) => playlist !== exceptPlaylist);
+  await Promise.allSettled(playlists.map(async (playlist) => {
+    const url = STATIC_JSON_URL_TEMPLATE.replace("{playlist}", playlist);
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return;
+    const json = await response.json();
+    const row = (Array.isArray(json?.rows) ? json.rows : []).find((entry) => {
+      const entryName = String(entry?.name || "").trim();
+      const sourced = String(entry?.sourceUserId || "").trim();
+      return entryName === target && !sourced;
+    });
+    if (!row) return;
+    const oldId = String(row._docId || row.uid || "").trim();
+    if (!oldId || oldId === `${uid}_${playlist}`) return;
+    const payload = {
+      playlist,
+      sourceUserId: uid,
+      name: row.name,
+      flag: row.flag || "",
+      icons: typeof row.icons === "string" ? row.icons : Array.isArray(row.icons) ? row.icons.join(",") : "",
+    };
+    if (playlist === "wins") {
+      payload.wins = Number(row.wins);
+      payload.matches = Number(row.matches);
+    } else {
+      payload.mmr = Number(row.mmr);
+    }
+    await gateway.updatePlayer(oldId, payload);
+  }));
 }
 
 function openEdit(player) {
@@ -1181,22 +1216,33 @@ function wireEvents() {
         score: payload.score,
         matches: payload.matches,
       });
-      const saved = await writes?.updatePlayer(player.id, {
+      const updatePayload = {
         ...payload,
         playlist: player.playlist,
-      });
+      };
+      const destId = destinationPlayerDocId(player.id, updatePayload);
+      const attachedUid = typeof payload.sourceUserId === "string" ? payload.sourceUserId.trim() : "";
+      const saved = await writes?.updatePlayer(player.id, updatePayload);
       if (!saved) log.error("write", "update failed", new Error(`updatePlayer returned falsy for ${player.id}`));
-      else log.info("write", "update completed", { id: player.id, playlist: player.playlist });
+      else log.info("write", "update completed", { id: destId, playlist: player.playlist });
       if (saved) {
+        if (attachedUid) await writes?.addAllowedUserId(attachedUid);
+        if (attachedUid && !player.sourceUserId && player.playlist !== "tournament") {
+          await migrateUnsourcedNameSiblings({
+            name: player.name,
+            uid: attachedUid,
+            exceptPlaylist: player.playlist,
+          });
+        }
         clearAdminRosterCache();
         // Optimistic overlay: patch the edited row into state.rows and
         // re-sort so the admin sees their change without waiting for the
         // ~15-min publish cycle. The CDN update will replace this shortly
         // and normalizePlaylistRows will re-derive an identical row.
         if (state.playlist === player.playlist && player.playlist !== "tournament") {
-          const idx = state.rows.findIndex((r) => r.id === player.id);
+          const idx = state.rows.findIndex((r) => r.id === player.id || r.id === destId);
           if (idx >= 0) {
-            const patch = { ...state.rows[idx], name: payload.name };
+            const patch = { ...state.rows[idx], id: destId, name: payload.name };
             if (typeof payload.flag === "string") patch.flag = payload.flag;
             if (typeof payload.icons === "string") {
               // model stores icons as an array; payload has the comma string.
@@ -1232,7 +1278,7 @@ function wireEvents() {
         // playlist docs so a flag edit made in 1v1 shows up in 2v2/3v3/wins
         // too. Score fields stay per-playlist. Tournament rows have no
         // siblings.
-        if (player.sourceUserId && player.playlist !== "tournament") {
+        if ((attachedUid || player.sourceUserId) && player.playlist !== "tournament") {
           const cosmetic = {
             name: payload.name,
             flag: payload.flag,
@@ -1240,7 +1286,7 @@ function wireEvents() {
           };
           const siblingIds = ["1v1", "2v2", "3v3", "wins"]
             .filter((p) => p !== player.playlist)
-            .map((p) => `${player.sourceUserId}_${p}`);
+            .map((p) => `${attachedUid || player.sourceUserId}_${p}`);
           // Fire in parallel, ignore individual failures (a sibling doc may
           // simply not exist yet — e.g. the player never played that mode).
           await Promise.allSettled(

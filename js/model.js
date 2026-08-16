@@ -444,6 +444,17 @@ export function buildPlayerPayload(input, includePlaylist = true) {
   return payload;
 }
 
+// Manual admin rows live at a random Firestore id. Once an RG user id is
+// attached, HUD upserts and rules expect `{sourceUserId}_{playlist}`.
+export function destinationPlayerDocId(id, payload) {
+  const playlist = payload?.playlist;
+  const uid = typeof payload?.sourceUserId === "string" ? payload.sourceUserId.trim() : "";
+  if (uid && isPlaylist(playlist) && playlist !== "tournament") {
+    return `${uid}_${playlist}`;
+  }
+  return id;
+}
+
 export function buildIconPayload(input) {
   const label = typeof input?.label === "string" ? input.label.trim() : "";
   const icon = sanitizeHttpUrl(input?.icon);
