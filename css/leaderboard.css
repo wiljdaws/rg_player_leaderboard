@@ -1761,22 +1761,24 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 .access-lede{
   max-width:52ch;margin-top:10px;color:var(--ink-dim);font-size:16px;line-height:1.5;
 }
-.access-meters{display:flex;gap:12px}
+.access-meters{display:flex;gap:12px;flex-wrap:wrap}
 .access-meter{
-  min-width:108px;padding:14px 16px 12px;border-radius:14px;text-align:right;
+  min-width:124px;padding:14px 16px 12px;border-radius:14px;text-align:right;
   background:rgba(6,10,24,.45);border:1px solid var(--line);
 }
 .access-meter-count{
   display:block;font:700 32px/1 var(--display);font-variant-numeric:tabular-nums;
 }
 .access-meter-label{
-  display:block;margin-top:4px;font:600 11px var(--display);letter-spacing:.22em;text-transform:uppercase;
+  display:block;margin-top:4px;font:600 11px var(--display);letter-spacing:.14em;text-transform:uppercase;
   color:var(--ink-dim);
 }
 .access-meter-allow{box-shadow:inset 3px 0 0 var(--gain)}
 .access-meter-allow .access-meter-count{color:var(--gain)}
 .access-meter-ban{box-shadow:inset 3px 0 0 var(--loss)}
 .access-meter-ban .access-meter-count{color:var(--loss)}
+.access-meter-device{box-shadow:inset 3px 0 0 var(--gold)}
+.access-meter-device .access-meter-count{color:var(--gold)}
 
 .access-toolbar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .access-search{flex:1;min-width:min(100%,280px);display:flex;flex-direction:column;gap:6px}

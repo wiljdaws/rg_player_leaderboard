@@ -453,6 +453,19 @@ export async function createFirebaseGateway() {
   // announce it once so the admin widget can paint the red chip immediately.
   if (blocked) announceTrip(budget.snapshot());
 
+  async function chargedGetDoc(ref, label) {
+    try {
+      const snapshot = await getDoc(ref);
+      budget.charge(label, 1);
+      return snapshot;
+    } catch (err) {
+      if (String(err?.code ?? "").includes("permission-denied")) {
+        budget.chargeDeny(label);
+      }
+      throw err;
+    }
+  }
+
   async function chargedGetDocs(target, label) {
     try {
       const snapshot = await getDocs(target);
@@ -706,6 +719,12 @@ export async function createFirebaseGateway() {
       return control.allowedUserIds;
     },
     loadAccessControl: () => loadAccessControlDoc(),
+    loadScriptSubmission: async (uid) => {
+      const id = String(uid || "").trim();
+      if (!id) return null;
+      const snap = await chargedGetDoc(doc(db, "script_submissions", id), "accessNameLookup");
+      return snap.exists() ? snap.data() : null;
+    },
     addAllowedUserId: (uid) => chargedWrite("addAllowedUserId", () =>
       setDoc(doc(db, "admin", "blacklist"), {
         allowedUserIds: arrayUnion(uid),

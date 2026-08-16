@@ -26,6 +26,62 @@ export function filterAccessEntries(entries, query) {
   });
 }
 
+export function nameFromSubmission(data) {
+  if (!data || typeof data !== "object") return "";
+  const display = String(data.displayName || "").trim();
+  if (display) return display.slice(0, 80);
+  const raw = String(data.nickname || data.Nickname || "").trim();
+  if (!raw) return "";
+  return raw.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+const NAME_CACHE_KEY = "rgLB:accessNames:v1";
+const MISSING_NAME_LOOKUP_CAP = 12;
+
+export function readCachedAccessNames(storage = globalThis.localStorage) {
+  try {
+    const raw = JSON.parse(storage?.getItem?.(NAME_CACHE_KEY) || "{}");
+    if (!raw || typeof raw !== "object") return new Map();
+    return new Map(Object.entries(raw).filter(([uid, name]) => uid && name));
+  } catch {
+    return new Map();
+  }
+}
+
+export function writeCachedAccessNames(names, storage = globalThis.localStorage) {
+  try {
+    const obj = {};
+    for (const [uid, name] of names || []) {
+      if (uid && name) obj[uid] = name;
+    }
+    storage?.setItem?.(NAME_CACHE_KEY, JSON.stringify(obj));
+  } catch {
+    // Private mode / quota — names still live in memory for this session.
+  }
+}
+
+export async function fillMissingAccessNames({
+  uids = [],
+  names = new Map(),
+  lookup,
+  limit = MISSING_NAME_LOOKUP_CAP,
+} = {}) {
+  const next = new Map(names);
+  if (typeof lookup !== "function") return next;
+  const missing = [...new Set(uids.map(normalizeAccessUid).filter(Boolean))]
+    .filter((uid) => !next.get(uid))
+    .slice(0, Math.max(0, Number(limit) || 0));
+  await Promise.all(missing.map(async (uid) => {
+    try {
+      const name = nameFromSubmission(await lookup(uid));
+      if (name) next.set(uid, name);
+    } catch {
+      // Quota or a missing submission — row stays on the raw uid.
+    }
+  }));
+  return next;
+}
+
 export function decorateAccessLists({ allowed = [], banned = [], names = new Map() } = {}) {
   const nameOf = (uid) => names.get(uid) || "";
   return {
@@ -152,8 +208,9 @@ function paint(container, {
           }),
         ]),
         el("div", { className: "access-meters", attrs: { "aria-label": "List counts" } }, [
-          meter("Allowed", allowedRows.length, "allow"),
-          meter("Banned", bannedRows.length, "ban"),
+          meter("Allowed IDs", allowedRows.length, "allow"),
+          meter("Banned IDs", bannedRows.length, "ban"),
+          meter("Banned devices", (devices || []).length, "device"),
         ]),
       ]),
       el("div", { className: "access-toolbar" }, [
@@ -383,12 +440,24 @@ export function createAccessView({ gateway, writes } = {}) {
     error = "";
     render();
     try {
-      if (force || names.size === 0) names = await loadNameMap();
+      if (force || names.size === 0) {
+        const published = await loadNameMap();
+        const cached = readCachedAccessNames();
+        names = new Map([...cached, ...published]);
+      }
       const control = await gateway.loadAccessControl();
       if (token !== inflight || !active) return;
       allowed = control.allowedUserIds;
       banned = control.userIds;
       devices = control.deviceIds;
+      if (typeof gateway.loadScriptSubmission === "function") {
+        names = await fillMissingAccessNames({
+          uids: [...allowed, ...banned],
+          names,
+          lookup: (uid) => gateway.loadScriptSubmission(uid),
+        });
+        writeCachedAccessNames(names);
+      }
       loading = false;
       render();
     } catch (err) {
