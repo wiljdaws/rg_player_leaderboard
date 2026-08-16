@@ -37,8 +37,12 @@ export class AdminWriteService {
       // callers can grab the id. Default to true for the void case.
       return result === undefined ? true : result;
     } catch (error) {
-      setWriteStatus({ kind: "error", message: error?.message || `${label} failed.`, error });
-      this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 5000);
+      const raw = error?.message || `${label} failed.`;
+      const message = /quota exceeded|resource-exhausted|RESOURCE_EXHAUSTED/i.test(`${error?.code || ""} ${raw}`)
+        ? "Firestore daily quota is used up. The save did not land — try again after it resets."
+        : raw;
+      setWriteStatus({ kind: "error", message, error });
+      this._clearTimer = setTimeout(() => setWriteStatus({ kind: "idle", message: "" }), 12000);
       return false;
     }
   }

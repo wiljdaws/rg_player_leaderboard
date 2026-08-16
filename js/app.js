@@ -1186,8 +1186,15 @@ function wireEvents() {
   $("editForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!state.editingPlayer) return;
+    const player = state.editingPlayer;
+    const closeEdit = () => {
+      state.editingPlayer = null;
+      const dialog = $("editDialog");
+      if (dialog?.open) dialog.close();
+    };
     try {
       if (!writes) {
+        closeEdit();
         setWriteStatus({
           kind: "error",
           message: "Firebase is still loading. Try Save again in a second.",
@@ -1195,7 +1202,6 @@ function wireEvents() {
         return;
       }
       const rawValues = readFormValues($("editForm"));
-      const player = state.editingPlayer;
       // Tournament edits hide the Appearance section, and disabled inputs
       // are dropped from FormData. Without this, every edit would blank
       // the row's flag and icons. Re-inject them from the current row.
@@ -1222,6 +1228,7 @@ function wireEvents() {
       };
       const destId = destinationPlayerDocId(player.id, updatePayload);
       const attachedUid = typeof payload.sourceUserId === "string" ? payload.sourceUserId.trim() : "";
+      closeEdit();
       const saved = await writes?.updatePlayer(player.id, updatePayload);
       if (!saved) log.error("write", "update failed", new Error(`updatePlayer returned falsy for ${player.id}`));
       else log.info("write", "update completed", { id: destId, playlist: player.playlist });
@@ -1293,10 +1300,9 @@ function wireEvents() {
             siblingIds.map((id) => gateway.updatePlayer(id, cosmetic)),
           );
         }
-        state.editingPlayer = null;
-        $("editDialog").close();
       }
     } catch (error) {
+      closeEdit();
       handleValidationError(error);
     }
   });
