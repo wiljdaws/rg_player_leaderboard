@@ -379,6 +379,7 @@ export async function createFirebaseGateway() {
     updateDoc,
     arrayUnion,
     arrayRemove,
+    deleteField,
     where,
   } = firestoreMod;
 
@@ -735,13 +736,20 @@ export async function createFirebaseGateway() {
       const snap = await chargedGetDoc(doc(db, "script_submissions", id), "accessNameLookup");
       return snap.exists() ? snap.data() : null;
     },
-    addAllowedUserId: (uid) => chargedWrite("addAllowedUserId", () =>
-      setDoc(doc(db, "admin", "blacklist"), {
+    addAllowedUserId: (uid, deviceId) => chargedWrite("addAllowedUserId", () => {
+      const patch = {
         allowedUserIds: arrayUnion(uid),
         userIds: arrayRemove(uid),
-      }, { merge: true })),
+      };
+      const bound = String(deviceId || "").trim();
+      if (bound) patch.allowedDevices = { [uid]: bound };
+      return setDoc(doc(db, "admin", "blacklist"), patch, { merge: true });
+    }),
     removeAllowedUserId: (uid) => chargedWrite("removeAllowedUserId", () =>
-      setDoc(doc(db, "admin", "blacklist"), { allowedUserIds: arrayRemove(uid) }, { merge: true })),
+      setDoc(doc(db, "admin", "blacklist"), {
+        allowedUserIds: arrayRemove(uid),
+        allowedDevices: { [uid]: deleteField() },
+      }, { merge: true })),
     addBannedUserId: (uid) => chargedWrite("addBannedUserId", () =>
       setDoc(doc(db, "admin", "blacklist"), {
         userIds: arrayUnion(uid),
