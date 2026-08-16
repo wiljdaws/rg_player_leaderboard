@@ -11,9 +11,7 @@ import { MmrHistoryStore } from "./history.js";
 import { PlaylistListenerManager } from "./listener-manager.js";
 import { readAdminRosterCache, writeAdminRosterCache, clearAdminRosterCache, clearPlaylistCache } from "./local-cache.js";
 import { log } from "./log.js";
-import { createReadTelemetryUploader } from "./read-telemetry.js";
 import { createAccessView } from "./access-view.js";
-import { createReadsView } from "./reads-view.js";
 import { createPublishView } from "./publish-pipeline.js";
 import {
   buildIconPayload,
@@ -361,9 +359,7 @@ function render() {
   // Admin tabs don't have a per-playlist row count — swap the subline for
   // something contextual so the header doesn't try to pluralize a
   // playlist that isn't a real one.
-  if (state.playlist === "reads") {
-    setSubLine("Admin read insights.");
-  } else if (state.playlist === "publish") {
+  if (state.playlist === "publish") {
     setSubLine("Firestore → CDN sync health.");
   } else if (state.playlist === "access") {
     setSubLine("Allow and ban HUD accounts.");
@@ -495,11 +491,10 @@ function openEdit(player) {
 }
 
 function isAdminViewPlaylist(playlist) {
-  return playlist === "reads" || playlist === "publish" || playlist === "access";
+  return playlist === "publish" || playlist === "access";
 }
 
 function deactivateAdminViews() {
-  readsView?.deactivate();
   publishView?.deactivate();
   accessView?.deactivate();
 }
@@ -527,7 +522,6 @@ function activatePlaylist(playlist, { push = true, updateUrl = true } = {}) {
     if (iconKeyHost) iconKeyHost.hidden = true;
     const adminBoxHost = $("adminBox");
     if (adminBoxHost) adminBoxHost.hidden = true;
-    if (playlist === "reads") readsView?.activate();
     if (playlist === "publish") publishView?.activate();
     if (playlist === "access") accessView?.activate();
     if (updateUrl) urlState(push);
@@ -1016,7 +1010,6 @@ function wireTournamentQuickAdd() {
   });
 }
 
-let readsView = null;
 let publishView = null;
 let accessView = null;
 let lastRealPlaylist = "1v1";
@@ -1376,7 +1369,6 @@ async function boot() {
     isAdminAccount: () => state.admin,
     refreshIcons,
   });
-  readsView = createReadsView({ gateway });
   publishView = createPublishView();
   accessView = createAccessView({ gateway, writes });
 
@@ -1389,26 +1381,6 @@ async function boot() {
     const haltBanner = $("haltBanner");
     if (haltBanner) haltBanner.hidden = false;
   }
-
-  // Cross-session telemetry: every admin session pushes its read-budget
-  // snapshot to admin_read_stats/. Disabled with ?telemetry=off. Only starts
-  // once the auth-observer flips state.admin to true.
-  const telemetryDisabled = (() => {
-    try { return new URL(window.location.href).searchParams.get("telemetry") === "off"; }
-    catch { return false; }
-  })();
-  const readTelemetry = telemetryDisabled
-    ? { start() {}, stop() {}, upload: async () => {} }
-    : createReadTelemetryUploader({
-        gateway,
-        budget: gateway.readBudget,
-        isAdmin: () => state.admin,
-        // Captures which admin is signed in so the dashboard's Site
-        // Sessions table can distinguish Pal from JesusDied4U on the
-        // same site deployment. Only sent when we actually have a
-        // signed-in admin.
-        getAdminEmail: () => (state.admin && state.user?.email) || null,
-      });
 
   gateway.observeAuth((user) => {
     state.user = user;
@@ -1431,11 +1403,9 @@ async function boot() {
       : user
         ? "Signed in without admin access"
         : "";
-    // Reveal the admin-only Reads / Sync / Access tabs; hide + kick the
+    // Reveal the admin-only Sync / Access tabs; hide + kick the
     // user back to a real playlist if they were viewing one while their
     // admin session ended.
-    const readsTabEl = $("readsTab");
-    if (readsTabEl) readsTabEl.hidden = !state.admin;
     const publishTabEl = $("publishTab");
     if (publishTabEl) publishTabEl.hidden = !state.admin || state.writesPaused;
     const accessTabEl = $("accessTab");
@@ -1447,9 +1417,6 @@ async function boot() {
     if (state.admin) {
       loadVersionBreakdown();
       refreshAllowlist();
-      readTelemetry.start();
-    } else {
-      readTelemetry.stop();
     }
     syncReadBudgetWidget();
   });

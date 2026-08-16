@@ -106,7 +106,7 @@ h1{
 }
 .tab.active{background:linear-gradient(93deg,var(--grad-a),var(--grad-b));color:var(--ink)}
 .tab:focus-visible{outline:2px solid var(--grad-a);outline-offset:2px}
-/* Admin-only "Reads" tab. app.js reveals it on admin sign-in.
+/* Admin-only Sync / Access tabs. app.js reveals them on admin sign-in.
    Gold tint to distinguish from the regular playlist tabs. */
 .tab.tab-admin{color:var(--gold);letter-spacing:.22em}
 .tab.tab-admin.active{background:linear-gradient(93deg,var(--gold),var(--grad-a));color:var(--navy-0)}
