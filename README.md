@@ -1,46 +1,63 @@
 # Rocket Goal — Player Leaderboard
 
-Live competitive rankings for 1v1, 2v2, 3v3, and Wins. Reads the same
-`rgleaderboard` Firebase project the ATLAS userscript writes to and renders
-per-playlist standings live via `onSnapshot`.
+Live 1v1, 2v2, 3v3, and Wins standings for the Rocket Goal community. ATLAS
+writes match results; this site publishes them.
 
-## Structure
+**[Open the board](https://wiljdaws.github.io/rg_player_leaderboard/)**
+· [Clan Clash](https://wiljdaws.github.io/RG_Clan_Leaderboard/)
+· [Install ATLAS](https://github.com/wiljdaws/Tampermonkeys)
+· [Discord](https://discord.gg/MDz7hsrh9m)
+
+Visitors read published JSON. They do not list Firestore. Admins sign in with
+Google for Sync and Access (allow list, ban list, device bans).
+
+## How it works
+
+1. ATLAS writes a player's row after a match.
+2. The publisher in [Tampermonkeys](https://github.com/wiljdaws/Tampermonkeys)
+   writes JSON to the `data` branch.
+3. This site renders that JSON on GitHub Pages.
+
+Recent MMR chips and the “last hour” strip are computed in the browser from
+`localStorage`. They are not a second Firestore feed.
+
+## Local setup
+
+```bash
+npm start   # http://localhost:5173
+npm test
+```
+
+No build step. Push to `main` and GitHub Pages updates.
+
+## Layout
 
 ```
 index.html              page shell
-css/leaderboard.css     all styling (design tokens in :root)
-js/config.js            Firebase config + playlists + row limit + admin allowlist
-js/firebase.js          CDN import, gateway, playlist listener with fallback
-js/listener-manager.js  activate/pause/reconnect the visible playlist listener
-js/local-cache.js       last-known playlist rows kept in localStorage
-js/model.js             sanitize + normalize player docs
-js/history.js           per-player MMR history, 60-minute rolling window
-js/momentum.js          "last hour" delta per player
-js/render.js            podium, recent-gains strip, table, icon key, dialogs
-js/admin.js             add/edit/delete forms, icon key management
-js/app.js               boot + Firebase listener + tab lifecycle
+privacy.html            privacy policy
+terms.html              terms of use
+css/leaderboard.css     design tokens and layout
+js/app.js               boot, tabs, admin actions
+js/access-view.js       allow / ban / device lists
+js/firebase.js          auth, published JSON, admin writes
+js/render.js            podium, table, dialogs
+js/model.js             sanitize player rows
+js/history.js           60-minute local MMR window
+js/momentum.js          last-hour delta
 ```
 
-## Recent MMR gains
+## Related
 
-The site keeps a per-player MMR history in `localStorage` (60-minute rolling
-window, one entry per snapshot). The "🔥 last hour" chips and the "Recent MMR
-gains" strip are computed from that browser-local history — no schema change to
-Firestore. Ported line-for-line from the clan leaderboard.
+- [ATLAS HUD](https://github.com/wiljdaws/Tampermonkeys)
+- [Clan Clash Cup](https://github.com/wiljdaws/RG_Clan_Leaderboard)
 
-## Firestore indexes
+## Community
 
-Only the visible playlist has a live listener. Each listener uses a playlist
-filter, descending score order, and a 100-row limit.
+This is a fan project. It is not affiliated with Rocket Goal.
 
-Required composite indexes on `leaderboard`:
-
-- `playlist` ascending + `mmr` descending
-- `playlist` ascending + `wins` descending
-
-If the index is not ready, the page transparently falls back to a one-time,
-scoped read instead of hiding all otherwise valid rows.
-
-## Deploy
-
-No build step. Push to GitHub Pages (or drop into any static host).
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)
+- [MIT License](LICENSE)
+- [Privacy](https://wiljdaws.github.io/rg_player_leaderboard/privacy.html)
+- [Terms](https://wiljdaws.github.io/rg_player_leaderboard/terms.html)
