@@ -80,13 +80,18 @@ export function sanitizePublicImageUrl(value) {
   }
 }
 
+function iconCandidates(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 function normalizeIcons(value) {
-  const candidates = Array.isArray(value)
-    ? value
-    : typeof value === "string"
-      ? value.split(",")
-      : [];
-  return candidates.slice(0, 12).map(sanitizePublicImageUrl).filter(Boolean);
+  return iconCandidates(value).slice(0, 12).map(sanitizePublicImageUrl).filter(Boolean);
 }
 
 function normalizeUpdatedAt(value) {
@@ -207,6 +212,65 @@ export function normalizePlayerDocument(raw, expectedPlaylist) {
   };
 }
 
+function bareLeaderboardName(name) {
+  return String(name || "")
+    .trim()
+    .replace(/^\[[^\]]+\]\s*/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function playerWriteAt(player) {
+  const date = player?.provenance?.updatedAt;
+  if (date instanceof Date && !Number.isNaN(date.getTime())) return date.getTime();
+  return 0;
+}
+
+function preferPlaylistTwin(current, candidate, playlist) {
+  const currentAt = playerWriteAt(current);
+  const candidateAt = playerWriteAt(candidate);
+  if (candidateAt !== currentAt) return candidateAt > currentAt;
+  const field = playlist === "wins" ? "wins" : playlist === "tournament" ? "score" : "mmr";
+  return Number(candidate[field]) > Number(current[field]);
+}
+
+function absorbPlaylistTwin(winner, loser) {
+  const out = { ...winner };
+  if (!out.flag && loser.flag) out.flag = loser.flag;
+  if ((!out.icons || !out.icons.length) && loser.icons?.length) out.icons = loser.icons;
+  const winnerTagged = /^\[[^\]]+\]\s*/.test(String(winner.name || "").trim());
+  const loserTagged = /^\[[^\]]+\]\s*/.test(String(loser.name || "").trim());
+  if (!winnerTagged && loserTagged
+      && bareLeaderboardName(winner.name) === bareLeaderboardName(loser.name)) {
+    out.name = loser.name;
+  }
+  return out;
+}
+
+function collapsePlaylistTwins(rows, playlist) {
+  const kept = new Map();
+  const leftovers = [];
+  for (const row of rows) {
+    const key = bareLeaderboardName(row.name);
+    if (!key) {
+      leftovers.push(row);
+      continue;
+    }
+    const existing = kept.get(key);
+    if (!existing) {
+      kept.set(key, row);
+      continue;
+    }
+    if (preferPlaylistTwin(existing, row, playlist)) {
+      kept.set(key, absorbPlaylistTwin(row, existing));
+    } else {
+      kept.set(key, absorbPlaylistTwin(existing, row));
+    }
+  }
+  return [...kept.values(), ...leftovers];
+}
+
 export function normalizePlaylistRows(rawRows, playlist) {
   const rows = [];
   const quarantined = [];
@@ -226,8 +290,9 @@ export function normalizePlaylistRows(rawRows, playlist) {
     rows.push(result.player);
   }
 
-  sortPlaylistRows(rows, playlist);
-  return { rows, quarantined };
+  const collapsed = collapsePlaylistTwins(rows, playlist);
+  sortPlaylistRows(collapsed, playlist);
+  return { rows: collapsed, quarantined };
 }
 
 // Mirror the publisher's sort so live and static ranks agree. Exported
@@ -300,7 +365,12 @@ export function buildPlayerPayload(input, includePlaylist = true) {
   if (!isPlaylist(playlist)) throw new Error("Choose a valid playlist.");
   if (!name || name.length > MAX_NAME_LENGTH) throw new Error("Enter a player name up to 80 characters.");
 
-  const icons = normalizeIcons(input.icons).join(",");
+  const typedIcons = iconCandidates(input.icons).slice(0, 12);
+  const iconsList = typedIcons.map(sanitizePublicImageUrl).filter(Boolean);
+  if (typedIcons.length && iconsList.length < typedIcons.length) {
+    throw new Error("Icon URLs must be https links from i.imgur.com, imgur.com, or upload.wikimedia.org.");
+  }
+  const icons = iconsList.join(",");
   const rawFlag = typeof input.flag === "string" ? input.flag.trim() : "";
   const flag = sanitizeHttpUrl(canonicalFlagUrl(rawFlag));
   if (rawFlag && !flag) throw new Error("Flag URL must use http or https.");

@@ -849,22 +849,11 @@ export async function createFirebaseGateway() {
     // specific features. Merge-write so periodic polls keep updating the
     // same doc without re-creating it. Rules restrict this collection to
     // admin writers.
-    setReadStat: (docKey, payload) => chargedWrite("setReadStat", () =>
-      setDoc(doc(db, "admin_read_stats", docKey), payload, { merge: true })),
-    // Query the admin_read_stats collection for a date range. Both `from`
-    // and `to` are inclusive `YYYY-MM-DD` strings; the field they compare
-    // against is a string, and `YYYY-MM-DD` sorts lexicographically the
-    // same way it sorts chronologically, so `>=` / `<=` are safe. This is
-    // the read half of the "Reads" admin dashboard — the write half is
-    // setReadStat above. Charged reads use the "readStatsQuery" label so
-    // opening the dashboard shows up cleanly in the read budget breakdown.
-    fetchAdminReadStats: async (from, to) => {
-      const snapshot = await chargedGetDocs(
-        query(adminReadStats, where("date", ">=", from), where("date", "<=", to)),
-        "readStatsQuery",
-      );
-      return rawDocuments(snapshot);
-    },
+    setReadStat: async () => false,
+    // Live date-range scans of admin_read_stats blew Spark. The Reads
+    // tab is gone; these stay as no-ops so a leftover caller cannot
+    // start that query again.
+    fetchAdminReadStats: async () => [],
     // Preferred by createReadStatsQuery; the chargedGetDocs paths above
     // stay as the fallback.
     fetchReadStatsSnapshot: async () => {
@@ -880,34 +869,16 @@ export async function createFirebaseGateway() {
     // the running totals for the HUD's session, not per-window counters,
     // so aggregation should treat them as latest-known-state, not sums
     // over time. Charged with the "hudStatsQuery" label.
-    fetchHudReadStats: async (from, to) => {
-      const snapshot = await chargedGetDocs(
-        query(hudReadStats, where("date", ">=", from), where("date", "<=", to)),
-        "hudStatsQuery",
-      );
-      return rawDocuments(snapshot);
-    },
+    fetchHudReadStats: async () => [],
     // Firestore-project-wide totals written every 3h by the Cloud Monitoring
     // cron (see Tampermonkeys/firebase/scripts/fetch-firestore-usage.mjs).
     // One doc per UTC day; delta from our attributed reads = untracked
     // (Pal's site + old HUDs + scrapers). Charged with a distinct label so
     // the dashboard's per-label breakdown shows what the dashboard itself
     // costs to open.
-    fetchReadStatsTotal: async (from, to) => {
-      const snapshot = await chargedGetDocs(
-        query(readStatsTotal, where("date", ">=", from), where("date", "<=", to)),
-        "totalStatsQuery",
-      );
-      return rawDocuments(snapshot);
-    },
+    fetchReadStatsTotal: async () => [],
     // Anonymous clan-page browsers upload here. One doc per visitor session
     // per day. Rules gate on shape + deviceId, no auth required.
-    fetchVisitorReadStats: async (from, to) => {
-      const snapshot = await chargedGetDocs(
-        query(visitorReadStats, where("date", ">=", from), where("date", "<=", to)),
-        "visitorStatsQuery",
-      );
-      return rawDocuments(snapshot);
-    },
+    fetchVisitorReadStats: async () => [],
   };
 }

@@ -155,6 +155,37 @@ test("normalizePlaylistRows is stable across shuffled inputs", () => {
   assert.deepEqual(second, first);
 });
 
+test("normalizePlaylistRows collapses tagged and untagged HUD twins", () => {
+  const { rows } = normalizePlaylistRows(
+    [
+      {
+        id: "cemz_3v3",
+        playlist: "3v3",
+        name: "[KING] JesusDied4U",
+        sourceUserId: "cemz",
+        mmr: 8508,
+        flag: "https://i.imgur.com/saBa4s8.png",
+        icons: "https://i.imgur.com/VopY1JE.png",
+      },
+      {
+        id: "szfb_3v3",
+        playlist: "3v3",
+        name: "JesusDied4U",
+        sourceUserId: "szfb",
+        mmr: 8650,
+        lastWriteAt: "2026-08-16T16:20:00Z",
+      },
+    ],
+    "3v3",
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, "szfb_3v3");
+  assert.equal(rows[0].mmr, 8650);
+  assert.equal(rows[0].name, "[KING] JesusDied4U");
+  assert.equal(rows[0].flag, "https://i.imgur.com/saBa4s8.png");
+  assert.deepEqual(rows[0].icons, ["https://i.imgur.com/VopY1JE.png"]);
+});
+
 test("normalizePlaylistRows sorts descending by score and quarantines duplicates", () => {
   const { rows, quarantined } = normalizePlaylistRows(
     [
@@ -181,6 +212,32 @@ test("filterPlayers matches case-insensitively", () => {
 test("winRate reports one-decimal percent", () => {
   assert.equal(winRate({ wins: 3, matches: 10 }), "30.0");
   assert.equal(winRate({ wins: 0, matches: 0 }), "0.0");
+});
+
+test("buildPlayerPayload keeps comma-separated imgur icon URLs", () => {
+  const payload = buildPlayerPayload({
+    playlist: "3v3",
+    name: "Romance anime a",
+    mmr: 4819,
+    icons: "https://i.imgur.com/VopY1JE.png,https://i.imgur.com/5VVlaO7.png",
+  });
+  assert.equal(
+    payload.icons,
+    "https://i.imgur.com/VopY1JE.png,https://i.imgur.com/5VVlaO7.png",
+  );
+});
+
+test("buildPlayerPayload rejects Discord icon URLs instead of silently dropping them", () => {
+  assert.throws(
+    () =>
+      buildPlayerPayload({
+        playlist: "1v1",
+        name: "A",
+        mmr: 1000,
+        icons: "https://cdn.discordapp.com/attachments/1/2/icon.png",
+      }),
+    /imgur\.com/,
+  );
 });
 
 test("buildPlayerPayload rejects invalid flag URL", () => {

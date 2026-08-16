@@ -1141,6 +1141,13 @@ function wireEvents() {
     loadVersionBreakdown({ force: true });
   });
 
+  $("editForm").addEventListener("invalid", (event) => {
+    event.preventDefault();
+    handleValidationError({
+      message: event.target?.validationMessage || "Check the form and try again.",
+    });
+  }, true);
+
   $("editForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!state.editingPlayer) return;

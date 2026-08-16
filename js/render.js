@@ -897,6 +897,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   searchWrap.className = "flag-search";
   const search = document.createElement("input");
   search.type = "search";
+  search.className = "flag-search-input";
   search.placeholder = "Search flags…";
   search.autocomplete = "off";
   search.setAttribute("aria-label", "Search flags");
@@ -915,10 +916,12 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   customRow.className = "flag-custom";
   customRow.hidden = true;
   const customInput = document.createElement("input");
-  customInput.type = "url";
+  // type=text, not url. A hidden type=url (even empty) fails native
+  // submit in Safari/Chrome with no visible tooltip, so Save looks dead.
+  // commitCustomUrl() already checks http(s).
+  customInput.type = "text";
+  customInput.inputMode = "url";
   customInput.placeholder = "https://…/flag.svg";
-  // Hidden url inputs still fail native form submit. Keep this disabled
-  // until the admin actually opens "+ Add new flag URL…".
   customInput.autocomplete = "off";
   customInput.className = "flag-custom-input";
   customInput.disabled = true;
@@ -1088,6 +1091,7 @@ export function hydrateFlagPicker(root, { currentValue = "", directory, onNewFla
   function openMenu() {
     menu.hidden = false;
     setCustomRowOpen(false);
+    search.disabled = false;
     trigger.setAttribute("aria-expanded", "true");
     root.classList.add("open");
     drawOptions();

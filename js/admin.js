@@ -139,6 +139,15 @@ export function togglePlaylistFields(form, playlist) {
     const hidden = playlist === "tournament";
     section.hidden = hidden;
     for (const input of section.querySelectorAll("input, select")) {
+      const inPicker = input.closest("[data-flag-picker], .flag-picker");
+      if (inPicker && input.name !== "flag") {
+        // Never re-enable picker chrome (search / add-URL / country) when
+        // showing Appearance. Enabling a hidden type=url (or leftover
+        // add-row value) blocks native submit with no error in the dialog.
+        // hydrateFlagPicker owns those disabled flags.
+        if (hidden) input.disabled = true;
+        continue;
+      }
       input.disabled = hidden;
     }
   }
