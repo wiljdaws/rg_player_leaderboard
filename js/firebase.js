@@ -740,25 +740,26 @@ export async function createFirebaseGateway() {
       const snap = await chargedGetDoc(doc(db, "script_submissions", id), "accessNameLookup");
       return snap.exists() ? snap.data() : null;
     },
-    addAllowedUserId: (uid, deviceId) => chargedWrite("addAllowedUserId", () => {
-      const patch = {
-        allowedUserIds: arrayUnion(uid),
-        userIds: arrayRemove(uid),
-      };
+    addAllowedUserId: (uid, deviceId) => chargedWrite("addAllowedUserId", async () => {
+      const ref = doc(db, "admin", "blacklist");
+      // Same-write arrayUnion + arrayRemove was a no-op on userIds, so
+      // Allow left people on the ban list. Ban still wins in rules.
+      await setDoc(ref, { userIds: arrayRemove(uid) }, { merge: true });
+      const patch = { allowedUserIds: arrayUnion(uid) };
       const bound = String(deviceId || "").trim();
       if (bound) patch.allowedDevices = { [uid]: bound };
-      return setDoc(doc(db, "admin", "blacklist"), patch, { merge: true });
+      return setDoc(ref, patch, { merge: true });
     }),
     removeAllowedUserId: (uid) => chargedWrite("removeAllowedUserId", () =>
       setDoc(doc(db, "admin", "blacklist"), {
         allowedUserIds: arrayRemove(uid),
         allowedDevices: { [uid]: deleteField() },
       }, { merge: true })),
-    addBannedUserId: (uid) => chargedWrite("addBannedUserId", () =>
-      setDoc(doc(db, "admin", "blacklist"), {
-        userIds: arrayUnion(uid),
-        allowedUserIds: arrayRemove(uid),
-      }, { merge: true })),
+    addBannedUserId: (uid) => chargedWrite("addBannedUserId", async () => {
+      const ref = doc(db, "admin", "blacklist");
+      await setDoc(ref, { allowedUserIds: arrayRemove(uid) }, { merge: true });
+      return setDoc(ref, { userIds: arrayUnion(uid) }, { merge: true });
+    }),
     removeBannedUserId: (uid) => chargedWrite("removeBannedUserId", () =>
       setDoc(doc(db, "admin", "blacklist"), { userIds: arrayRemove(uid) }, { merge: true })),
     addBannedDeviceId: (id) => chargedWrite("addBannedDeviceId", () =>

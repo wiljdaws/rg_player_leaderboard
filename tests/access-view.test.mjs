@@ -135,6 +135,22 @@ test("uniqueAccessUids keeps a player who was seeded from every playlist", () =>
   assert.deepEqual(uniqueAccessUids([uid, uid, uid, uid]), [uid]);
 });
 
+test("decorateAccessLists still shows a uid that is on both lists", () => {
+  const { allowedRows, bannedRows } = decorateAccessLists({
+    allowed: ["yama"],
+    banned: ["yama"],
+    names: new Map([["yama", "YamaJax"]]),
+  });
+  assert.equal(allowedRows.length, 1);
+  assert.equal(bannedRows.length, 1);
+});
+
+test("Allow writes drop the uid from the ban list before adding it to allow", async () => {
+  const src = await readFile(join(root, "js/firebase.js"), "utf8");
+  assert.match(src, /userIds: arrayRemove\(uid\)[\s\S]*allowedUserIds: arrayUnion\(uid\)/);
+  assert.match(src, /await setDoc\(ref, \{ userIds: arrayRemove\(uid\) \}/);
+});
+
 test("decorateAccessLists shows one row per uid when the seed listed them twice", () => {
   const { allowedRows, bannedRows } = decorateAccessLists({
     allowed: ["uid-a", "uid-a", "uid-b"],
