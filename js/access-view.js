@@ -9,6 +9,42 @@ export function normalizeAccessUid(value) {
   return String(value ?? "").trim();
 }
 
+export const ZERO_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
+
+export function normalizeAccessDeviceId(value) {
+  return String(value ?? "").trim();
+}
+
+export function isBindableDeviceId(value) {
+  const id = normalizeAccessDeviceId(value);
+  return id.length >= 8 && id !== ZERO_DEVICE_ID;
+}
+
+export function parseAllowCredentials(uidValue, deviceValue) {
+  const uid = normalizeAccessUid(uidValue);
+  const deviceId = normalizeAccessDeviceId(deviceValue);
+  if (!uid) return { error: "Paste their Firebase id." };
+  if (!deviceId) return { error: "Paste their Device id too. Writes fail without a pin." };
+  if (deviceId === ZERO_DEVICE_ID) return { error: "That Device id is the all-zero UUID. Don't pin it." };
+  if (deviceId.length < 8) return { error: "That Device id looks too short." };
+  return { uid, deviceId };
+}
+
+export function readAllowedDevicePins(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [uid, device] of Object.entries(raw)) {
+    const id = normalizeAccessUid(uid);
+    const pin = normalizeAccessDeviceId(device);
+    if (id && isBindableDeviceId(pin)) out[id] = pin;
+  }
+  return out;
+}
+
+export function unpinnedAccessCount(rows) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => !row?.pinned).length;
+}
+
 export function shortUid(uid) {
   const id = normalizeAccessUid(uid);
   if (id.length <= 16) return id;
@@ -22,7 +58,8 @@ export function filterAccessEntries(entries, query) {
   return rows.filter((row) => {
     const uid = String(row?.uid || "").toLowerCase();
     const name = String(row?.name || "").toLowerCase();
-    return uid.includes(q) || name.includes(q);
+    const deviceId = String(row?.deviceId || "").toLowerCase();
+    return uid.includes(q) || name.includes(q) || deviceId.includes(q);
   });
 }
 
@@ -116,15 +153,27 @@ export function uniqueAccessUids(ids) {
   return out;
 }
 
-export function decorateAccessLists({ allowed = [], banned = [], names = new Map() } = {}) {
+export function decorateAccessLists({ allowed = [], banned = [], names = new Map(), pins = {} } = {}) {
   const nameOf = (uid) => names.get(uid) || "";
+  const pinOf = (uid) => (isBindableDeviceId(pins[uid]) ? pins[uid] : "");
+  const decorate = (uid, list) => ({
+    uid,
+    name: nameOf(uid),
+    list,
+    deviceId: pinOf(uid),
+    pinned: Boolean(pinOf(uid)),
+  });
+  const byName = (a, b) => (nameOf(a) || a).localeCompare(nameOf(b) || b, undefined, { sensitivity: "base" });
   return {
     allowedRows: uniqueAccessUids(allowed)
-      .sort((a, b) => (nameOf(a) || a).localeCompare(nameOf(b) || b, undefined, { sensitivity: "base" }))
-      .map((uid) => ({ uid, name: nameOf(uid), list: "allow" })),
+      .sort((a, b) => {
+        const pinGap = Number(Boolean(pinOf(a))) - Number(Boolean(pinOf(b)));
+        return pinGap || byName(a, b);
+      })
+      .map((uid) => decorate(uid, "allow")),
     bannedRows: uniqueAccessUids(banned)
-      .sort((a, b) => (nameOf(a) || a).localeCompare(nameOf(b) || b, undefined, { sensitivity: "base" }))
-      .map((uid) => ({ uid, name: nameOf(uid), list: "ban" })),
+      .sort(byName)
+      .map((uid) => decorate(uid, "ban")),
   };
 }
 
@@ -177,12 +226,16 @@ function paint(container, {
   query,
   loading,
   error,
+  formError,
+  drafts,
   onAllow,
   onBan,
   onRemoveAllow,
   onRemoveBan,
   onBanDevice,
   onRemoveDevice,
+  onRequestAllow,
+  onDraft,
   onQuery,
   onRefresh,
 }) {
@@ -192,43 +245,65 @@ function paint(container, {
     className: "access-search-input",
     type: "search",
     value: query,
-    placeholder: "Search a name or uid…",
+    placeholder: "Search a name, uid, or device…",
     attrs: { "aria-label": "Filter allow and ban lists" },
     onInput: (event) => onQuery(event.target.value),
   });
 
-  const allowInput = el("input", {
+  const allowUidInput = el("input", {
     className: "access-uid-input",
     type: "text",
     autocomplete: "off",
     spellcheck: false,
-    placeholder: "Paste their Firebase uid",
-    attrs: { maxlength: "128", "aria-label": "Uid to allow" },
+    value: drafts?.allowUid || "",
+    placeholder: "Firebase id from ATLAS settings",
+    attrs: { maxlength: "128", "aria-label": "Firebase id to allow" },
+    onInput: (event) => onDraft("allowUid", event.target.value),
+  });
+  const allowDeviceInput = el("input", {
+    className: "access-uid-input",
+    type: "text",
+    autocomplete: "off",
+    spellcheck: false,
+    value: drafts?.allowDevice || "",
+    placeholder: "Device id from the row below it",
+    attrs: { maxlength: "128", "aria-label": "Device id to pin" },
+    onInput: (event) => onDraft("allowDevice", event.target.value),
   });
   const banInput = el("input", {
     className: "access-uid-input",
     type: "text",
     autocomplete: "off",
     spellcheck: false,
+    value: drafts?.banUid || "",
     placeholder: "Paste a uid to lock out",
     attrs: { maxlength: "128", "aria-label": "Uid to ban" },
+    onInput: (event) => onDraft("banUid", event.target.value),
   });
-  const deviceInput = el("input", {
+  const bannedDeviceInput = el("input", {
     className: "access-uid-input",
     type: "text",
     autocomplete: "off",
     spellcheck: false,
+    value: drafts?.banDevice || "",
     placeholder: "Device id",
     attrs: { maxlength: "128", "aria-label": "Device id to ban" },
+    onInput: (event) => onDraft("banDevice", event.target.value),
   });
 
-  const submitUid = (input, handler) => (event) => {
+  const submitUid = (field, handler) => (event) => {
     event.preventDefault();
-    const uid = normalizeAccessUid(input.value);
+    const uid = normalizeAccessUid(drafts?.[field] || "");
     if (!uid) return;
     handler(uid);
-    input.value = "";
   };
+
+  const submitAllow = (event) => {
+    event.preventDefault();
+    onAllow(drafts?.allowUid, drafts?.allowDevice);
+  };
+
+  const unpinned = unpinnedAccessCount(allowedRows);
 
   container.append(
     el("div", { className: "access-shell" }, [
@@ -238,11 +313,12 @@ function paint(container, {
           el("h2", { className: "access-title", text: "Who gets through" }),
           el("p", {
             className: "access-lede",
-            text: "Allow a uid and they can write the live board. Ban one and ATLAS stops cold. Allowing someone unbans them. Banning someone drops them off the allow list.",
+            text: "They DM both ids from ATLAS settings. Paste both here. A uid with no device pin still cannot write. Allowing someone unbans them. Banning someone drops them off the allow list.",
           }),
         ]),
         el("div", { className: "access-meters", attrs: { "aria-label": "List counts" } }, [
           meter("Allowed IDs", allowedRows.length, "allow"),
+          meter("Needs pin", unpinned, "pin"),
           meter("Banned IDs", bannedRows.length, "ban"),
           meter("Banned devices", (devices || []).length, "device"),
         ]),
@@ -268,27 +344,40 @@ function paint(container, {
           tone: "allow",
           kicker: "Cleared",
           title: "Allow list",
-          hint: "HUD 19.9 → Settings → Copy. Then paste here.",
-          input: allowInput,
-          actionLabel: "Allow this uid",
-          onSubmit: submitUid(allowInput, onAllow),
+          hint: "Settings → Firebase id and Device id. Both required.",
+          form: el("form", { className: "access-add access-add-allow", onSubmit: submitAllow }, [
+            el("label", { className: "access-field" }, [
+              el("span", { className: "access-field-label", text: "Firebase id" }),
+              allowUidInput,
+            ]),
+            el("label", { className: "access-field" }, [
+              el("span", { className: "access-field-label", text: "Device id" }),
+              allowDeviceInput,
+            ]),
+            formError
+              ? el("p", { className: "access-form-error", text: formError, attrs: { role: "alert" } })
+              : null,
+            el("button", { className: "admin-primary", type: "submit", text: "Allow and pin" }),
+          ]),
           rows: filterAccessEntries(allowedRows, query),
           empty: query ? "No allowed uid matches that search." : "Nobody is allowed yet. The live board will not take HUD writes.",
           onMove: onBan,
           moveLabel: "Ban",
           onRemove: onRemoveAllow,
+          onPin: onRequestAllow,
         }),
         gate({
           tone: "ban",
           kicker: "Denied",
           title: "Ban list",
           hint: "Writes die even if they still have the HUD.",
-          input: banInput,
-          actionLabel: "Ban this uid",
-          onSubmit: submitUid(banInput, onBan),
+          form: el("form", { className: "access-add", onSubmit: submitUid("banUid", onBan) }, [
+            banInput,
+            el("button", { className: "admin-danger", type: "submit", text: "Ban this uid" }),
+          ]),
           rows: filterAccessEntries(bannedRows, query),
           empty: query ? "No banned uid matches that search." : "No uid bans. Attack leftovers go here.",
-          onMove: onAllow,
+          onMove: onRequestAllow,
           moveLabel: "Allow",
           onRemove: onRemoveBan,
         }),
@@ -299,8 +388,8 @@ function paint(container, {
             el("span", { className: "access-kicker", text: "Hardware" }),
             el("h3", { className: "access-devices-title", text: "Banned devices" }),
           ]),
-          el("form", { className: "access-add", onSubmit: submitUid(deviceInput, onBanDevice) }, [
-            deviceInput,
+          el("form", { className: "access-add", onSubmit: submitUid("banDevice", onBanDevice) }, [
+            bannedDeviceInput,
             el("button", { className: "admin-danger", type: "submit", text: "Ban device" }),
           ]),
         ]),
@@ -333,14 +422,13 @@ function gate({
   kicker,
   title,
   hint,
-  input,
-  actionLabel,
-  onSubmit,
+  form,
   rows,
   empty,
   onMove,
   moveLabel,
   onRemove,
+  onPin,
 }) {
   return el("section", { className: `access-gate access-gate-${tone}` }, [
     el("div", { className: "access-gate-head" }, [
@@ -348,45 +436,59 @@ function gate({
       el("h3", { className: "access-gate-title", text: title }),
       el("p", { className: "access-gate-hint", text: hint }),
     ]),
-    el("form", { className: "access-add", onSubmit }, [
-      input,
-      el("button", {
-        className: tone === "allow" ? "admin-primary" : "admin-danger",
-        type: "submit",
-        text: actionLabel,
-      }),
-    ]),
+    form,
     rows.length
-      ? el("ul", { className: "access-list" }, rows.map((row) => accessRow(row, { onMove, moveLabel, onRemove })))
+      ? el("ul", { className: "access-list" }, rows.map((row) => accessRow(row, { onMove, moveLabel, onRemove, onPin })))
       : el("p", { className: "access-empty", text: empty }),
   ]);
 }
 
-function accessRow(row, { onMove, moveLabel, onRemove }) {
+function copyButton(label, value, ariaLabel) {
   const copy = el("button", {
     className: "access-icon-btn",
     type: "button",
-    text: "Copy",
-    title: "Copy uid",
-    attrs: { "aria-label": `Copy ${row.uid}` },
+    text: label,
+    title: ariaLabel,
+    attrs: { "aria-label": ariaLabel },
     onClick: async () => {
       try {
-        await navigator.clipboard.writeText(row.uid);
+        await navigator.clipboard.writeText(value);
         copy.textContent = "Copied";
-        setTimeout(() => { copy.textContent = "Copy"; }, 1200);
+        setTimeout(() => { copy.textContent = label; }, 1200);
       } catch {
         copy.textContent = "Failed";
-        setTimeout(() => { copy.textContent = "Copy"; }, 1200);
+        setTimeout(() => { copy.textContent = label; }, 1200);
       }
     },
   });
-  return el("li", { className: "access-row" }, [
+  return copy;
+}
+
+function accessRow(row, { onMove, moveLabel, onRemove, onPin }) {
+  const pinMissing = row.list === "allow" && !row.pinned;
+  return el("li", { className: `access-row${pinMissing ? " access-row-unpinned" : ""}` }, [
     el("div", { className: "access-row-id" }, [
       el("strong", { className: "access-row-name", text: row.name || "Unknown player" }),
       el("code", { className: "access-row-uid", text: shortUid(row.uid), title: row.uid }),
+      row.list === "allow"
+        ? el("span", {
+          className: `access-pin ${row.pinned ? "access-pin-ok" : "access-pin-missing"}`,
+          text: row.pinned ? `Pinned ${shortUid(row.deviceId)}` : "Needs pin",
+          title: row.deviceId || "No device pin",
+        })
+        : null,
     ]),
     el("div", { className: "access-row-actions" }, [
-      copy,
+      copyButton("Copy", row.uid, `Copy ${row.uid}`),
+      row.pinned ? copyButton("Device", row.deviceId, `Copy device ${row.deviceId}`) : null,
+      pinMissing
+        ? el("button", {
+          className: "access-icon-btn access-pin-btn",
+          type: "button",
+          text: "Pin",
+          onClick: () => onPin(row.uid),
+        })
+        : null,
       el("button", {
         className: "admin-secondary",
         type: "button",
@@ -413,26 +515,63 @@ export function createAccessView({ gateway, writes } = {}) {
   let allowed = [];
   let banned = [];
   let devices = [];
+  let pins = {};
   let knownUids = null;
   let nameMisses = new Set();
   let loading = false;
   let error = "";
+  let formError = "";
+  let drafts = { allowUid: "", allowDevice: "", banUid: "", banDevice: "" };
   let inflight = 0;
+  let focusDevice = false;
 
   function snapshot() {
-    const decorated = decorateAccessLists({ allowed, banned, names });
+    const decorated = decorateAccessLists({ allowed, banned, names, pins });
     return {
       ...decorated,
       devices,
       query,
       loading,
       error,
-      onAllow: (uid) => act(() => writes?.addAllowedUserId(uid)),
-      onBan: (uid) => act(() => writes?.addBannedUserId(uid)),
+      formError,
+      drafts,
+      onAllow: (uid, deviceId) => {
+        const parsed = parseAllowCredentials(uid, deviceId);
+        if (parsed.error) {
+          formError = parsed.error;
+          render();
+          return;
+        }
+        formError = "";
+        act(async () => {
+          const ok = await writes?.addAllowedUserId(parsed.uid, parsed.deviceId);
+          if (ok) {
+            drafts = { ...drafts, allowUid: "", allowDevice: "" };
+          }
+          return ok;
+        });
+      },
+      onBan: (uid) => {
+        drafts = { ...drafts, banUid: "" };
+        act(() => writes?.addBannedUserId(uid));
+      },
       onRemoveAllow: (uid) => act(() => writes?.removeAllowedUserId(uid)),
       onRemoveBan: (uid) => act(() => writes?.removeBannedUserId(uid)),
-      onBanDevice: (id) => act(() => writes?.addBannedDeviceId(id)),
+      onBanDevice: (id) => {
+        drafts = { ...drafts, banDevice: "" };
+        act(() => writes?.addBannedDeviceId(id));
+      },
       onRemoveDevice: (id) => act(() => writes?.removeBannedDeviceId(id)),
+      onRequestAllow: (uid) => {
+        drafts = { ...drafts, allowUid: uid, allowDevice: pins[uid] || "" };
+        formError = "";
+        focusDevice = true;
+        render();
+      },
+      onDraft: (field, value) => {
+        drafts = { ...drafts, [field]: value };
+        if (field === "allowUid" || field === "allowDevice") formError = "";
+      },
       onQuery: (value) => {
         query = value;
         render();
@@ -453,6 +592,12 @@ export function createAccessView({ gateway, writes } = {}) {
       }
       : null;
     paint(container, snapshot());
+    if (focusDevice) {
+      focusDevice = false;
+      const deviceField = container.querySelector('[aria-label="Device id to pin"]');
+      deviceField?.focus();
+      return;
+    }
     if (!restore) return;
     const next = restore.label
       ? container.querySelector(`[aria-label="${restore.label}"]`)
@@ -486,6 +631,7 @@ export function createAccessView({ gateway, writes } = {}) {
       allowed = control.allowedUserIds;
       banned = control.userIds;
       devices = control.deviceIds;
+      pins = readAllowedDevicePins(control.allowedDevices);
       const current = uniqueAccessUids([...allowed, ...banned]);
       const newcomers = newAccessUids(current, knownUids);
       knownUids = current;

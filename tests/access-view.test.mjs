@@ -7,15 +7,20 @@ import {
   decorateAccessLists,
   fillMissingAccessNames,
   filterAccessEntries,
+  isBindableDeviceId,
   MISSING_NAME_LOOKUP_CAP,
   nameFromSubmission,
   newAccessUids,
   normalizeAccessUid,
+  parseAllowCredentials,
   pickAccessNameLookups,
+  readAllowedDevicePins,
   readCachedAccessNames,
   shortUid,
   uniqueAccessUids,
+  unpinnedAccessCount,
   writeCachedAccessNames,
+  ZERO_DEVICE_ID,
 } from "../js/access-view.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,14 +35,42 @@ test("shortUid keeps short ids and ellipsizes long ones", () => {
   assert.equal(shortUid("YpbPvklM3pOWp2h7MJFZrAPYM4m2"), "YpbPvklM…PYM4m2");
 });
 
-test("filterAccessEntries matches name or uid", () => {
+test("filterAccessEntries matches name, uid, or device pin", () => {
   const rows = [
-    { uid: "aaa111", name: "Croxy" },
-    { uid: "bbb222", name: "Pal" },
+    { uid: "aaa111", name: "Croxy", deviceId: "device-alpha-1234" },
+    { uid: "bbb222", name: "Pal", deviceId: "device-bravo-5678" },
   ];
   assert.equal(filterAccessEntries(rows, "crox").length, 1);
   assert.equal(filterAccessEntries(rows, "BBB").length, 1);
+  assert.equal(filterAccessEntries(rows, "bravo-5678").length, 1);
   assert.equal(filterAccessEntries(rows, "").length, 2);
+});
+
+test("parseAllowCredentials requires a uid and a real device pin", () => {
+  assert.equal(parseAllowCredentials("  uid-a  ", "device-12345678").uid, "uid-a");
+  assert.equal(parseAllowCredentials("uid-a", "device-12345678").deviceId, "device-12345678");
+  assert.match(parseAllowCredentials("", "device-12345678").error, /Firebase/i);
+  assert.match(parseAllowCredentials("uid-a", "").error, /Device/i);
+  assert.match(parseAllowCredentials("uid-a", ZERO_DEVICE_ID).error, /zero/i);
+  assert.match(parseAllowCredentials("uid-a", "short").error, /short/i);
+});
+
+test("isBindableDeviceId rejects blanks, short ids, and the all-zero UUID", () => {
+  assert.equal(isBindableDeviceId("device-12345678"), true);
+  assert.equal(isBindableDeviceId("  "), false);
+  assert.equal(isBindableDeviceId("short"), false);
+  assert.equal(isBindableDeviceId(ZERO_DEVICE_ID), false);
+});
+
+test("readAllowedDevicePins keeps bindable pins and drops the zero UUID", () => {
+  const pins = readAllowedDevicePins({
+    " uid-a ": " device-12345678 ",
+    "uid-zero": ZERO_DEVICE_ID,
+    "uid-blank": "",
+  });
+  assert.equal(pins["uid-a"], "device-12345678");
+  assert.equal(pins["uid-zero"], undefined);
+  assert.equal(pins["uid-blank"], undefined);
 });
 
 test("nameFromSubmission prefers displayName and strips nickname markup", () => {
@@ -161,25 +194,38 @@ test("decorateAccessLists shows one row per uid when the seed listed them twice"
   assert.equal(bannedRows.length, 1);
 });
 
-test("decorateAccessLists attaches published names and sorts by them", () => {
-  const names = new Map([["uid-b", "Croxy"], ["uid-a", "Pal"]]);
+test("decorateAccessLists attaches published names and sorts unpinned first", () => {
+  const names = new Map([["uid-b", "Croxy"], ["uid-a", "Pal"], ["uid-c", "Yama"]]);
   const { allowedRows, bannedRows } = decorateAccessLists({
-    allowed: ["uid-b", "uid-a"],
+    allowed: ["uid-b", "uid-a", "uid-c"],
     banned: ["uid-z"],
     names,
+    pins: { "uid-a": "device-pal-1234", "uid-c": "device-yama-5678" },
   });
   assert.equal(allowedRows[0].name, "Croxy");
+  assert.equal(allowedRows[0].pinned, false);
   assert.equal(allowedRows[1].name, "Pal");
+  assert.equal(allowedRows[1].deviceId, "device-pal-1234");
+  assert.equal(allowedRows[1].pinned, true);
   assert.equal(bannedRows[0].uid, "uid-z");
   assert.equal(bannedRows[0].name, "");
+  assert.equal(unpinnedAccessCount(allowedRows), 1);
 });
 
-test("checkpoint meters label allowed ids, banned ids, and banned devices", async () => {
+test("checkpoint meters label allowed ids, unpinned, banned ids, and banned devices", async () => {
   const src = await readFile(join(root, "js/access-view.js"), "utf8");
   assert.match(src, /Allowed IDs/);
+  assert.match(src, /Needs pin/);
   assert.match(src, /Banned IDs/);
   assert.match(src, /Banned devices/);
-  assert.match(src, /meter\("Banned devices", \(devices \|\| \[\]\)\.length/);
+  assert.match(src, /Allow and pin/);
+  assert.match(src, /writes\?\.addAllowedUserId\(parsed\.uid, parsed\.deviceId\)/);
+});
+
+test("Allow pins one uid with a dotted path so other pins stay put", async () => {
+  const src = await readFile(join(root, "js/firebase.js"), "utf8");
+  assert.match(src, /`allowedDevices\.\$\{uid\}`/);
+  assert.doesNotMatch(src, /patch\.allowedDevices = \{ \[uid\]: bound \}/);
 });
 
 test("index.html exposes the Access tab after Sync", async () => {

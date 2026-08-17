@@ -710,6 +710,7 @@ export async function createFirebaseGateway() {
       allowedUserIds: asIds(data.allowedUserIds),
       userIds: asIds(data.userIds),
       deviceIds: asIds(data.deviceIds),
+      allowedDevices: data.allowedDevices,
     };
   }
 
@@ -747,14 +748,20 @@ export async function createFirebaseGateway() {
       await setDoc(ref, { userIds: arrayRemove(uid) }, { merge: true });
       const patch = { allowedUserIds: arrayUnion(uid) };
       const bound = String(deviceId || "").trim();
-      if (bound) patch.allowedDevices = { [uid]: bound };
-      return setDoc(ref, patch, { merge: true });
+      // Nested { allowedDevices: { [uid]: bound } } replace-merges the
+      // whole pin map. Dotted updateDoc writes one key and leaves the rest.
+      if (bound
+          && bound.length >= 8
+          && bound !== "00000000-0000-0000-0000-000000000000") {
+        patch[`allowedDevices.${uid}`] = bound;
+      }
+      return updateDoc(ref, patch);
     }),
     removeAllowedUserId: (uid) => chargedWrite("removeAllowedUserId", () =>
-      setDoc(doc(db, "admin", "blacklist"), {
+      updateDoc(doc(db, "admin", "blacklist"), {
         allowedUserIds: arrayRemove(uid),
-        allowedDevices: { [uid]: deleteField() },
-      }, { merge: true })),
+        [`allowedDevices.${uid}`]: deleteField(),
+      })),
     addBannedUserId: (uid) => chargedWrite("addBannedUserId", async () => {
       const ref = doc(db, "admin", "blacklist");
       await setDoc(ref, { allowedUserIds: arrayRemove(uid) }, { merge: true });
