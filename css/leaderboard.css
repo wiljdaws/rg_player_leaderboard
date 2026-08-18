@@ -1844,12 +1844,26 @@ footer a:hover{color:var(--ink);border-color:var(--ink)}
 .access-pin-ok{color:var(--gain);background:rgba(74,222,128,.12)}
 .access-pin-missing{color:var(--gold);background:rgba(255,210,74,.14)}
 .access-row-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.access-row-actions .admin-secondary,
 .access-icon-btn,
 .access-refresh{
-  padding:6px 10px;font-size:12px;
+  padding:7px 11px;border-radius:9px;cursor:pointer;
+  font:700 11px var(--display);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink);background:rgba(6,10,24,.78);border:1px solid var(--line-strong);
 }
-.access-icon-btn-danger{color:var(--loss);border-color:rgba(251,113,133,.35)}
-.access-pin-btn{color:var(--gold);border-color:rgba(255,210,74,.45)}
+.access-row-actions .admin-secondary:hover,
+.access-icon-btn:hover,
+.access-refresh:hover{
+  border-color:var(--ink);background:rgba(19,27,68,.95);
+}
+.access-icon-btn-danger{
+  color:#FFC4CC;border-color:rgba(251,113,133,.7);background:rgba(72,16,28,.92);
+}
+.access-icon-btn-danger:hover{border-color:#FFC4CC;background:rgba(96,20,36,.96)}
+.access-pin-btn{
+  color:#FFE28A;border-color:rgba(255,210,74,.75);background:rgba(56,40,8,.92);
+}
+.access-pin-btn:hover{border-color:#FFE28A;background:rgba(72,52,10,.96)}
 
 .access-devices{
   padding:20px 22px;border-radius:18px;

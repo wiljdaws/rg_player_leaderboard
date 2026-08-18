@@ -212,14 +212,16 @@ test("decorateAccessLists attaches published names and sorts unpinned first", ()
   assert.equal(unpinnedAccessCount(allowedRows), 1);
 });
 
-test("checkpoint meters label allowed ids, unpinned, banned ids, and banned devices", async () => {
+test("checkpoint meters label allowed ids, missing devices, banned ids, and banned devices", async () => {
   const src = await readFile(join(root, "js/access-view.js"), "utf8");
   assert.match(src, /Allowed IDs/);
-  assert.match(src, /Needs pin/);
+  assert.match(src, /No device/);
   assert.match(src, /Banned IDs/);
   assert.match(src, /Banned devices/);
-  assert.match(src, /Allow and pin/);
+  assert.match(src, /text: "Allow"/);
+  assert.match(src, /Set device/);
   assert.match(src, /writes\?\.addAllowedUserId\(parsed\.uid, parsed\.deviceId\)/);
+  assert.match(src, /new FormData\(event\.currentTarget\)/);
 });
 
 test("Allow pins one uid with a dotted path so other pins stay put", async () => {
