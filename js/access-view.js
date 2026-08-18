@@ -144,6 +144,13 @@ export async function fillMissingAccessNames({
 
 // One Firebase uid covers every playlist. The first seed listed the same
 // person once per board they appeared on; collapse that here.
+export function nameForAccessUid(rows, uid) {
+  const id = normalizeAccessUid(uid);
+  if (!id) return "";
+  const row = (Array.isArray(rows) ? rows : []).find((entry) => entry?.uid === id);
+  return String(row?.name || "").trim();
+}
+
 export function uniqueAccessUids(ids) {
   const seen = new Set();
   const out = [];
@@ -308,6 +315,8 @@ function paint(container, {
   };
 
   const unpinned = unpinnedAccessCount(allowedRows);
+  const draftUid = normalizeAccessUid(drafts?.allowUid);
+  const draftName = nameForAccessUid([...allowedRows, ...bannedRows], draftUid);
 
   container.append(
     el("div", { className: "access-shell" }, [
@@ -350,6 +359,14 @@ function paint(container, {
           title: "Allow list",
           hint: "Settings → Firebase id and Device id. Both required.",
           form: el("form", { className: "access-add access-add-allow", onSubmit: submitAllow }, [
+            draftUid
+              ? el("p", {
+                className: "access-draft-who",
+                text: draftName
+                  ? `Editing ${draftName}`
+                  : "Editing an unknown player",
+              })
+              : null,
             el("label", { className: "access-field" }, [
               el("span", { className: "access-field-label", text: "Firebase id" }),
               allowUidInput,
@@ -384,6 +401,7 @@ function paint(container, {
           onMove: onRequestAllow,
           moveLabel: "Allow",
           onRemove: onRemoveBan,
+          onPin: onRequestAllow,
         }),
       ]),
       el("section", { className: "access-devices", attrs: { "aria-label": "Banned devices" } }, [
@@ -472,7 +490,13 @@ function accessRow(row, { onMove, moveLabel, onRemove, onPin }) {
   const pinMissing = row.list === "allow" && !row.pinned;
   return el("li", { className: `access-row${pinMissing ? " access-row-unpinned" : ""}` }, [
     el("div", { className: "access-row-id" }, [
-      el("strong", { className: "access-row-name", text: row.name || "Unknown player" }),
+      el("button", {
+        className: "access-row-name",
+        type: "button",
+        text: row.name || "Unknown player",
+        title: "Edit this player in the form above",
+        onClick: () => onPin?.(row.uid),
+      }),
       el("code", { className: "access-row-uid", text: shortUid(row.uid), title: row.uid }),
       row.list === "allow"
         ? el("span", {

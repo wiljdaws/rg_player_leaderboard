@@ -7,6 +7,7 @@ import {
   decorateAccessLists,
   fillMissingAccessNames,
   filterAccessEntries,
+  nameForAccessUid,
   isBindableDeviceId,
   MISSING_NAME_LOOKUP_CAP,
   nameFromSubmission,
@@ -33,6 +34,16 @@ test("normalizeAccessUid trims pasted uids", () => {
 test("shortUid keeps short ids and ellipsizes long ones", () => {
   assert.equal(shortUid("short"), "short");
   assert.equal(shortUid("YpbPvklM3pOWp2h7MJFZrAPYM4m2"), "YpbPvklM…PYM4m2");
+});
+
+test("nameForAccessUid returns the published display name for a uid", () => {
+  const rows = [
+    { uid: "uid-a", name: "[KING] JesusDied4U" },
+    { uid: "uid-b", name: "Croxy" },
+  ];
+  assert.equal(nameForAccessUid(rows, " uid-a "), "[KING] JesusDied4U");
+  assert.equal(nameForAccessUid(rows, "missing"), "");
+  assert.equal(nameForAccessUid(rows, ""), "");
 });
 
 test("filterAccessEntries matches name, uid, or device pin", () => {
@@ -223,6 +234,8 @@ test("checkpoint meters label allowed ids, missing devices, banned ids, and bann
   assert.match(src, /Banned devices/);
   assert.match(src, /text: "Allow"/);
   assert.match(src, /Set device/);
+  assert.match(src, /access-draft-who/);
+  assert.match(src, /Editing \$\{draftName\}/);
   assert.match(src, /writes\?\.addAllowedUserId\(parsed\.uid, parsed\.deviceId\)/);
   assert.match(src, /new FormData\(event\.currentTarget\)/);
 });
