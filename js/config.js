@@ -109,11 +109,35 @@ export function isAdminUser(user) {
   return Boolean(user?.email && ADMIN_EMAILS.includes(user.email));
 }
 
-// Visitors stay on the published JSON. Live Firestore reads are for
-// the tournament tab (small, public) and for signed-in admins.
+// Fake / XSS-test / LeoGaming ids. A stranger cannot write this list
+// (admin/blacklist writes are Pal/Dawson only). These still leaked on
+// when an admin Allow or Add-player auto-allowlisted them.
+export const HARD_DENIED_ACCESS_UIDS = Object.freeze([
+  "test123",
+  "SECURITYTESTXSSEND2END9",
+  "SECURITYTESTXSSVALID8ABCDEF",
+]);
+
+const REJECT_ACCESS_UID_PREFIXES = Object.freeze([
+  "securitytest",
+  "security_test",
+  "leogaming",
+  "leo_gaming",
+]);
+
+export function isRejectableAccessUid(uid) {
+  const id = String(uid || "").trim();
+  if (!id) return false;
+  if (HARD_DENIED_ACCESS_UIDS.includes(id)) return true;
+  const low = id.toLowerCase();
+  return REJECT_ACCESS_UID_PREFIXES.some((prefix) => low.startsWith(prefix));
+}
+
+// Visitors stay on the published JSON. Live Firestore is admin-only.
 export function publicPlaylistUsesLiveFirestore({ playlist, source, isAdmin } = {}) {
+  if (!isAdmin) return false;
   if (playlist === "tournament") return true;
-  return Boolean(isAdmin) && source === "firestore";
+  return source === "firestore";
 }
 
 export function publicPlaylistAllowsFirestoreFallback(isAdmin) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   READ_SOURCE_DEFAULT,
+  isRejectableAccessUid,
   publicPlaylistAllowsFirestoreFallback,
   publicPlaylistUsesLiveFirestore,
   resolveReadSource,
@@ -116,9 +117,21 @@ test("admins can still use live Firestore", () => {
   assert.equal(publicPlaylistAllowsFirestoreFallback(true), true);
 });
 
-test("tournament tab stays on Firestore for everyone", () => {
+test("junk and XSS-test uids cannot be allowlisted", () => {
+  assert.equal(isRejectableAccessUid("test123"), true);
+  assert.equal(isRejectableAccessUid("SECURITYTESTXSSVALID8ABCDEF"), true);
+  assert.equal(isRejectableAccessUid("leogamingcgs5yzqk3mlhxqql"), true);
+  assert.equal(isRejectableAccessUid("SzFBmvqy9RfNarysMdQcisoTsus2"), false);
+  assert.equal(isRejectableAccessUid("95237"), false);
+});
+
+test("tournament tab is live Firestore for admins only", () => {
   assert.equal(
     publicPlaylistUsesLiveFirestore({ playlist: "tournament", source: "static", isAdmin: false }),
+    false,
+  );
+  assert.equal(
+    publicPlaylistUsesLiveFirestore({ playlist: "tournament", source: "static", isAdmin: true }),
     true,
   );
 });

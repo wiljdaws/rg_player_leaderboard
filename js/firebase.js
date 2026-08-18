@@ -9,6 +9,7 @@ import {
   STATIC_JSON_URL_TEMPLATE,
   isAdminUser,
   isPlaylist,
+  isRejectableAccessUid,
   publicPlaylistAllowsFirestoreFallback,
   publicPlaylistUsesLiveFirestore,
   resolveReadSource,
@@ -657,10 +658,9 @@ export async function createFirebaseGateway() {
   // Anything unrecognized is treated as "firestore" so a corrupt config can't
   // strand the site on a broken path.
   function subscribePlaylistDispatch(playlist, handlers) {
-    // Tournament stays on Firestore so admin edits show up right away.
-    // Ranked tabs use the published JSON. Live Firestore (or a fallback
-    // after CDN failures) is admin-only — listing the board now needs
-    // a signed-in user, and a public tab shouldn't keep retrying that.
+    // Live Firestore is admin-only, including the tournament tab.
+    // Visitors stay on the published JSON so a public tab never
+    // opens a denied listener.
     const source = resolveReadSource();
     if (publicPlaylistUsesLiveFirestore({ playlist, source, isAdmin: signedInAdmin })) {
       return subscribePlaylist(playlist, handlers);
@@ -742,6 +742,9 @@ export async function createFirebaseGateway() {
       return snap.exists() ? snap.data() : null;
     },
     addAllowedUserId: (uid, deviceId) => chargedWrite("addAllowedUserId", async () => {
+      if (isRejectableAccessUid(uid)) {
+        throw new Error("That id is a test/spam uid. It stays banned.");
+      }
       const ref = doc(db, "admin", "blacklist");
       // Same-write arrayUnion + arrayRemove was a no-op on userIds, so
       // Allow left people on the ban list. Ban still wins in rules.

@@ -1,7 +1,7 @@
 // Admin-only Access tab: allow list + ban list on one screen.
 // Show / hide is handled by activatePlaylist("access") in app.js.
 
-import { PLAYLISTS, STATIC_JSON_URL_TEMPLATE } from "./config.js";
+import { PLAYLISTS, STATIC_JSON_URL_TEMPLATE, isRejectableAccessUid } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,6 +24,9 @@ export function parseAllowCredentials(uidValue, deviceValue) {
   const uid = normalizeAccessUid(uidValue);
   const deviceId = normalizeAccessDeviceId(deviceValue);
   if (!uid) return { error: "Paste their Firebase id." };
+  if (isRejectableAccessUid(uid)) {
+    return { error: "That id is a test/spam uid. It stays banned." };
+  }
   if (!deviceId) return { error: "Paste their Device id too. Writes fail without it." };
   if (deviceId === ZERO_DEVICE_ID) return { error: "That Device id is the all-zero UUID. Don't use it." };
   if (deviceId.length < 8) return { error: "That Device id looks too short." };

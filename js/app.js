@@ -4,7 +4,7 @@ import {
   setFormValue,
   togglePlaylistFields,
 } from "./admin.js";
-import { PLAYLIST_LABELS, STATIC_JSON_URL_TEMPLATE, isAdminUser, isPlaylist } from "./config.js";
+import { PLAYLIST_LABELS, STATIC_JSON_URL_TEMPLATE, isAdminUser, isPlaylist, isRejectableAccessUid } from "./config.js";
 import { createFirebaseGateway, subscribePlaylistJson } from "./firebase.js";
 import { FlagDirectory } from "./flag-directory.js";
 import { MmrHistoryStore } from "./history.js";
@@ -1145,7 +1145,7 @@ function wireEvents() {
       const saved = await writes?.addPlayer(payload);
       if (saved) {
         const uid = typeof payload.sourceUserId === "string" ? payload.sourceUserId.trim() : "";
-        if (uid) await writes?.addAllowedUserId(uid);
+        if (uid && !isRejectableAccessUid(uid)) await writes?.addAllowedUserId(uid);
         clearAdminRosterCache();
         $("adminForm").reset();
         flagPickers.add?.setValue("");
@@ -1233,7 +1233,7 @@ function wireEvents() {
       if (!saved) log.error("write", "update failed", new Error(`updatePlayer returned falsy for ${player.id}`));
       else log.info("write", "update completed", { id: destId, playlist: player.playlist });
       if (saved) {
-        if (attachedUid) await writes?.addAllowedUserId(attachedUid);
+        if (attachedUid && !isRejectableAccessUid(attachedUid)) await writes?.addAllowedUserId(attachedUid);
         if (attachedUid && !player.sourceUserId && player.playlist !== "tournament") {
           await migrateUnsourcedNameSiblings({
             name: player.name,
@@ -1415,10 +1415,10 @@ async function boot() {
     return;
   }
 
+  listenerManager.subscribe = gateway.subscribePlaylist;
   if (state.playlist === "tournament") {
     listenerManager.disconnect();
     listenerManager.activePlaylist = null;
-    listenerManager.subscribe = gateway.subscribePlaylist;
     listenerManager.activate("tournament");
   }
 
@@ -1431,56 +1431,68 @@ async function boot() {
   publishView = createPublishView();
   accessView = createAccessView({ gateway, writes });
 
-  try {
-    state.writesPaused = await gateway.writesPaused();
-  } catch {
-    state.writesPaused = false;
-  }
-  if (state.writesPaused) {
+  const applyWritesPaused = (paused) => {
+    state.writesPaused = paused === true;
     const haltBanner = $("haltBanner");
-    if (haltBanner) haltBanner.hidden = false;
-  }
+    if (haltBanner) haltBanner.hidden = !state.writesPaused;
+  };
 
+  let lastAdmin = false;
   gateway.observeAuth((user) => {
+    const nextAdmin = isAdminUser(user);
+    const adminChanged = nextAdmin !== lastAdmin;
+    lastAdmin = nextAdmin;
     state.user = user;
-    state.admin = isAdminUser(user);
+    state.admin = nextAdmin;
     if (!state.admin) {
       state.editingPlayer = null;
       const dialog = $("editDialog");
       if (dialog?.open) dialog.close();
     }
-    // In debug mode we force the admin panel visible so the widget renders
-    // for any user. Otherwise the panel follows real admin state.
-    $("adminBox").hidden = state.writesPaused
-      || (!state.admin && !READ_BUDGET_DEBUG)
-      || isAdminViewPlaylist(state.playlist);
-    syncTournamentAdmin();
-    $("loginButton").hidden = Boolean(user);
-    $("logoutButton").hidden = !user;
-    $("authStatus").textContent = state.admin
-      ? "Admin mode"
-      : user
-        ? "Signed in without admin access"
-        : "";
-    // Reveal the admin-only Sync / Access tabs; hide + kick the
-    // user back to a real playlist if they were viewing one while their
-    // admin session ended.
-    const publishTabEl = $("publishTab");
-    if (publishTabEl) publishTabEl.hidden = !state.admin || state.writesPaused;
-    const accessTabEl = $("accessTab");
-    if (accessTabEl) accessTabEl.hidden = !state.admin;
-    if (!state.admin && isAdminViewPlaylist(state.playlist)) {
-      activatePlaylist(lastRealPlaylist || "1v1", { push: false });
-    }
-    render();
+    const finishAuth = () => {
+      // In debug mode we force the admin panel visible so the widget renders
+      // for any user. Otherwise the panel follows real admin state.
+      $("adminBox").hidden = state.writesPaused
+        || (!state.admin && !READ_BUDGET_DEBUG)
+        || isAdminViewPlaylist(state.playlist);
+      syncTournamentAdmin();
+      $("loginButton").hidden = Boolean(user);
+      $("logoutButton").hidden = !user;
+      $("authStatus").textContent = state.admin
+        ? "Admin mode"
+        : user
+          ? "Signed in without admin access"
+          : "";
+      // Reveal the admin-only Sync / Access tabs; hide + kick the
+      // user back to a real playlist if they were viewing one while their
+      // admin session ended.
+      const publishTabEl = $("publishTab");
+      if (publishTabEl) publishTabEl.hidden = !state.admin || state.writesPaused;
+      const accessTabEl = $("accessTab");
+      if (accessTabEl) accessTabEl.hidden = !state.admin;
+      if (!state.admin && isAdminViewPlaylist(state.playlist)) {
+        activatePlaylist(lastRealPlaylist || "1v1", { push: false });
+      }
+      if (adminChanged && state.playlist === "tournament" && listenerManager) {
+        listenerManager.disconnect();
+        listenerManager.activePlaylist = null;
+        listenerManager.activate("tournament");
+      }
+      render();
+      if (state.admin) {
+        loadVersionBreakdown();
+        refreshAllowlist();
+        refreshIcons();
+      }
+      syncReadBudgetWidget();
+    };
     if (state.admin) {
-      loadVersionBreakdown();
-      refreshAllowlist();
+      gateway.writesPaused().then(applyWritesPaused).catch(() => applyWritesPaused(false)).then(finishAuth);
+      return;
     }
-    syncReadBudgetWidget();
+    applyWritesPaused(false);
+    finishAuth();
   });
-
-  refreshIcons();
 
   // Debug/ops override — makes the widget visible for any user (still needs
   // adminBox visible for its parent to layout, which the auth block above

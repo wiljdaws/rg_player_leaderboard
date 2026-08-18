@@ -53,6 +53,9 @@ test("parseAllowCredentials requires a uid and a real device pin", () => {
   assert.match(parseAllowCredentials("uid-a", "").error, /Device/i);
   assert.match(parseAllowCredentials("uid-a", ZERO_DEVICE_ID).error, /zero/i);
   assert.match(parseAllowCredentials("uid-a", "short").error, /short/i);
+  assert.match(parseAllowCredentials("test123", "device-12345678").error, /banned/i);
+  assert.match(parseAllowCredentials("SECURITYTESTXSSEND2END9", "device-12345678").error, /banned/i);
+  assert.match(parseAllowCredentials("LeoGamingCKI0PX2KQXLB0EYPP3", "device-12345678").error, /banned/i);
 });
 
 test("isBindableDeviceId rejects blanks, short ids, and the all-zero UUID", () => {
