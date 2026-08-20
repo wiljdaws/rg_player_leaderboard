@@ -5,8 +5,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   decorateAccessLists,
+  devicePinOwner,
   fillMissingAccessNames,
   filterAccessEntries,
+  MAX_PINNED_DEVICES,
+  mergePinnedDevices,
   nameForAccessUid,
   isBindableDeviceId,
   MISSING_NAME_LOOKUP_CAP,
@@ -14,7 +17,10 @@ import {
   newAccessUids,
   normalizeAccessUid,
   parseAllowCredentials,
+  parseCopiedAllowIds,
+  formatCopiedAllowIds,
   pickAccessNameLookups,
+  pinBindError,
   readAllowedDevicePins,
   readCachedAccessNames,
   shortUid,
@@ -69,6 +75,28 @@ test("parseAllowCredentials requires a uid and a real device pin", () => {
   assert.match(parseAllowCredentials("LeoGamingCKI0PX2KQXLB0EYPP3", "device-12345678").error, /banned/i);
 });
 
+test("parseCopiedAllowIds splits a labeled Discord paste", () => {
+  const copied = parseCopiedAllowIds(
+    "Firebase ID: abcdefghijklmnop\nDevice ID: 1234-1234-1234-1234",
+  );
+  assert.deepEqual(copied, {
+    uid: "abcdefghijklmnop",
+    deviceId: "1234-1234-1234-1234",
+  });
+  assert.equal(
+    formatCopiedAllowIds("abcdefghijklmnop", "1234-1234-1234-1234"),
+    "Firebase ID: abcdefghijklmnop\nDevice ID: 1234-1234-1234-1234",
+  );
+  assert.equal(
+    parseAllowCredentials(
+      "Firebase ID: abcdefghijklmnop\nDevice ID: 1234-1234-1234-1234",
+      "",
+    ).deviceId,
+    "1234-1234-1234-1234",
+  );
+  assert.equal(parseCopiedAllowIds("abcdefghijklmnop"), null);
+});
+
 test("isBindableDeviceId rejects blanks, short ids, and the all-zero UUID", () => {
   assert.equal(isBindableDeviceId("device-12345678"), true);
   assert.equal(isBindableDeviceId("  "), false);
@@ -81,10 +109,63 @@ test("readAllowedDevicePins keeps bindable pins and drops the zero UUID", () => 
     " uid-a ": " device-12345678 ",
     "uid-zero": ZERO_DEVICE_ID,
     "uid-blank": "",
+    "uid-list": ["device-aaaaaaaa", ZERO_DEVICE_ID, "device-aaaaaaaa", "device-bbbbbbbb"],
   });
-  assert.equal(pins["uid-a"], "device-12345678");
+  assert.deepEqual(pins["uid-a"], ["device-12345678"]);
   assert.equal(pins["uid-zero"], undefined);
   assert.equal(pins["uid-blank"], undefined);
+  assert.deepEqual(pins["uid-list"], ["device-aaaaaaaa", "device-bbbbbbbb"]);
+});
+
+test("mergePinnedDevices appends up to 3 and replace wipes the list", () => {
+  assert.deepEqual(mergePinnedDevices("device-aaaaaaaa", "device-bbbbbbbb"), [
+    "device-aaaaaaaa",
+    "device-bbbbbbbb",
+  ]);
+  assert.deepEqual(
+    mergePinnedDevices(["device-aaaaaaaa", "device-bbbbbbbb", "device-cccccccc"], "device-dddddddd"),
+    ["device-aaaaaaaa", "device-bbbbbbbb", "device-cccccccc", "device-dddddddd"],
+  );
+  assert.equal(MAX_PINNED_DEVICES, 3);
+  assert.deepEqual(
+    mergePinnedDevices(["device-aaaaaaaa", "device-bbbbbbbb"], "device-cccccccc", { replace: true }),
+    ["device-cccccccc"],
+  );
+});
+
+test("pinBindError refuses a stolen pin, a banned device, and a 4th append", () => {
+  const pins = { "uid-a": ["device-aaaaaaaa"] };
+  assert.equal(devicePinOwner(pins, "device-aaaaaaaa"), "uid-a");
+  assert.match(
+    pinBindError({ uid: "uid-b", deviceId: "device-aaaaaaaa", pins }),
+    /already pinned/,
+  );
+  assert.match(
+    pinBindError({
+      uid: "uid-a",
+      deviceId: "device-bbbbbbbb",
+      pins,
+      bannedDevices: ["device-bbbbbbbb"],
+    }),
+    /banned/,
+  );
+  assert.match(
+    pinBindError({
+      uid: "uid-a",
+      deviceId: "device-dddddddd",
+      pins: { "uid-a": ["device-aaaaaaaa", "device-bbbbbbbb", "device-cccccccc"] },
+    }),
+    /3 devices/,
+  );
+  assert.equal(
+    pinBindError({
+      uid: "uid-a",
+      deviceId: "device-dddddddd",
+      pins: { "uid-a": ["device-aaaaaaaa", "device-bbbbbbbb", "device-cccccccc"] },
+      replace: true,
+    }),
+    "",
+  );
 });
 
 test("nameFromSubmission prefers displayName and strips nickname markup", () => {
@@ -233,16 +314,19 @@ test("checkpoint meters label allowed ids, missing devices, banned ids, and bann
   assert.match(src, /Banned IDs/);
   assert.match(src, /Banned devices/);
   assert.match(src, /text: "Allow"/);
+  assert.match(src, /text: "Replace"/);
+  assert.match(src, /text: "Add device"/);
   assert.match(src, /Set device/);
   assert.match(src, /access-draft-who/);
   assert.match(src, /Editing \$\{draftName\}/);
-  assert.match(src, /writes\?\.addAllowedUserId\(parsed\.uid, parsed\.deviceId\)/);
+  assert.match(src, /writes\?\.addAllowedUserId\(parsed\.uid, parsed\.deviceId, \{ replace \}\)/);
   assert.match(src, /new FormData\(event\.currentTarget\)/);
 });
 
 test("Allow pins one uid with a dotted path so other pins stay put", async () => {
   const src = await readFile(join(root, "js/firebase.js"), "utf8");
   assert.match(src, /`allowedDevices\.\$\{uid\}`/);
+  assert.match(src, /mergePinnedDevices/);
   assert.doesNotMatch(src, /patch\.allowedDevices = \{ \[uid\]: bound \}/);
 });
 

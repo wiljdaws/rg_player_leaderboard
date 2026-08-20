@@ -23,6 +23,10 @@ import {
 import { createReadBudget } from "./read-budget.js";
 import { destinationPlayerDocId } from "./model.js";
 import { log } from "./log.js";
+import {
+  mergePinnedDevices,
+  pinBindError,
+} from "./access-view.js";
 
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
@@ -741,22 +745,30 @@ export async function createFirebaseGateway() {
       const snap = await chargedGetDoc(doc(db, "script_submissions", id), "accessNameLookup");
       return snap.exists() ? snap.data() : null;
     },
-    addAllowedUserId: (uid, deviceId) => chargedWrite("addAllowedUserId", async () => {
+    addAllowedUserId: (uid, deviceId, { replace = false } = {}) => chargedWrite("addAllowedUserId", async () => {
       if (isRejectableAccessUid(uid)) {
         throw new Error("That id is a test/spam uid. It stays banned.");
       }
       const ref = doc(db, "admin", "blacklist");
-      // Same-write arrayUnion + arrayRemove was a no-op on userIds, so
-      // Allow left people on the ban list. Ban still wins in rules.
+      // Allow used to leave them on the ban list. Ban still wins in rules.
       await setDoc(ref, { userIds: arrayRemove(uid) }, { merge: true });
       const patch = { allowedUserIds: arrayUnion(uid) };
       const bound = String(deviceId || "").trim();
-      // Nested { allowedDevices: { [uid]: bound } } replace-merges the
-      // whole pin map. Dotted updateDoc writes one key and leaves the rest.
+      // Dotted path so we don't wipe everyone else's pins.
       if (bound
           && bound.length >= 8
           && bound !== "00000000-0000-0000-0000-000000000000") {
-        patch[`allowedDevices.${uid}`] = bound;
+        const control = await loadAccessControlDoc();
+        const bindError = pinBindError({
+          uid,
+          deviceId: bound,
+          pins: control.allowedDevices,
+          bannedDevices: control.deviceIds,
+          replace,
+        });
+        if (bindError) throw new Error(bindError);
+        const next = mergePinnedDevices(control.allowedDevices?.[uid], bound, { replace });
+        patch[`allowedDevices.${uid}`] = next.length === 1 ? next[0] : next;
       }
       return updateDoc(ref, patch);
     }),

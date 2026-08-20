@@ -87,8 +87,12 @@ export class AdminWriteService {
     );
   }
 
-  addAllowedUserId(uid, deviceId) {
-    return this.run("Allowing HUD uid", () => this.gateway.addAllowedUserId(uid, deviceId), { allowWhenPaused: true });
+  addAllowedUserId(uid, deviceId, options) {
+    return this.run(
+      "Allowing HUD uid",
+      () => this.gateway.addAllowedUserId(uid, deviceId, options),
+      { allowWhenPaused: true },
+    );
   }
 
   removeAllowedUserId(uid) {

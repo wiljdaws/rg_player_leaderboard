@@ -1,5 +1,4 @@
-// Admin-only Access tab: allow list + ban list on one screen.
-// Show / hide is handled by activatePlaylist("access") in app.js.
+// Access tab: allow list + ban list. Show/hide is in app.js.
 
 import { PLAYLISTS, STATIC_JSON_URL_TEMPLATE, isRejectableAccessUid } from "./config.js";
 
@@ -20,9 +19,30 @@ export function isBindableDeviceId(value) {
   return id.length >= 8 && id !== ZERO_DEVICE_ID;
 }
 
+export function parseCopiedAllowIds(text) {
+  const raw = String(text ?? "").replace(/\r\n/g, "\n").trim();
+  if (!raw) return null;
+  const firebase = raw.match(/firebase\s*id\s*:\s*(\S+)/i);
+  const device = raw.match(/device\s*id\s*:\s*(\S+)/i);
+  if (!firebase?.[1] || !device?.[1]) return null;
+  return {
+    uid: normalizeAccessUid(firebase[1]),
+    deviceId: normalizeAccessDeviceId(device[1]),
+  };
+}
+
+export function formatCopiedAllowIds(uid, deviceId) {
+  const id = normalizeAccessUid(uid);
+  const pin = normalizeAccessDeviceId(deviceId);
+  if (!id) return "";
+  return pin ? `Firebase ID: ${id}\nDevice ID: ${pin}` : `Firebase ID: ${id}`;
+}
+
 export function parseAllowCredentials(uidValue, deviceValue) {
-  const uid = normalizeAccessUid(uidValue);
-  const deviceId = normalizeAccessDeviceId(deviceValue);
+  const copied = parseCopiedAllowIds(uidValue)
+    || parseCopiedAllowIds(`${uidValue}\n${deviceValue}`);
+  const uid = normalizeAccessUid(copied?.uid ?? uidValue);
+  const deviceId = normalizeAccessDeviceId(copied?.deviceId ?? deviceValue);
   if (!uid) return { error: "Paste their Firebase id." };
   if (isRejectableAccessUid(uid)) {
     return { error: "That id is a test/spam uid. It stays banned." };
@@ -33,15 +53,75 @@ export function parseAllowCredentials(uidValue, deviceValue) {
   return { uid, deviceId };
 }
 
+export const MAX_PINNED_DEVICES = 3;
+
+export function deviceIdsFromPin(value) {
+  const raw = Array.isArray(value) ? value : [value];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const id = normalizeAccessDeviceId(item);
+    if (!isBindableDeviceId(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 export function readAllowedDevicePins(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out = {};
-  for (const [uid, device] of Object.entries(raw)) {
+  for (const [uid, value] of Object.entries(raw)) {
     const id = normalizeAccessUid(uid);
-    const pin = normalizeAccessDeviceId(device);
-    if (id && isBindableDeviceId(pin)) out[id] = pin;
+    const pins = deviceIdsFromPin(value);
+    if (id && pins.length) out[id] = pins;
   }
   return out;
+}
+
+export function devicePinOwner(raw, deviceId) {
+  const needle = normalizeAccessDeviceId(deviceId);
+  if (!isBindableDeviceId(needle)) return "";
+  const pins = (raw && typeof raw === "object" && !Array.isArray(raw))
+    ? readAllowedDevicePins(raw)
+    : {};
+  for (const [uid, list] of Object.entries(pins)) {
+    if (list.includes(needle)) return uid;
+  }
+  return "";
+}
+
+export function mergePinnedDevices(existing, nextId, { replace = false } = {}) {
+  const id = normalizeAccessDeviceId(nextId);
+  if (!isBindableDeviceId(id)) return deviceIdsFromPin(existing);
+  if (replace) return [id];
+  const pins = deviceIdsFromPin(existing);
+  if (pins.includes(id)) return pins;
+  return [...pins, id];
+}
+
+export function pinBindError({
+  uid,
+  deviceId,
+  pins,
+  bannedDevices = [],
+  replace = false,
+} = {}) {
+  const parsed = parseAllowCredentials(uid, deviceId);
+  if (parsed.error) return parsed.error;
+  const owner = devicePinOwner(pins, parsed.deviceId);
+  if (owner && owner !== parsed.uid) {
+    return "That device is already pinned to a different uid.";
+  }
+  const banned = new Set(
+    (Array.isArray(bannedDevices) ? bannedDevices : []).map(normalizeAccessDeviceId),
+  );
+  if (banned.has(parsed.deviceId)) return "That device is banned.";
+  const next = mergePinnedDevices(pins?.[parsed.uid], parsed.deviceId, { replace });
+  if (next.length > MAX_PINNED_DEVICES) {
+    return "This uid already has 3 devices. Use Replace for a lost phone.";
+  }
+  return "";
 }
 
 export function unpinnedAccessCount(rows) {
@@ -62,7 +142,8 @@ export function filterAccessEntries(entries, query) {
     const uid = String(row?.uid || "").toLowerCase();
     const name = String(row?.name || "").toLowerCase();
     const deviceId = String(row?.deviceId || "").toLowerCase();
-    return uid.includes(q) || name.includes(q) || deviceId.includes(q);
+    const deviceIds = (Array.isArray(row?.deviceIds) ? row.deviceIds : []).join(" ").toLowerCase();
+    return uid.includes(q) || name.includes(q) || deviceId.includes(q) || deviceIds.includes(q);
   });
 }
 
@@ -165,19 +246,23 @@ export function uniqueAccessUids(ids) {
 
 export function decorateAccessLists({ allowed = [], banned = [], names = new Map(), pins = {} } = {}) {
   const nameOf = (uid) => names.get(uid) || "";
-  const pinOf = (uid) => (isBindableDeviceId(pins[uid]) ? pins[uid] : "");
-  const decorate = (uid, list) => ({
-    uid,
-    name: nameOf(uid),
-    list,
-    deviceId: pinOf(uid),
-    pinned: Boolean(pinOf(uid)),
-  });
+  const pinListOf = (uid) => deviceIdsFromPin(pins[uid]);
+  const decorate = (uid, list) => {
+    const deviceIds = pinListOf(uid);
+    return {
+      uid,
+      name: nameOf(uid),
+      list,
+      deviceId: deviceIds[0] || "",
+      deviceIds,
+      pinned: deviceIds.length > 0,
+    };
+  };
   const byName = (a, b) => (nameOf(a) || a).localeCompare(nameOf(b) || b, undefined, { sensitivity: "base" });
   return {
     allowedRows: uniqueAccessUids(allowed)
       .sort((a, b) => {
-        const pinGap = Number(Boolean(pinOf(a))) - Number(Boolean(pinOf(b)));
+        const pinGap = Number(pinListOf(a).length > 0) - Number(pinListOf(b).length > 0);
         return pinGap || byName(a, b);
       })
       .map((uid) => decorate(uid, "allow")),
@@ -326,7 +411,7 @@ function paint(container, {
           el("h2", { className: "access-title", text: "Who gets through" }),
           el("p", {
             className: "access-lede",
-            text: "They DM both ids from ATLAS settings. Paste both here. A uid with no device still cannot write. Allowing someone unbans them. Banning someone drops them off the allow list.",
+            text: "They DM both ids from ATLAS settings. Paste both here. Allow adds a device (up to 3). Replace wipes old pins for a lost phone. A uid with no device still cannot write. Allowing someone unbans them. Banning someone drops them off the allow list.",
           }),
         ]),
         el("div", { className: "access-meters", attrs: { "aria-label": "List counts" } }, [
@@ -357,7 +442,7 @@ function paint(container, {
           tone: "allow",
           kicker: "Cleared",
           title: "Allow list",
-          hint: "Settings → Firebase id and Device id. Both required.",
+          hint: "Settings → Firebase id and Device id. Allow appends. Replace is for a lost phone.",
           form: el("form", { className: "access-add access-add-allow", onSubmit: submitAllow }, [
             draftUid
               ? el("p", {
@@ -378,7 +463,16 @@ function paint(container, {
             formError
               ? el("p", { className: "access-form-error", text: formError, attrs: { role: "alert" } })
               : null,
-            el("button", { className: "admin-primary", type: "submit", text: "Allow" }),
+            el("div", { className: "access-allow-actions" }, [
+              el("button", { className: "admin-primary", type: "submit", text: "Allow" }),
+              el("button", {
+                className: "admin-secondary",
+                type: "button",
+                text: "Replace",
+                title: "Wipe old pins and keep only this device. Lost phone only.",
+                onClick: () => onAllow(drafts?.allowUid, drafts?.allowDevice, { replace: true }),
+              }),
+            ]),
           ]),
           rows: filterAccessEntries(allowedRows, query),
           empty: query ? "No allowed uid matches that search." : "Nobody is allowed yet. The live board will not take HUD writes.",
@@ -488,6 +582,10 @@ function copyButton(label, value, ariaLabel) {
 
 function accessRow(row, { onMove, moveLabel, onRemove, onPin }) {
   const pinMissing = row.list === "allow" && !row.pinned;
+  const deviceIds = Array.isArray(row.deviceIds) && row.deviceIds.length
+    ? row.deviceIds
+    : (row.deviceId ? [row.deviceId] : []);
+  const canAddDevice = row.list === "allow" && row.pinned && deviceIds.length < MAX_PINNED_DEVICES;
   return el("li", { className: `access-row${pinMissing ? " access-row-unpinned" : ""}` }, [
     el("div", { className: "access-row-id" }, [
       el("button", {
@@ -501,19 +599,36 @@ function accessRow(row, { onMove, moveLabel, onRemove, onPin }) {
       row.list === "allow"
         ? el("span", {
           className: `access-pin ${row.pinned ? "access-pin-ok" : "access-pin-missing"}`,
-          text: row.pinned ? `Device ${shortUid(row.deviceId)}` : "No device",
-          title: row.deviceId || "No device on file",
+          text: pinMissing
+            ? "No device"
+            : (deviceIds.length > 1
+              ? `${deviceIds.length} devices`
+              : `Device ${shortUid(deviceIds[0])}`),
+          title: deviceIds.join("\n") || "No device on file",
         })
         : null,
     ]),
     el("div", { className: "access-row-actions" }, [
-      copyButton("Copy", row.uid, `Copy ${row.uid}`),
-      row.pinned ? copyButton("Device", row.deviceId, `Copy device ${row.deviceId}`) : null,
+      copyButton(
+        "Copy ids",
+        formatCopiedAllowIds(row.uid, deviceIds[0] || ""),
+        deviceIds[0]
+          ? `Copy Firebase ID and Device ID for ${row.uid}`
+          : `Copy Firebase ID for ${row.uid}`,
+      ),
       pinMissing
         ? el("button", {
           className: "access-icon-btn access-pin-btn",
           type: "button",
           text: "Set device",
+          onClick: () => onPin(row.uid),
+        })
+        : null,
+      canAddDevice
+        ? el("button", {
+          className: "access-icon-btn access-pin-btn",
+          type: "button",
+          text: "Add device",
           onClick: () => onPin(row.uid),
         })
         : null,
@@ -563,16 +678,28 @@ export function createAccessView({ gateway, writes } = {}) {
       error,
       formError,
       drafts,
-      onAllow: (uid, deviceId) => {
+      onAllow: (uid, deviceId, { replace = false } = {}) => {
         const parsed = parseAllowCredentials(uid, deviceId);
         if (parsed.error) {
           formError = parsed.error;
           render();
           return;
         }
+        const bindError = pinBindError({
+          uid: parsed.uid,
+          deviceId: parsed.deviceId,
+          pins,
+          bannedDevices: devices,
+          replace,
+        });
+        if (bindError) {
+          formError = bindError;
+          render();
+          return;
+        }
         formError = "";
         act(async () => {
-          const ok = await writes?.addAllowedUserId(parsed.uid, parsed.deviceId);
+          const ok = await writes?.addAllowedUserId(parsed.uid, parsed.deviceId, { replace });
           if (ok) {
             drafts = { ...drafts, allowUid: "", allowDevice: "" };
           }
@@ -591,12 +718,21 @@ export function createAccessView({ gateway, writes } = {}) {
       },
       onRemoveDevice: (id) => act(() => writes?.removeBannedDeviceId(id)),
       onRequestAllow: (uid) => {
-        drafts = { ...drafts, allowUid: uid, allowDevice: pins[uid] || "" };
+        drafts = { ...drafts, allowUid: uid, allowDevice: "" };
         formError = "";
         focusDevice = true;
         render();
       },
       onDraft: (field, value) => {
+        if (field === "allowUid") {
+          const copied = parseCopiedAllowIds(value);
+          if (copied) {
+            drafts = { ...drafts, allowUid: copied.uid, allowDevice: copied.deviceId };
+            formError = "";
+            render();
+            return;
+          }
+        }
         drafts = { ...drafts, [field]: value };
         if (field === "allowUid" || field === "allowDevice") formError = "";
       },
