@@ -31,6 +31,10 @@ import {
 const APP_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app.js`;
 const FIRESTORE_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-firestore.js`;
 const AUTH_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-auth.js`;
+const APP_CHECK_URL = `https://www.gstatic.com/firebasejs/${SDK}/firebase-app-check.js`;
+
+// reCAPTCHA v3 site key for "rg-leaderboard". Public, safe to commit.
+const APP_CHECK_SITE_KEY = "6LetM38tAAAAADvHq4SYd05r_DGK2AWJo8M3ZmJK";
 
 // Published by the Tampermonkeys publish workflow every 15 min.
 const READ_STATS_SNAPSHOT_URL = "https://raw.githubusercontent.com/wiljdaws/rg_player_leaderboard/data/state/read-stats.json";
@@ -365,11 +369,14 @@ export function subscribePlaylistJson(playlist, handlers, options = {}) {
 }
 
 export async function createFirebaseGateway() {
-  const [{ initializeApp }, firestoreMod, authMod] = await Promise.all([
+  const [{ initializeApp }, firestoreMod, authMod, appCheckMod] = await Promise.all([
     import(APP_URL),
     import(FIRESTORE_URL),
     import(AUTH_URL),
+    import(APP_CHECK_URL),
   ]);
+
+  const { initializeAppCheck, ReCaptchaV3Provider } = appCheckMod;
 
   const {
     addDoc,
@@ -401,6 +408,17 @@ export async function createFirebaseGateway() {
   } = authMod;
 
   const app = initializeApp(FIREBASE_CONFIG);
+
+  // App Check in Monitor mode. Failures here must not break Firestore init.
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (err) {
+    log.warn?.("appcheck", "init failed", err);
+  }
+
   const db = getFirestore(app);
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
