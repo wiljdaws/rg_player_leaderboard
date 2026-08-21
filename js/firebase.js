@@ -376,7 +376,7 @@ export async function createFirebaseGateway() {
     import(APP_CHECK_URL),
   ]);
 
-  const { initializeAppCheck, ReCaptchaV3Provider } = appCheckMod;
+  const { initializeAppCheck, ReCaptchaV3Provider, getToken: getAppCheckToken } = appCheckMod;
 
   const {
     addDoc,
@@ -411,12 +411,25 @@ export async function createFirebaseGateway() {
 
   // App Check in Monitor mode. Failures here must not break Firestore init.
   try {
-    initializeAppCheck(app, {
+    log.info?.("appcheck", "initializing reCAPTCHA v3 provider", { host: location.hostname });
+    const appCheck = initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
       isTokenAutoRefreshEnabled: true,
     });
+    log.info?.("appcheck", "init returned, requesting first token…");
+    getAppCheckToken(appCheck).then(
+      (result) => {
+        const tokLen = result?.token?.length || 0;
+        if (tokLen > 0) {
+          log.info?.("appcheck", "token minted", { len: tokLen });
+        } else {
+          log.warn?.("appcheck", "token fetch returned empty result — verify wiljdaws.github.io is in reCAPTCHA Domains and the site key matches");
+        }
+      },
+      (err) => log.warn?.("appcheck", "token fetch REJECTED — check reCAPTCHA Domains list, site key, and Firebase App Check secret key", err),
+    );
   } catch (err) {
-    log.warn?.("appcheck", "init failed", err);
+    log.warn?.("appcheck", "init THREW — App Check module import failed or duplicate init", err);
   }
 
   const db = getFirestore(app);
